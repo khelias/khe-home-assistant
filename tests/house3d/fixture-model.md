@@ -9,7 +9,8 @@ vendored three.js.
 
 A one-storey house of 10 x 8 m: a kitchen-living room on the west side with a glass door to the
 front garden and a floor window to the back deck, the hall, bathroom and bedroom on the east
-side, and a carport beside it that the car reaches through the sliding drive gate. The play area
+side, and a carport against its east wall, closed by two panel walls, that the car reaches through
+the sliding drive gate. The second garage roof is the canopy over the front door. The play area
 is in the back garden. The engine tests count the outer walls, the street wall's openings and the
 site's planters, steps and paving, so change those together with the tests.
 
@@ -59,7 +60,9 @@ model, never this file.
   ] },
   { "a": [9.6, 2.2], "b": [9.6, 5], "t": 0.15, "top": 2.6, "openings": [
    { "kind": "door", "c": 1.8, "w": 0.8, "h": 2.1 }
-  ] }
+  ] },
+  { "a": [12.3, 7.3], "b": [17.2, 7.3], "t": 0.04, "top": 2.6, "finish": "panel" },
+  { "a": [17.2, 7.3], "b": [17.2, 0.9], "t": 0.04, "top": 2.6, "finish": "panel" }
  ],
  "furniture": [
   { "what": "kitchen counter", "rect": [2.2, 2.4, 2.8, 5.4], "y": [0, 0.9] },
@@ -80,14 +83,14 @@ model, never this file.
   "decks": [[[2, 10.3], [8, 10.3], [8, 13.5], [2, 13.5]]],
   "paving": [[[13, -6], [17, -6], [17, 1], [13, 1], [13, 0.5], [7.8, 0.5], [7.8, -0.7], [13, -0.7]]],
   "porch": [7.5, 0.9, 9.1, 1.8],
-  "garage_roof": { "rects": [[12.8, 0.8, 17.2, 7.2], [12.8, 7.2, 17.2, 9.4]], "y": [2.6, 2.8] },
+  "garage_roof": { "rects": [[12.3, 0.8, 17.3, 7.4], [7.2, 0.6, 9.4, 1.8]], "y": [2.6, 2.8] },
   "pergola": { "rect": [2.3, 10.3, 6.7, 13.3], "height": 2.6, "modules": 2 },
   "outdoor_units": [{ "what": "heat pump", "rect": [1, 6.6, 1.6, 7.6], "y": [0, 0.8] }],
   "sandpit": { "rect": [6.5, 15.5, 8, 17], "height": 0.25 },
   "swing": { "rect": [10, 14, 10.2, 17], "height": 2.2, "slide": [12, 17.4] },
   "trampoline": { "rect": [16.6, 13.8, 20.2, 17.4], "height": 0.9 },
   "planters": [
-   { "rect": [6.6, 0.9, 7.2, 1.5], "y": [0, 0.45], "plant": "thuja" },
+   { "rect": [9.3, 0.95, 9.9, 1.55], "y": [0, 0.45], "plant": "thuja" },
    { "rect": [8.3, 10.6, 9.8, 11.2], "y": [0, 0.6], "plant": "low", "finish": "cladding" }
   ],
   "steps": [{ "rect": [7.8, 0.5, 8.8, 0.9], "height": 0.115 }],
