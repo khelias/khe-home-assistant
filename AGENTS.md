@@ -1,0 +1,137 @@
+# khe-home-assistant
+
+The Home Assistant configuration of one house, public as a reference: the
+YAML packages, the dashboard generator, the CLI tools around HA's API and the
+3D house view. The container, its image pin, the Renovate hold on HA bumps
+and the backup stay in [khe-homelab](https://github.com/khelias/khe-homelab).
+This file holds rules and pointers; the reference lives in:
+
+- [README.md](README.md) - what the repo is, for people
+- [docs/operational-notes.md](docs/operational-notes.md) - per-integration
+  quirks, measured behaviour and the 3D view
+- [ROADMAP.md](ROADMAP.md) - house automation, near-term and the long form
+
+House documentation (HA rollout, dashboard layout, HVAC protocols, energy)
+is in the private `khe-meta` repo under `house/`: it names devices, LAN
+addresses and metering data. Read `house/home-assistant-plan.md` before
+analysing house data: its method rules are not loaded into context on their
+own.
+
+## Layout
+
+```
+config/            what deploy copies into HA's /config
+  configuration.yaml
+  packages/        one package per device or concern
+  tuya_local_devices/  device definitions copied into tuya-local at HA start
+house3d/           3D house view: engine (core house3d.js, scene/ layer
+                   modules, kit and sun), HA card, standalone viewer,
+                   placement page, vendored three.js
+scripts/           ha-dashboard.py (HA Overview generator),
+                   ha-ws.py (HA WebSocket commands from the CLI),
+                   house3d-* and house3d_model.py (3D view build, vendoring,
+                   device and tree placement, ETAK surroundings, model),
+                   house3d-test.sh (the 3D view's tests),
+                   pv-sim.py (rooftop PV, battery and EV simulation against
+                   the Estfeed hourly load), check.sh, install-hooks.sh
+tests/house3d/     3D view tests on a made-up fixture house: model and build
+                   (Python unittest), engine and simple-style snapshot (node:test)
+```
+
+## Commands
+
+- Setup once after cloning: `python3 -m venv .venv && .venv/bin/pip install
+  ruff==0.17.0` (the version `ci.yml` pins), then
+  `bash scripts/install-hooks.sh` for the gitleaks pre-commit hook.
+- `bash scripts/check.sh` is the whole check: `bash -n` on every
+  `scripts/*.sh`, `scripts/house3d-test.sh` (needs `node` and `python3`) and
+  ruff lint and format over `scripts/`. It runs everything and exits 1 if
+  anything failed. CI runs it with `RUFF=ruff`, the workspace commit gate
+  before each commit.
+- `ruff check --fix scripts && ruff format scripts` before committing Python.
+- `ha-ws.py` and `ha-dashboard.py` import `websockets`, and `pv-sim.py`
+  needs numpy and scipy (plus websockets for its `fetch`). The `.venv` above
+  carries only ruff; run those scripts from a venv that has them.
+
+## Rules
+
+1. **Public repo: nothing secret or identifying.** No tokens, device ids,
+   local keys, LAN addresses of house devices, coordinates, family names or
+   room names. Those live in khe-meta `house/` and in the untracked
+   `~/.config/khe/*.json` files; the header comment of
+   `scripts/ha-dashboard.py` says which file carries what, and every
+   consumer degrades to leaving the card out when a file is missing. The
+   gitleaks hook covers secrets; personal-data patterns are caught by the
+   khe-workspace commit gate; names and street addresses by nobody.
+2. **The 3D view carries no house data.** The model is khe-meta's
+   `house/house-model.md`. Run `scripts/house3d-build.py --scan <model>
+   house3d/` with the real model before every commit that touches
+   `house3d/`, and before publishing anything built from the model.
+3. **Modules under `house3d/scene/` import nothing**
+   ([notes](docs/operational-notes.md#the-3d-house-view-house3d)); the engine
+   tests enforce it.
+4. **Fork PRs can reach the homelab runner.** Fork PR approval stays at
+   `all_external_contributors`, and a fork run is approved only after
+   reading its `.github/workflows/` diff ([estate
+   ADR-006](https://github.com/khelias/khe-architecture/blob/main/decisions/006-branch-protection.md)).
+
+## Deploy
+
+A push to `main` that touches `config/` or `house3d/` runs `deploy.yml` on
+the homelab runner. A throwaway container of the running HA image (no
+network, entrypoint `sh`, so no second HA starts) checks that the volume
+holds `.storage`, runs `check_config` on a copy of `config/`, then replaces
+`configuration.yaml`, `packages/`, `tuya_local_devices/` and `www/house3d/`
+in HA's config volume `homeassistant_ha_config`. **Deploy never restarts
+HA**: that stays the API step below. If the volume does not exist, deploy
+fails instead of creating an empty one.
+
+What stays in khe-homelab: the compose file and the volume definition, the
+image pin and the Renovate hold on HA bumps, `backup.sh` (which covers
+`.storage`, `custom_components/` and the recorder) and the host's security
+model in its `SECURITY.md`.
+
+## Working on Home Assistant
+
+HA is operated through its API: not the UI, not SSH.
+
+- **Token:** a long-lived token in `~/.config/khe/ha-token` on the operator's
+  machine, mode 600. Read it inside scripts; never print or commit it.
+- **REST** for states, service calls, `POST /api/template`, diagnostics and
+  `POST /api/services/homeassistant/restart` (back in ~10 s; wait another
+  ~40 s before trusting a state read). **WebSocket** (`/api/websocket`) for
+  the entity and device registries, config entries, dashboards and HACS,
+  sent with `scripts/ha-ws.py '{"type": "..."}'`, which handles auth and ids.
+  Host and port are in `scripts/ha-dashboard.py` and `scripts/ha-ws.py`.
+- **Config lives in git, not on the VM.** Edit `config/packages/*.yaml`,
+  commit, the operator pushes, deploy copies it into the volume, then
+  restart or reload HA through the API. Deploy replaces
+  `configuration.yaml`, `packages/`, `tuya_local_devices/` and
+  `www/house3d/` in the volume, so a hand edit there is lost at the next
+  deploy.
+- **YAML platforms need a restart, not a reload:** `input_*`, `rest:`,
+  `shell_command:` and the group `cover:`/`light:` platforms. Automations and
+  templates reload, but a template reload blanks the trigger-based price
+  sensors until the hourly tick: follow every `template/reload` at once with
+  `POST /api/events/khe_price_refresh`
+  ([notes](docs/operational-notes.md#reloads-restarts-and-prices)).
+- **Helpers come up at their minimum.** Set the first value through the API;
+  `initial:` would overwrite the household's choice on every restart.
+- **The dashboard is generated** by `scripts/ha-dashboard.py`, and HA adds
+  sections to the stored config by itself when a new device appears. Before
+  rerunning, diff the generator's output against the live config: exec the
+  script up to `async def main`, dump `config`, compare with a WebSocket
+  `lovelace/config` read.
+- **Keep the house idiom in a new view**, and read two existing views first.
+  A row is a `horizontal-stack` of 2-4 vertical tiles or `third()`, never a
+  lone full-width tile; full width is for charts, forecast cards and alerts.
+  Each number appears once (turn off a forecast card's `show_current` when a
+  tile already carries the value). Badge labels are short and still say what
+  they control. The front page holds what is done daily; per-side controls,
+  rare settings and diagnostics go on a `subview` behind a "Seaded" badge. A
+  `note()` truncates to one line, so longer text needs a markdown card.
+- Read the integration's section in `docs/operational-notes.md` before
+  touching it.
+
+All content in English, except user-facing Estonian strings in the
+dashboard, packages and the 3D view.
