@@ -2,6 +2,7 @@
 """Build the standalone house 3D viewer, and scan files for private house data.
 
 Usage:  house3d-build.py MODEL OUTDIR           build, then scan OUTDIR
+        house3d-build.py --demo OUTDIR          build the HA card demo of the test house
         house3d-build.py --scan MODEL PATH...   scan files or trees, exit 1 on any hit
 
 The build writes OUTDIR/index.html (viewer.html), house3d.js, scene/, vendor/ and model.json
@@ -9,6 +10,11 @@ from the geometry, rooms and showcase layers of MODEL (khe-meta house/house-mode
 private and surroundings layers and the georeference never go in; model.json gets only the
 plan's grid bearing in whole degrees as orientation.x_axis_bearing_deg, for the real style's
 sun. Publishing the folder is a separate decision.
+
+The demo build reads only the made-up test house (tests/house3d/fixture-model.md), never a
+model argument or HOUSE3D_MODEL, and writes OUTDIR/index.html and demo.js (from demo/), the HA
+card, the engine and model.json with every layer the card gets in HA. khe-sites publishes it at
+khe.ee/house3d/. The fixture is public in this repo, so there is nothing to scan.
 
 The scan reads the private layer of MODEL and fails on every occurrence of an entity id,
 a device name, a family room name or the car's entity and name
@@ -35,7 +41,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import house3d_model
 
-SRC = Path(__file__).resolve().parent.parent / "house3d"
+ROOT = Path(__file__).resolve().parent.parent
+SRC = ROOT / "house3d"
+DEMO = ROOT / "demo"
+FIXTURE = ROOT / "tests/house3d/fixture-model.md"
 DEVICES_KEY = re.compile(r"""["']?\bdevices["']?\s*:""")
 
 
@@ -147,23 +156,59 @@ def build(model_path, outdir):
     assert "surroundings" not in public, (
         "the surroundings layer fixes the location; it never goes public"
     )
+    out = copy_engine(outdir)
+    shutil.copyfile(SRC / "viewer.html", out / "index.html")
+    write_model(out, public)
+    print(f"built {out}")
+    return run_scan(house3d_model.merge(layers, house3d_model.LAYERS), [out])
+
+
+def copy_engine(outdir):
+    """Copy the engine, its scene modules and vendored three.js into outdir; return its Path."""
     out = Path(outdir)
     out.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(SRC / "viewer.html", out / "index.html")
     shutil.copyfile(SRC / "house3d.js", out / "house3d.js")
     shutil.copytree(SRC / "scene", out / "scene", dirs_exist_ok=True)
     shutil.copytree(SRC / "vendor", out / "vendor", dirs_exist_ok=True)
+    return out
+
+
+def write_model(out, model):
     (out / "model.json").write_text(
-        json.dumps(public, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+        json.dumps(model, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
     )
-    print(f"built {out}")
-    return run_scan(house3d_model.merge(layers, house3d_model.LAYERS), [out])
+
+
+def card_version():
+    m = re.search(
+        r"^const HOUSE3D_VERSION = (\d+);", (SRC / "house3d-card.js").read_text(), re.MULTILINE
+    )
+    if not m:
+        sys.exit("house3d-card.js: no HOUSE3D_VERSION")
+    return m.group(1)
+
+
+def build_demo(outdir):
+    layers = full_model(FIXTURE)
+    model = house3d_model.with_room_names(house3d_model.merge(layers, house3d_model.CARD))
+    out = copy_engine(outdir)
+    shutil.copyfile(SRC / "house3d-card.js", out / "house3d-card.js")
+    # nginx and Cloudflare cache .js for 30 days: ?v= on the card and demo.js, as on HA's resource URL
+    version = card_version()
+    for name in ("index.html", "demo.js"):
+        text = (DEMO / name).read_text(encoding="utf-8")
+        (out / name).write_text(text.replace("__HOUSE3D_VERSION__", version), encoding="utf-8")
+    write_model(out, model)
+    print(f"built demo {out} (card v{version})")
+    return 0
 
 
 def main(argv):
     if len(argv) >= 3 and argv[0] == "--scan":
         layers = full_model(argv[1])
         return run_scan(house3d_model.merge(layers, house3d_model.LAYERS), argv[2:])
+    if len(argv) == 2 and argv[0] == "--demo":
+        return build_demo(argv[1])
     if len(argv) == 2 and not argv[0].startswith("-"):
         return build(*argv)
     print(__doc__.split("\n\n")[1], file=sys.stderr)

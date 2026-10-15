@@ -33,6 +33,7 @@ from itertools import pairwise
 REQUIRED = ("geometry", "rooms", "private", "showcase")
 LAYERS = REQUIRED + ("surroundings",)
 PUBLIC = ("geometry", "rooms", "showcase")
+CARD = ("geometry", "rooms", "private", "surroundings")  # the HA card's model: no showcase
 OUTDOOR = "oues"
 GATE_KINDS = ("sliding", "swing1", "swing2")
 ROOM_FLOORS = ("tile", "paving")  # the real style's floor finishes besides the default oak

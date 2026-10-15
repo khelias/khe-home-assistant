@@ -2074,9 +2074,7 @@ def house3d_view():
     problems = house3d_model.validate(layers)
     if problems:
         raise SystemExit("house3d model: " + "; ".join(problems))
-    model = house3d_model.with_room_names(
-        house3d_model.merge(layers, ("geometry", "rooms", "private", "surroundings"))
-    )
+    model = house3d_model.with_room_names(house3d_model.merge(layers, house3d_model.CARD))
     return [
         {
             "title": "3D",

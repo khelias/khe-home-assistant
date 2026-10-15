@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="et">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Maja 3D-vaade</title>
+<meta name="description" content="Väljamõeldud maja Home Assistanti 3D-vaates, simuleeritud seadmetega.">
+<!-- Demo of the Home Assistant card on the made-up test house: built by
+     scripts/house3d-build.py --demo next to the card, the engine and model.json. -->
+<style>
+:root {
+  --bg: #060c1b; --line: #6fe3ff; --ink: #e4ecff; --muted: #8a9bc2;
+  --panel: rgba(10, 18, 38, 0.9); --edge: rgba(111, 227, 255, 0.18); --chip: rgba(111, 227, 255, 0.08);
+  --amber: #ffc56e;
+  --display: "Saira Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--body); overflow: hidden;
+  display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100dvh; -webkit-tap-highlight-color: transparent; }
+header { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: end; justify-content: space-between;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 12px max(16px, env(safe-area-inset-left, 0px));
+  border-bottom: 1px solid var(--edge); }
+.brand { display: grid; gap: 4px; min-width: 0; max-width: 560px; }
+.eyebrow { font: 500 11px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--line); opacity: 0.85; }
+h1 { margin: 0; font: 600 26px/1.05 var(--display); letter-spacing: 0.02em; }
+.brand p { margin: 0; color: var(--muted); }
+a { color: var(--line); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.hint { margin: 0; color: var(--muted); font-size: 13px; }
+button { font: 500 13px/1 var(--body); color: var(--ink); background: var(--chip); border: 1px solid var(--edge);
+  border-radius: 9px; padding: 10px 12px; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
+button[aria-pressed="true"] { color: var(--bg); background: var(--line); border-color: var(--line); }
+button:disabled { opacity: .45; cursor: default; }
+@media (hover: hover) and (pointer: fine) { button:not([aria-pressed="true"]):not(:disabled):hover { border-color: var(--line); } }
+/* the more-info dialog, after Home Assistant's: name and room, the state, then the controls */
+dialog.info { width: min(400px, calc(100% - 32px)); box-sizing: border-box; padding: 18px; color: var(--ink);
+  background: #0b1428; border: 1px solid var(--edge); border-radius: 16px; box-shadow: 0 24px 70px rgba(0, 0, 0, .55); }
+dialog.info::backdrop { background: rgba(3, 6, 14, .55); }
+.i-head { display: grid; grid-template-columns: 1fr 36px; gap: 12px; align-items: start; }
+.i-head h2 { margin: 0; font: 600 20px/1.15 var(--display); letter-spacing: 0.01em; }
+.i-head .room { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+.i-head button { width: 36px; height: 36px; padding: 0; display: grid; place-items: center; font-size: 18px; background: transparent; border-color: transparent; }
+.state { margin: 16px 0 2px; font: 600 28px/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.when { margin: 0 0 16px; color: var(--muted); font-size: 12px; }
+.controls { display: grid; gap: 12px; }
+.controls .row { display: flex; gap: 8px; }
+.controls .row > button { flex: 1; }
+.controls .row.wrap { flex-wrap: wrap; }
+.controls .row.wrap > button { flex: 1 1 40%; }
+.controls .seg { padding: 3px; gap: 3px; border: 1px solid var(--edge); border-radius: 11px; }
+.controls .seg button { border-color: transparent; background: transparent; }
+.controls .seg button[aria-pressed="true"] { background: var(--line); }
+.big-toggle { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 14px 16px; font-size: 15px; }
+.sw { position: relative; width: 40px; height: 24px; border-radius: 12px; background: rgba(138, 155, 194, 0.25); transition: background-color .15s; }
+.sw::after { content: ""; position: absolute; top: 4px; left: 4px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform .15s, background-color .15s; }
+[aria-checked="true"] .sw { background: rgba(255, 197, 110, 0.4); }
+[aria-checked="true"] .sw::after { transform: translateX(16px); background: var(--amber); }
+.slider { display: grid; grid-template-columns: auto 1fr 3.5em; gap: 12px; align-items: center; font-size: 13px; color: var(--muted); }
+.slider input { width: 100%; margin: 0; accent-color: var(--amber); }
+.slider output { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+.stepper { display: grid; grid-template-columns: 48px 1fr 48px; gap: 8px; align-items: center; }
+.stepper button { height: 44px; font-size: 20px; padding: 0; }
+.stepper output { text-align: center; font: 600 22px/1 var(--display); font-variant-numeric: tabular-nums; }
+.note { margin: 0; color: var(--muted); font-size: 12px; }
+.cam { display: grid; place-items: center; aspect-ratio: 16 / 9; border-radius: 10px; color: var(--muted); font: 500 11px/1 var(--mono);
+  letter-spacing: .14em; text-transform: uppercase; border: 1px dashed var(--edge);
+  background: repeating-linear-gradient(135deg, rgba(111, 227, 255, .05) 0 10px, transparent 10px 20px); }
+@media (prefers-reduced-motion: reduce) { .sw, .sw::after { transition: none; } }
+house3d-card { display: block; height: auto; min-height: 0; --ha-card-border-radius: 0; }
+.fallback { display: grid; place-items: center; padding: 16px; color: var(--muted); text-align: center; }
+@media (max-width: 600px) {
+  dialog.info { width: 100%; max-width: none; margin: auto 0 0; border-radius: 16px 16px 0 0;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
+  header { padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
+  h1 { font-size: 22px; }
+  .brand p { font-size: 13px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="eyebrow">Home Assistant · demo</span>
+    <h1>Maja 3D-vaade</h1>
+    <p>Väljamõeldud maja, seadmete olekud on simuleeritud. Päris majas tulevad need Home Assistantist.
+      <a href="https://github.com/khelias/khe-home-assistant">Lähtekood GitHubis</a></p>
+  </div>
+  <div class="actions">
+    <p class="hint">Vajuta seadmele või ruumile, et seda juhtida.</p>
+    <button type="button" data-act="car" hidden>Auto saabub</button>
+  </div>
+</header>
+<house3d-card aria-label="Maja kolmemõõtmeline mudel"></house3d-card>
+<dialog class="info" aria-labelledby="info-name">
+  <div class="i-head"><div><h2 id="info-name"></h2><p class="room"></p></div>
+    <button type="button" data-act="close" aria-label="Sulge">✕</button></div>
+  <p class="state" aria-live="polite"></p>
+  <p class="when"></p>
+  <div class="controls"></div>
+</dialog>
+<script type="module" src="demo.js?v=__HOUSE3D_VERSION__"></script>
+</body>
+</html>

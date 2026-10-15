@@ -2,7 +2,7 @@
 
 Run from the repo root: python3 -I -m unittest discover -s tests/house3d -v
 """
-import copy, importlib.util, json, shutil, subprocess, sys, tempfile, unittest
+import copy, importlib.util, json, os, re, shutil, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,8 +19,8 @@ def layers():
     return hm.read_layers(FIXTURE)
 
 
-def run(*args):
-    return subprocess.run([sys.executable, "-I", str(BUILD), *map(str, args)], capture_output=True, text=True)
+def run(*args, env=None):
+    return subprocess.run([sys.executable, "-I", str(BUILD), *map(str, args)], capture_output=True, text=True, env=env)
 
 
 class FixtureModel(unittest.TestCase):
@@ -226,6 +226,55 @@ class BuildAndScan(unittest.TestCase):
             r = run("--scan", FIXTURE, f)
             self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
             self.assertIn(f"private string {entity!r}", r.stdout)
+
+
+class Demo(unittest.TestCase):
+    DEMO_FILES = ("index.html", "demo.js", "house3d-card.js", "house3d.js", "model.json")
+
+    def build(self, tmp, env=None):
+        r = run("--demo", tmp, env=env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        return Path(tmp)
+
+    def test_demo_writes_the_card_engine_and_model(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = self.build(tmp)
+            for name in self.DEMO_FILES:
+                self.assertTrue((out / name).is_file(), name)
+            self.assertTrue((out / "scene").is_dir())
+            self.assertTrue((out / "vendor").is_dir())
+            model = json.loads((out / "model.json").read_text(encoding="utf-8"))
+            L = layers()
+            self.assertEqual(model["devices"], L["private"]["devices"])
+            self.assertEqual(model["car"], L["private"]["car"])
+            self.assertEqual(model["surroundings"], L["surroundings"]["surroundings"])
+            self.assertIn("walls", model)
+            self.assertNotIn("showcase", model)
+            self.assertNotIn("room_names", model)
+
+    def test_demo_carries_the_card_version(self):
+        version = re.search(r"^const HOUSE3D_VERSION = (\d+);", (ENGINE / "house3d-card.js").read_text(), re.M).group(1)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = self.build(tmp)
+            for name in ("index.html", "demo.js"):
+                text = (out / name).read_text(encoding="utf-8")
+                self.assertNotIn("__HOUSE3D_VERSION__", text)
+                self.assertIn(f"?v={version}", text)
+
+    def test_demo_ignores_house3d_model(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            other = Path(tmp) / "other-model.md"
+            text = FIXTURE.read_text(encoding="utf-8").replace("Testvalgusti", "Muuvalgusti")
+            other.write_text(text, encoding="utf-8")
+            plain = self.build(Path(tmp) / "plain")
+            planted = self.build(Path(tmp) / "planted", env={**os.environ, "HOUSE3D_MODEL": str(other)})
+            for f in sorted(p for p in plain.rglob("*") if p.is_file()):
+                self.assertEqual(f.read_bytes(), (planted / f.relative_to(plain)).read_bytes(), f.name)
+
+    def test_demo_takes_no_model_argument(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = run("--demo", FIXTURE, tmp)
+            self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
 
 
 if __name__ == "__main__":

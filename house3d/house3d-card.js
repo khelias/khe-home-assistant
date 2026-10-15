@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 16;
+const HOUSE3D_VERSION = 17;
 const engine = import(`./house3d.js?v=${HOUSE3D_VERSION}`);
 
 const nf1 = new Intl.NumberFormat('et-EE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -104,9 +104,13 @@ export function toMarker(d, st) {
   } else if (domain === 'sensor') {
     const v = num(s);
     if (v !== null) m.value = `${nf1.format(v)}°`;
-  } else if (domain === 'water_heater') {
+  } else if (domain === 'water_heater' || domain === 'climate') {
     const v = num(st.attributes && st.attributes.current_temperature);
     if (v !== null) m.value = `${nf1.format(v)}°`;
+    // a heating unit at work is on, but it is no lamp: the room's floor stays as it is
+    if (domain === 'climate' && s !== 'off' && s !== 'unknown') { m.state = 'on'; m.warm = false; }
+  } else if (domain === 'switch' || domain === 'fan' || domain === 'input_boolean') {
+    if (s === 'on') { m.state = 'on'; m.warm = false; }
   }
   // cover (the pergola reports no position), select and camera stay idle
   return m;
@@ -355,10 +359,11 @@ class House3dCard extends HTMLElement {
   }
 
   // the licence asks for the licensor, the dataset and its date; the bottom corners hold the
-  // phone's button bar, so the line sits top left
+  // phone's button bar, so the line sits top left. Only ETAK data is credited: a made-up
+  // surroundings layer (the demo's test house) names no licensor.
   _credit() {
     const sur = this._config.model.surroundings;
-    if (!sur) return '';
+    if (!sur || !String(sur.source || '').startsWith('ETAK,')) return '';
     const d = /(\d{4})-(\d{2})-(\d{2})/.exec(sur.source || '');
     return `<div class="credit">Ümbrus: Maa- ja Ruumiamet, ETAK${d ? `, ${d[3]}.${d[2]}.${d[1]}` : ''}</div>`;
   }
