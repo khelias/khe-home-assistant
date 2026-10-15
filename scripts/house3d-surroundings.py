@@ -27,15 +27,26 @@ itself holds no coordinates; the location lives only in MODEL.
 Licence: Maa- ja Ruumiamet open data licence (01.01.2025). Credit licensor, dataset and date,
 which the layer's source string carries and the HA card shows.
 """
-import argparse, json, math, sqlite3, struct, sys
+
+import argparse
+import json
+import math
+import sqlite3
+import struct
+import sys
 from collections import Counter
+from itertools import pairwise
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import house3d_model  # noqa: E402
+import house3d_model
 
 BUILDINGS, ROAD_AREAS, ROAD_LINES = "E_401_hoone_ka", "E_501_tee_a", "E_501_tee_j"
-BUILDING_TYPES = {10: 6.0, 20: 3.0, 50: 6.0}  # ETAK building type -> assumed height when korgus_m is missing
+BUILDING_TYPES = {
+    10: 6.0,
+    20: 3.0,
+    50: 6.0,
+}  # ETAK building type -> assumed height when korgus_m is missing
 ROAD_AREA_TYPES = (10, 60)  # traffic area including the sidewalks beside it, pedestrian area
 STREET_TYPES = (50, 60)  # centre lines of streets and roads
 DEFAULT_ROAD_WIDTH = 3.0
@@ -45,6 +56,7 @@ FENCE = "```json house3d:surroundings"
 
 
 # ---------- GeoPackage geometry ----------
+
 
 def _wkb(buf, at):
     """Parse one WKB geometry at offset at; return ([(kind, rings_or_points)], new offset).
@@ -105,6 +117,7 @@ def parse_gpkg(blob):
 
 # ---------- plane geometry ----------
 
+
 def area(ring):
     return abs(signed_area(ring))
 
@@ -150,8 +163,12 @@ def seg_point(p, a, b):
 def seg_dist(a, b, c, d):
     if house3d_model._segments_cross(a, b, c, d):
         return 0.0
-    return min(math.dist(a, seg_point(a, c, d)), math.dist(b, seg_point(b, c, d)),
-               math.dist(c, seg_point(c, a, b)), math.dist(d, seg_point(d, a, b)))
+    return min(
+        math.dist(a, seg_point(a, c, d)),
+        math.dist(b, seg_point(b, c, d)),
+        math.dist(c, seg_point(c, a, b)),
+        math.dist(d, seg_point(d, a, b)),
+    )
 
 
 def edges(ring):
@@ -169,7 +186,12 @@ def _box_cut(a, b, box):
     """Liang-Barsky: the part (t0, t1) of segment a-b inside box, or None."""
     t0, t1 = 0.0, 1.0
     dx, dz = b[0] - a[0], b[1] - a[1]
-    for p, q in ((-dx, a[0] - box[0]), (dx, box[2] - a[0]), (-dz, a[1] - box[1]), (dz, box[3] - a[1])):
+    for p, q in (
+        (-dx, a[0] - box[0]),
+        (dx, box[2] - a[0]),
+        (-dz, a[1] - box[1]),
+        (dz, box[3] - a[1]),
+    ):
         if p == 0:
             if q < 0:
                 return None
@@ -252,7 +274,9 @@ def clip_polygon(rings, box):
                     raise ValueError("clip: chains do not close; the polygon is not simple")
                 i = nxt
             pieces.append(out)
-    elif inside(((x0 + x1) / 2, (z0 + z1) / 2), rings[0]) and not any(inside(((x0 + x1) / 2, (z0 + z1) / 2), h) for h in rings[1:]):
+    elif inside(((x0 + x1) / 2, (z0 + z1) / 2), rings[0]) and not any(
+        inside(((x0 + x1) / 2, (z0 + z1) / 2), h) for h in rings[1:]
+    ):
         pieces.append([(x0, z0), (x1, z0), (x1, z1), (x0, z1)])
     holes = []
     for r in whole:
@@ -292,17 +316,25 @@ def buffer_line(pts, half):
     """A polyline widened by half on each side, as one outline per leg with square ends, overlapping
     at the joints."""
     out = []
-    for a, b in zip(pts, pts[1:]):
+    for a, b in pairwise(pts):
         L = math.dist(a, b)
         if L == 0:
             continue
         ux, uz = (b[0] - a[0]) / L, (b[1] - a[1]) / L
         nx, nz = -uz * half, ux * half
-        out.append([(a[0] + nx, a[1] + nz), (b[0] + nx, b[1] + nz), (b[0] - nx, b[1] - nz), (a[0] - nx, a[1] - nz)])
+        out.append(
+            [
+                (a[0] + nx, a[1] + nz),
+                (b[0] + nx, b[1] + nz),
+                (b[0] - nx, b[1] - nz),
+                (a[0] - nx, a[1] - nz),
+            ]
+        )
     return out
 
 
 # ---------- frames ----------
+
 
 class Frame:
     """L-EST97 <-> model frame. With theta the x axis bearing, dE = E - E0 and dN = N - N0:
@@ -332,11 +364,22 @@ def bbox(pts):
 
 def query(db, table, frame, window):
     """Rows (id, parts in the model frame, tyyp, extra) of table whose bbox meets the window."""
-    corners = [frame.to_lest(p) for p in ((window[0], window[1]), (window[2], window[1]), (window[2], window[3]), (window[0], window[3]))]
+    corners = [
+        frame.to_lest(p)
+        for p in (
+            (window[0], window[1]),
+            (window[2], window[1]),
+            (window[2], window[3]),
+            (window[0], window[3]),
+        )
+    ]
     e0, n0, e1, n1 = bbox(corners)
     extra = {BUILDINGS: "t.korgus_m", ROAD_AREAS: "NULL", ROAD_LINES: "t.laius"}[table]
-    rows = db.execute(f"SELECT t.id, t.geom, t.tyyp, {extra} FROM {table} t JOIN rtree_{table}_geom r ON r.id = t.id "
-                      "WHERE r.maxx >= ? AND r.minx <= ? AND r.maxy >= ? AND r.miny <= ?", (e0, e1, n0, n1)).fetchall()
+    rows = db.execute(
+        f"SELECT t.id, t.geom, t.tyyp, {extra} FROM {table} t JOIN rtree_{table}_geom r ON r.id = t.id "
+        "WHERE r.maxx >= ? AND r.minx <= ? AND r.maxy >= ? AND r.miny <= ?",
+        (e0, e1, n0, n1),
+    ).fetchall()
     out = []
     for fid, blob, tyyp, value in rows:
         parts = []
@@ -351,13 +394,16 @@ def query(db, table, frame, window):
 
 # ---------- the check, the selection and the layer ----------
 
+
 def house_box(geo):
     """Bounding box of the house's outer wall faces. The outbuilding is left out: its walls run up
     to a roof whose outline stands apart from the house's roofs (the house being the group of
     touching roofs with the largest area)."""
     roofs = geo["roofs"]
     boxes = {k: bbox(r["outline"]) for k, r in roofs.items()}
-    touch = lambda a, b: a[0] <= b[2] + 0.5 and b[0] <= a[2] + 0.5 and a[1] <= b[3] + 0.5 and b[1] <= a[3] + 0.5
+    touch = lambda a, b: (
+        a[0] <= b[2] + 0.5 and b[0] <= a[2] + 0.5 and a[1] <= b[3] + 0.5 and b[1] <= a[3] + 0.5
+    )
     groups = []
     for k in roofs:
         near = [g for g in groups if any(touch(boxes[k], boxes[j]) for j in g)]
@@ -378,8 +424,11 @@ def house_box(geo):
 
 def lot_front(lot, x):
     """The z of the lot outline's street-side edge at x (its smallest z there), or None."""
-    zs = [a[1] + (x - a[0]) * (b[1] - a[1]) / (b[0] - a[0]) for a, b in edges(lot)
-          if a[0] != b[0] and min(a[0], b[0]) <= x <= max(a[0], b[0])]
+    zs = [
+        a[1] + (x - a[0]) * (b[1] - a[1]) / (b[0] - a[0])
+        for a, b in edges(lot)
+        if a[0] != b[0] and min(a[0], b[0]) <= x <= max(a[0], b[0])
+    ]
     return min(zs) if zs else None
 
 
@@ -388,7 +437,7 @@ def street_ahead(lines, x, z_front):
     leg's angle to the x axis in degrees), or None."""
     best = None
     for pts in lines:
-        for a, b in zip(pts, pts[1:]):
+        for a, b in pairwise(pts):
             if a[0] == b[0] or not min(a[0], b[0]) <= x <= max(a[0], b[0]):
                 continue
             z = a[1] + (x - a[0]) * (b[1] - a[1]) / (b[0] - a[0])
@@ -430,33 +479,60 @@ def surroundings(model, db, radius):
     areas = query(db, ROAD_AREAS, frame, window)
     lines = query(db, ROAD_LINES, frame, window)
     for table, rows in ((BUILDINGS, bld), (ROAD_AREAS, areas), (ROAD_LINES, lines)):
-        say(f"{table}: {len(rows)} in the window, tyyp " + ", ".join(f"{t}: {n}" for t, n in sorted(Counter(r[2] for r in rows).items())))
+        say(
+            f"{table}: {len(rows)} in the window, tyyp "
+            + ", ".join(f"{t}: {n}" for t, n in sorted(Counter(r[2] for r in rows).items()))
+        )
 
     # self-check: the house
     hb, house_roofs, other_roofs, skipped = house_box(model)
-    say(f"house: roofs {', '.join(house_roofs)}; {skipped} walls under {', '.join(other_roofs) or 'no other roof'} left out")
-    found = [ring for _, parts, _, _ in bld for kind, rings in parts if kind == "polygon"
-             for ring in rings[:1] if (lambda c: hb[0] - 1 <= c[0] <= hb[2] + 1 and hb[1] - 1 <= c[1] <= hb[3] + 1)(centroid(ring))]
+    say(
+        f"house: roofs {', '.join(house_roofs)}; {skipped} walls under {', '.join(other_roofs) or 'no other roof'} left out"
+    )
+    found = [
+        ring
+        for _, parts, _, _ in bld
+        for kind, rings in parts
+        if kind == "polygon"
+        for ring in rings[:1]
+        if hb[0] - 1 <= (c := centroid(ring))[0] <= hb[2] + 1 and hb[1] - 1 <= c[1] <= hb[3] + 1
+    ]
     failed = []
     if not found:
         failed.append("no ETAK footprint has its centroid on the house")
     else:
         eb = bbox([p for r in found for p in r])
         res = [eb[i] - hb[i] for i in range(4)]
-        say(f"self-check house: {len(found)} footprint(s); residuals west {res[0]:+.2f}, north {res[1]:+.2f}, "
-            f"east {res[2]:+.2f}, south {res[3]:+.2f} m (x0, z0, x1, z1; {HOUSE_TOLERANCE} m allowed)")
+        say(
+            f"self-check house: {len(found)} footprint(s); residuals west {res[0]:+.2f}, north {res[1]:+.2f}, "
+            f"east {res[2]:+.2f}, south {res[3]:+.2f} m (x0, z0, x1, z1; {HOUSE_TOLERANCE} m allowed)"
+        )
         if any(abs(r) > HOUSE_TOLERANCE for r in res):
             failed.append(f"the house footprint is off by more than {HOUSE_TOLERANCE} m")
 
     # self-check: a street runs along the front, in front of the fence
-    streets = [pts for _, parts, t, _ in lines if t in STREET_TYPES for kind, pts in parts if kind == "line"]
+    streets = [
+        pts
+        for _, parts, t, _ in lines
+        if t in STREET_TYPES
+        for kind, pts in parts
+        if kind == "line"
+    ]
     share, ang = street_check(streets, lot, radius)
-    say(f"self-check street: a centre line within {radius:g} m in front of the fence along {share:.0%} of the lot's front, "
-        + (f"median leg {ang:.1f} degrees off the x axis ({STREET_ANGLE} allowed)" if ang is not None else "no leg"))
+    say(
+        f"self-check street: a centre line within {radius:g} m in front of the fence along {share:.0%} of the lot's front, "
+        + (
+            f"median leg {ang:.1f} degrees off the x axis ({STREET_ANGLE} allowed)"
+            if ang is not None
+            else "no leg"
+        )
+    )
     if share < 0.5:
         failed.append("no street along most of the lot's front (axes swapped or mirrored?)")
     elif ang > STREET_ANGLE:
-        failed.append("the street in front does not run along the x axis (axes swapped or rotated?)")
+        failed.append(
+            "the street in front does not run along the x axis (axes swapped or rotated?)"
+        )
     if failed:
         print("\n".join(report))
         raise SystemExit("self-check failed: " + "; ".join(failed))
@@ -467,7 +543,11 @@ def surroundings(model, db, radius):
         if t not in BUILDING_TYPES:
             continue
         for kind, rings in parts:
-            if kind != "polygon" or inside(centroid(rings[0]), lot) or ring_dist(rings[0], lot) > radius:
+            if (
+                kind != "polygon"
+                or inside(centroid(rings[0]), lot)
+                or ring_dist(rings[0], lot) > radius
+            ):
                 continue
             outline = tidy(rings[0])
             if outline is None:
@@ -507,19 +587,41 @@ def surroundings(model, db, radius):
             r["holes"] = hs
         road_out.append(r)
 
-    when = max(row[0] for row in db.execute(
-        "SELECT substr(last_change, 1, 10) FROM gpkg_contents WHERE lower(table_name) IN (?, ?, ?)",
-        tuple(t.lower() for t in (BUILDINGS, ROAD_AREAS, ROAD_LINES))))
-    layer = {"surroundings": {"source": f"ETAK, Maa- ja Ruumiamet, {when}", "buildings": buildings, "roads": road_out}}
+    when = max(
+        row[0]
+        for row in db.execute(
+            "SELECT substr(last_change, 1, 10) FROM gpkg_contents WHERE lower(table_name) IN (?, ?, ?)",
+            tuple(t.lower() for t in (BUILDINGS, ROAD_AREAS, ROAD_LINES)),
+        )
+    )
+    layer = {
+        "surroundings": {
+            "source": f"ETAK, Maa- ja Ruumiamet, {when}",
+            "buildings": buildings,
+            "roads": road_out,
+        }
+    }
 
     hs = [b["height"] for b in buildings]
-    say(f"buildings: {len(buildings)}" + (f", height {min(hs):g}-{max(hs):g} m, {sum(1 for b in buildings if b.get('assumed'))} assumed" if hs else ""))
-    say(f"roads: {len(road_out)} ring(s) from the {source_kind}, {sum(len(r.get('holes', [])) for r in road_out)} hole(s)")
+    say(
+        f"buildings: {len(buildings)}"
+        + (
+            f", height {min(hs):g}-{max(hs):g} m, {sum(1 for b in buildings if b.get('assumed'))} assumed"
+            if hs
+            else ""
+        )
+    )
+    say(
+        f"roads: {len(road_out)} ring(s) from the {source_kind}, {sum(len(r.get('holes', [])) for r in road_out)} hole(s)"
+    )
     path = (model.get("car") or {}).get("path")
     x = path[0][0] if path else (lb[0] + lb[2]) / 2
     front = lot_front(lot, x)
     ahead = street_ahead(streets, x, front) if front is not None else None
-    say(f"street centre line at x {x:g}: " + (f"{ahead[0]:.1f} m in front of the fence" if ahead else "does not cross that x"))
+    say(
+        f"street centre line at x {x:g}: "
+        + (f"{ahead[0]:.1f} m in front of the fence" if ahead else "does not cross that x")
+    )
     say(f"source: {layer['surroundings']['source']}")
     return layer, report
 
@@ -528,9 +630,14 @@ def block_text(layer):
     s = layer["surroundings"]
     row = lambda v: json.dumps(v, ensure_ascii=False, separators=(",", ":"))
     lines = [FENCE, '{"surroundings": {', f'  "source": {row(s["source"])},', '  "buildings": [']
-    lines += [f"    {row(b)}" + ("," if i < len(s["buildings"]) - 1 else "") for i, b in enumerate(s["buildings"])]
+    lines += [
+        f"    {row(b)}" + ("," if i < len(s["buildings"]) - 1 else "")
+        for i, b in enumerate(s["buildings"])
+    ]
     lines += ["  ],", '  "roads": [']
-    lines += [f"    {row(r)}" + ("," if i < len(s["roads"]) - 1 else "") for i, r in enumerate(s["roads"])]
+    lines += [
+        f"    {row(r)}" + ("," if i < len(s["roads"]) - 1 else "") for i, r in enumerate(s["roads"])
+    ]
     lines += ["  ]", "}}", "```"]
     return "\n".join(lines)
 
@@ -551,16 +658,18 @@ def write(path, layer):
 
     old = block_at(FENCE)
     if old:
-        lines[old[0]:old[1] + 1] = new
+        lines[old[0] : old[1] + 1] = new
     else:
         priv = block_at("```json house3d:private")
         if priv is None:
             raise SystemExit(f"{path}: no private block to put the surroundings after")
-        lines[priv[1] + 1:priv[1] + 1] = [""] + new
+        lines[priv[1] + 1 : priv[1] + 1] = [""] + new
     out = "\n".join(lines)
     problems = house3d_model.validate(house3d_model.parse_layers(out))
     if problems:
-        raise SystemExit("the new model does not validate, nothing written:\n" + "\n".join(problems))
+        raise SystemExit(
+            "the new model does not validate, nothing written:\n" + "\n".join(problems)
+        )
     Path(path).write_text(out, encoding="utf-8")
     return "replaced" if old else "added"
 

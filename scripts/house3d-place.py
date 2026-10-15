@@ -17,18 +17,25 @@ geometry block's "trees" list, one item per line as before, and writes the file 
 other shape, an unknown entity or tree, a changed device height, a tree size that is not a
 positive number or a model that no longer validates stops it before writing.
 """
-import functools, http.server, json, math, sys
+
+import functools
+import http.server
+import json
+import math
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import house3d_model  # noqa: E402
+import house3d_model
 
 SRC = Path(__file__).resolve().parent.parent / "house3d"
 PRIVATE = "```json house3d:private"
 GEOMETRY = "```json house3d:geometry"
-SHAPE = ('changes must be {"devices": {entity: {pos: [x, y, z], look?, room?}}, '
-         '"trees": {id: {pos: [x, z], height, crown}}}, each group only when it has changes, '
-         'as the page copies them')
+SHAPE = (
+    'changes must be {"devices": {entity: {pos: [x, y, z], look?, room?}}, '
+    '"trees": {id: {pos: [x, z], height, crown}}}, each group only when it has changes, '
+    "as the page copies them"
+)
 
 
 def checked(layers):
@@ -40,7 +47,9 @@ def checked(layers):
 
 def serve(model_path, port=8731):
     layers = checked(house3d_model.read_layers(model_path))
-    model = house3d_model.with_room_names(house3d_model.merge(layers, ("geometry", "rooms", "private")))
+    model = house3d_model.with_room_names(
+        house3d_model.merge(layers, ("geometry", "rooms", "private"))
+    )
     body = json.dumps(model, ensure_ascii=False).encode("utf-8")
 
     class Handler(http.server.SimpleHTTPRequestHandler):
@@ -54,7 +63,9 @@ def serve(model_path, port=8731):
             self.end_headers()
             self.wfile.write(body)
 
-    with http.server.ThreadingHTTPServer(("127.0.0.1", port), functools.partial(Handler, directory=str(SRC))) as httpd:
+    with http.server.ThreadingHTTPServer(
+        ("127.0.0.1", port), functools.partial(Handler, directory=str(SRC))
+    ) as httpd:
         print(f"http://127.0.0.1:{port}/place.html  (Ctrl+C stops)", flush=True)
         try:
             httpd.serve_forever()
@@ -69,8 +80,12 @@ def parse_changes(raw):
         changes = json.loads(raw)
     except ValueError as e:
         sys.exit(f"changes are not JSON ({e}); {SHAPE}")
-    if not (isinstance(changes, dict) and changes and set(changes) <= {"devices", "trees"}
-            and all(isinstance(g, dict) for g in changes.values())):
+    if not (
+        isinstance(changes, dict)
+        and changes
+        and set(changes) <= {"devices", "trees"}
+        and all(isinstance(g, dict) for g in changes.values())
+    ):
         sys.exit(SHAPE)
     for entity, c in changes.get("devices", {}).items():
         if not (isinstance(c, dict) and house3d_model._point(c.get("pos"), 3)):
@@ -99,7 +114,11 @@ def rewrite(lines, i, item):
     """Write item over line i, keeping its indent and trailing comma."""
     line = lines[i].rstrip()
     indent = line[: len(line) - len(line.lstrip())]
-    lines[i] = indent + json.dumps(item, ensure_ascii=False, separators=(",", ":")) + ("," if line.endswith(",") else "")
+    lines[i] = (
+        indent
+        + json.dumps(item, ensure_ascii=False, separators=(",", ":"))
+        + ("," if line.endswith(",") else "")
+    )
 
 
 def apply_devices(lines, changes, path, report):
@@ -111,17 +130,23 @@ def apply_devices(lines, changes, path, report):
         try:
             device = json.loads(text.rstrip(","))
         except ValueError:
-            sys.exit(f"{path}:{i + 1}: not a whole device; the private block keeps one device per line")
+            sys.exit(
+                f"{path}:{i + 1}: not a whole device; the private block keeps one device per line"
+            )
         new = changes.get(device["entity"])
         if new is None:
             continue
         if new["pos"][1] != device["pos"][1]:
-            sys.exit(f"{device['entity']}: height {device['pos'][1]} would become {new['pos'][1]}; the page keeps heights")
+            sys.exit(
+                f"{device['entity']}: height {device['pos'][1]} would become {new['pos'][1]}; the page keeps heights"
+            )
         old = dict(device)
         device.update({k: new[k] for k in ("pos", "look", "room") if k in new})
         rewrite(lines, i, device)
         seen.add(device["entity"])
-        moved = ((device["pos"][0] - old["pos"][0]) ** 2 + (device["pos"][2] - old["pos"][2]) ** 2) ** 0.5
+        moved = (
+            (device["pos"][0] - old["pos"][0]) ** 2 + (device["pos"][2] - old["pos"][2]) ** 2
+        ) ** 0.5
         room = f", room {old['room']} -> {device['room']}" if old["room"] != device["room"] else ""
         report.append(f"{device['entity']}: moved {moved:.2f} m{room}")
     unknown = sorted(set(changes) - seen)
@@ -134,7 +159,9 @@ def apply_trees(lines, changes, path, report):
     rows = block(lines, GEOMETRY, path)
     start = next((i for i in rows if lines[i].strip() == '"trees": ['), None)
     if start is None:
-        sys.exit(f'{path}: no line "trees": [ alone in the geometry block; apply needs the trees one per line')
+        sys.exit(
+            f'{path}: no line "trees": [ alone in the geometry block; apply needs the trees one per line'
+        )
     seen = set()
     for i in range(start + 1, rows.stop):
         text = lines[i].strip()
@@ -154,7 +181,9 @@ def apply_trees(lines, changes, path, report):
         rewrite(lines, i, tree)
         seen.add(tree["id"])
         moved = math.dist(old["pos"], tree["pos"])
-        sizes = "".join(f", {k} {old[k]} -> {tree[k]}" for k in ("height", "crown") if old[k] != tree[k])
+        sizes = "".join(
+            f", {k} {old[k]} -> {tree[k]}" for k in ("height", "crown") if old[k] != tree[k]
+        )
         report.append(f"tree {tree['id']}: moved {moved:.2f} m{sizes}")
     else:
         sys.exit(f"{path}: the trees list in the geometry block has no closing ] line")
@@ -165,7 +194,9 @@ def apply_trees(lines, changes, path, report):
 
 
 def apply(model_path, changes_path):
-    raw = sys.stdin.read() if changes_path == "-" else Path(changes_path).read_text(encoding="utf-8")
+    raw = (
+        sys.stdin.read() if changes_path == "-" else Path(changes_path).read_text(encoding="utf-8")
+    )
     changes = parse_changes(raw)
     path = Path(model_path)
     text = path.read_text(encoding="utf-8")

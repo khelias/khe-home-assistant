@@ -22,7 +22,13 @@ Usage:  house3d_model.py --check FILE
         house3d_model.py --layers geometry,rooms,showcase FILE   (or --layers all)
 Import: load(path, layers), validate(layers), private_strings(model)
 """
-import argparse, json, math, re, sys
+
+import argparse
+import json
+import math
+import re
+import sys
+from itertools import pairwise
 
 REQUIRED = ("geometry", "rooms", "private", "showcase")
 LAYERS = REQUIRED + ("surroundings",)
@@ -32,9 +38,11 @@ GATE_KINDS = ("sliding", "swing1", "swing2")
 ROOM_FLOORS = ("tile", "paving")  # the real style's floor finishes besides the default oak
 PLANTS = ("thuja", "low")
 PLANTER_FINISHES = ("frame", "cladding")
-SLIDE_OFFSET = 0.12  # a sliding leaf runs this far to the lot side of the fence line, past its rails
+SLIDE_OFFSET = (
+    0.12  # a sliding leaf runs this far to the lot side of the fence line, past its rails
+)
 CAR_CLEARANCE = 0.3  # between the car and a gate leaf's sweep
-BLOCK = re.compile(r"^```json house3d:(\w+)[ \t]*\n(.*?)^```[ \t]*$", re.M | re.S)
+BLOCK = re.compile(r"^```json house3d:(\w+)[ \t]*\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
 
 
 def read_layers(path):
@@ -99,9 +107,15 @@ def _cross(o, a, b):
 def _segments_cross(p, q, a, b):
     """True when segment p-q meets segment a-b (touching counts)."""
     d1, d2, d3, d4 = _cross(a, b, p), _cross(a, b, q), _cross(p, q, a), _cross(p, q, b)
-    if ((d1 > 0) != (d2 > 0) or d1 == 0 or d2 == 0) and ((d3 > 0) != (d4 > 0) or d3 == 0 or d4 == 0):
-        return min(p[0], q[0]) <= max(a[0], b[0]) and min(a[0], b[0]) <= max(p[0], q[0]) and \
-            min(p[1], q[1]) <= max(a[1], b[1]) and min(a[1], b[1]) <= max(p[1], q[1])
+    if ((d1 > 0) != (d2 > 0) or d1 == 0 or d2 == 0) and (
+        (d3 > 0) != (d4 > 0) or d3 == 0 or d4 == 0
+    ):
+        return (
+            min(p[0], q[0]) <= max(a[0], b[0])
+            and min(a[0], b[0]) <= max(p[0], q[0])
+            and min(p[1], q[1]) <= max(a[1], b[1])
+            and min(a[1], b[1]) <= max(p[1], q[1])
+        )
     return False
 
 
@@ -140,8 +154,14 @@ def drive_gates(model):
     """Indexes of the gates in site.gates that the car's path, as straight legs, crosses."""
     path = (model.get("car") or {}).get("path") or []
     gates = (model.get("site") or {}).get("gates") or []
-    return [i for i, g in enumerate(gates) if isinstance(g, dict) and _point(g.get("a")) and _point(g.get("b"))
-            and any(_segments_cross(p, q, g["a"], g["b"]) for p, q in zip(path, path[1:]))]
+    return [
+        i
+        for i, g in enumerate(gates)
+        if isinstance(g, dict)
+        and _point(g.get("a"))
+        and _point(g.get("b"))
+        and any(_segments_cross(p, q, g["a"], g["b"]) for p, q in pairwise(path))
+    ]
 
 
 def validate(layers):
@@ -215,12 +235,16 @@ def validate(layers):
                 bad(f"{where}.openings[{j}]: c, w and h must be numbers")
                 continue
             if o.get("kind") not in ("window", "door", "glassdoor"):
-                bad(f"{where}.openings[{j}]: kind {o.get('kind')!r} is not window, door or glassdoor")
+                bad(
+                    f"{where}.openings[{j}]: kind {o.get('kind')!r} is not window, door or glassdoor"
+                )
             if o.get("kind") == "window" and not _num(o.get("sill")):
                 bad(f"{where}.openings[{j}]: a window needs a sill")
             if o["c"] - o["w"] / 2 < -1e-6 or o["c"] + o["w"] / 2 > length + 1e-6:
-                bad(f"{where}.openings[{j}]: span {o['c'] - o['w'] / 2:.3f}..{o['c'] + o['w'] / 2:.3f} "
-                    f"is outside the wall (length {length:.3f})")
+                bad(
+                    f"{where}.openings[{j}]: span {o['c'] - o['w'] / 2:.3f}..{o['c'] + o['w'] / 2:.3f} "
+                    f"is outside the wall (length {length:.3f})"
+                )
 
     for i, f in enumerate(model.get("furniture", [])):
         where = f"furniture[{i}]"
@@ -232,7 +256,11 @@ def validate(layers):
             bad(f"{where}: y must be [y0, y1] with y0 < y1")
 
     site = model.get("site", {})
-    if not (isinstance(site.get("lot"), list) and len(site["lot"]) >= 3 and all(_point(p) for p in site["lot"])):
+    if not (
+        isinstance(site.get("lot"), list)
+        and len(site["lot"]) >= 3
+        and all(_point(p) for p in site["lot"])
+    ):
         bad("site: lot needs three or more [x, z] points")
     for key in ("hedges", "fences", "bar_fences"):
         for i, seg in enumerate(site.get(key, [])):
@@ -249,8 +277,10 @@ def validate(layers):
             elif _area(v) < 1:
                 bad(f"{where}: outline area {_area(v):.2f} m2 is under 1 m2")
             elif any(p == q for p, q in zip(v, v[1:] + v[:1])):
-                bad(f"{where}: outline repeats a point (it closes by itself, do not repeat the first point)")
-            elif (c := _crossing(v)):
+                bad(
+                    f"{where}: outline repeats a point (it closes by itself, do not repeat the first point)"
+                )
+            elif c := _crossing(v):
                 bad(f"{where}: outline edges {c[0]} and {c[1]} cross")
     for key in ("porch",):
         if key in site:
@@ -260,9 +290,15 @@ def validate(layers):
             bad(f"site.{key}: not a JSON object")
         elif key in site:
             rect(f"site.{key}", site[key].get("rect"))
-    if isinstance(site.get("trampoline"), dict) and not (_num(site["trampoline"].get("height")) and site["trampoline"]["height"] > 0):
+    if isinstance(site.get("trampoline"), dict) and not (
+        _num(site["trampoline"].get("height")) and site["trampoline"]["height"] > 0
+    ):
         bad("site.trampoline: height is not a positive number")
-    if isinstance(site.get("swing"), dict) and "slide" in site["swing"] and not _point(site["swing"]["slide"]):
+    if (
+        isinstance(site.get("swing"), dict)
+        and "slide" in site["swing"]
+        and not _point(site["swing"]["slide"])
+    ):
         bad("site.swing: slide must be [x, z]")
     for i, p in enumerate(site.get("planters", [])):
         where = f"site.planters[{i}]"
@@ -305,7 +341,10 @@ def validate(layers):
     if not isinstance(trees, list):
         bad("site.trees: not a list")
         trees = []
-    ids("site.trees", [t["id"] for t in trees if isinstance(t, dict) and isinstance(t.get("id"), str)])
+    ids(
+        "site.trees",
+        [t["id"] for t in trees if isinstance(t, dict) and isinstance(t.get("id"), str)],
+    )
     for i, t in enumerate(trees):
         if not isinstance(t, dict):
             bad(f"site.trees[{i}]: not a JSON object")
@@ -366,7 +405,13 @@ def validate(layers):
         _validate_car(model["car"], {r.get("id"): r for r in rooms}, bad)
         car_ok = len(problems) == n
     lot = site.get("lot")
-    if car_ok and site.get("gates") and isinstance(lot, list) and len(lot) >= 3 and all(_point(p) for p in lot):
+    if (
+        car_ok
+        and site.get("gates")
+        and isinstance(lot, list)
+        and len(lot) >= 3
+        and all(_point(p) for p in lot)
+    ):
         _validate_drive(model, good_gates, bad)
     if "surroundings" in layers:
         _validate_surroundings(layers["surroundings"], bad)
@@ -428,8 +473,9 @@ def _validate_gates(gates, bad):
             h = gates[j]
             if any(abs(_cross(g["a"], g["b"], p)) / w > 0.01 for p in (h["a"], h["b"])):
                 continue
-            along = lambda p: (p[0] - g["a"][0]) * ux + (p[1] - g["a"][1]) * uz
-            lo, hi = sorted((along(h["a"]), along(h["b"])))
+            lo, hi = sorted(
+                (p[0] - g["a"][0]) * ux + (p[1] - g["a"][1]) * uz for p in (h["a"], h["b"])
+            )
             if min(w, hi) - max(0, lo) > 1e-6:
                 bad(f"site.gates[{i}] and site.gates[{j}] overlap along their line")
     return good
@@ -440,7 +486,9 @@ def _validate_drive(model, good, bad):
     gates = model["site"]["gates"]
     crossed = drive_gates(model)
     if len(crossed) > 1:
-        return bad(f"car: path crosses {len(crossed)} gates (site.gates {crossed}); at most one may be the drive gate")
+        return bad(
+            f"car: path crosses {len(crossed)} gates (site.gates {crossed}); at most one may be the drive gate"
+        )
     if not crossed or crossed[0] not in good:
         return
     g = gates[crossed[0]]
@@ -450,8 +498,10 @@ def _validate_drive(model, good, bad):
     out = gate_sweep(g)[0]
     need = model["car"]["profile"]["length"] / 2 + out + CAR_CLEARANCE
     if before < need - 1e-6:
-        bad(f"car: path starts {before:.2f} m before the drive gate's line, needs {need:.2f} m "
-            f"(half the car, the leaves' outward sweep {out:.2f} m and {CAR_CLEARANCE} m)")
+        bad(
+            f"car: path starts {before:.2f} m before the drive gate's line, needs {need:.2f} m "
+            f"(half the car, the leaves' outward sweep {out:.2f} m and {CAR_CLEARANCE} m)"
+        )
 
 
 def _ring(where, ring, bad):
@@ -463,7 +513,9 @@ def _ring(where, ring, bad):
 
 def _validate_surroundings(layer, bad):
     if set(layer) != {"surroundings"}:
-        return bad(f"layer surroundings: holds {sorted(layer)}, only the key surroundings belongs there")
+        return bad(
+            f"layer surroundings: holds {sorted(layer)}, only the key surroundings belongs there"
+        )
     s = layer["surroundings"]
     if not isinstance(s, dict):
         return bad("surroundings: not a JSON object")
@@ -520,8 +572,14 @@ def _validate_car(car, rooms, bad):
         if not (isinstance(pts, list) and len(pts) >= 3 and all(_point(p) for p in pts)):
             bad(f"car.profile: {k} needs three or more [x, y] points")
     wheels = prof.get("wheels")
-    if not (isinstance(wheels, dict) and _num(wheels.get("r")) and wheels["r"] > 0
-            and _point(wheels.get("x")) and _num(wheels.get("track")) and wheels["track"] > 0):
+    if not (
+        isinstance(wheels, dict)
+        and _num(wheels.get("r"))
+        and wheels["r"] > 0
+        and _point(wheels.get("x"))
+        and _num(wheels.get("track"))
+        and wheels["track"] > 0
+    ):
         bad("car.profile: wheels needs r > 0, x [rear, front] and a positive track")
     lights = prof.get("lights")
     if not isinstance(lights, dict):
@@ -529,7 +587,13 @@ def _validate_car(car, rooms, bad):
     else:
         for k in ("front", "rear"):
             segs = lights.get(k, [])
-            if not (isinstance(segs, list) and all(isinstance(s, list) and len(s) == 2 and all(_point(p, 3) for p in s) for s in segs)):
+            if not (
+                isinstance(segs, list)
+                and all(
+                    isinstance(s, list) and len(s) == 2 and all(_point(p, 3) for p in s)
+                    for s in segs
+                )
+            ):
                 bad(f"car.profile.lights: {k} must be a list of [[x, y, z], [x, y, z]] segments")
 
     path = car.get("path")
@@ -548,8 +612,14 @@ def _validate_car(car, rooms, bad):
     b, c = path[-2:]
     ux, uz = (c[0] - b[0]) / math.dist(b, c), (c[1] - b[1]) / math.dist(b, c)
     hl, hw = prof["length"] / 2, prof["width"] / 2
-    corners = [(c[0] + ux * s * hl - uz * t * hw, c[1] + uz * s * hl + ux * t * hw) for s in (-1, 1) for t in (-1, 1)]
-    inside = lambda q: all(q[0] - 1e-6 <= x <= q[2] + 1e-6 and q[1] - 1e-6 <= z <= q[3] + 1e-6 for x, z in corners)
+    corners = [
+        (c[0] + ux * s * hl - uz * t * hw, c[1] + uz * s * hl + ux * t * hw)
+        for s in (-1, 1)
+        for t in (-1, 1)
+    ]
+    inside = lambda q: all(
+        q[0] - 1e-6 <= x <= q[2] + 1e-6 and q[1] - 1e-6 <= z <= q[3] + 1e-6 for x, z in corners
+    )
     if not any(_rect(q) and inside(q) for q in room.get("rects", [])):
         span = ", ".join(f"[{x:.2f}, {z:.2f}]" for x, z in corners)
         bad(f"car: path ends with the car outside room {car['room']} (corners {span})")
@@ -588,7 +658,11 @@ def main(argv=None):
             print(f"{a.file}: ok ({', '.join(sorted(layers))})")
         return 1 if problems else 0
     # all: the required layers, and the optional ones the file has
-    names = tuple(n for n in LAYERS if n in REQUIRED or n in layers) if a.layers == "all" else tuple(a.layers.split(","))
+    names = (
+        tuple(n for n in LAYERS if n in REQUIRED or n in layers)
+        if a.layers == "all"
+        else tuple(a.layers.split(","))
+    )
     unknown = [n for n in names if n not in LAYERS]
     if unknown:
         print(f"unknown layer(s): {', '.join(unknown)}")

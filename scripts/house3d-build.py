@@ -23,12 +23,17 @@ model and in whole metres; their labels name the layer and an index, never the
 values. Run it over
 house3d/ before every commit that touches it.
 """
-import json, math, os, re, shutil, sys
+
+import json
+import math
+import re
+import shutil
+import sys
 from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import house3d_model  # noqa: E402
+import house3d_model
 
 SRC = Path(__file__).resolve().parent.parent / "house3d"
 DEVICES_KEY = re.compile(r"""["']?\bdevices["']?\s*:""")
@@ -37,7 +42,9 @@ DEVICES_KEY = re.compile(r"""["']?\bdevices["']?\s*:""")
 def _num(v):
     """Regex for a number as JS or JSON might write it: 5 matches 5 and 5.0, 1.3 matches 1.30."""
     # the shortest exact decimal, without exponent or rounding; -0.0 is written 0
-    whole, _, frac = format(Decimal(repr(abs(float(v)) if v == 0 else float(v))), "f").partition(".")
+    whole, _, frac = format(Decimal(repr(abs(float(v)) if v == 0 else float(v))), "f").partition(
+        "."
+    )
     frac = frac.rstrip("0")
     body = re.escape(whole) + (r"\." + frac + "0*" if frac else r"(?:\.0+)?")
     return r"(?<![\d.])" + body + r"(?![\d])"
@@ -49,7 +56,10 @@ def _seq(values):
 
 def patterns(model):
     """(label, regex) pairs for everything a public file must not contain."""
-    out = [(f"private string {s!r}", re.compile(r"(?<!\w)" + re.escape(s) + r"(?!\w)")) for s in house3d_model.private_strings(model)]
+    out = [
+        (f"private string {s!r}", re.compile(r"(?<!\w)" + re.escape(s) + r"(?!\w)"))
+        for s in house3d_model.private_strings(model)
+    ]
     out.append(("a devices key", DEVICES_KEY))
     for d in model.get("devices", []):
         x, y, z = d["pos"]
@@ -60,12 +70,19 @@ def patterns(model):
             out.append((f"view direction of {d['entity']}", _seq(look)))
     car = model.get("car") or {}
     pairs = [(f"car path point {i}", p) for i, p in enumerate(car.get("path", []))]
-    pairs += [(f"car outline point {i}", p) for i, p in enumerate((car.get("profile") or {}).get("side", []))]
+    pairs += [
+        (f"car outline point {i}", p)
+        for i, p in enumerate((car.get("profile") or {}).get("side", []))
+    ]
     sur = model.get("surroundings") or {}
     for i, b in enumerate(sur.get("buildings", [])):
         pairs += [(f"surroundings building {i}", p) for p in b.get("outline", [])]
     for i, r in enumerate(sur.get("roads", [])):
-        pairs += [(f"surroundings road {i}", p) for ring in [r.get("outline", [])] + r.get("holes", []) for p in ring]
+        pairs += [
+            (f"surroundings road {i}", p)
+            for ring in [r.get("outline", [])] + r.get("holes", [])
+            for p in ring
+        ]
     for label, p in pairs:
         if any(_decimals(v) >= 2 for v in p):
             out.append((label, _seq(p)))
@@ -127,14 +144,18 @@ def build(model_path, outdir):
     geo = public.pop("georef", None) or {}
     if isinstance(geo.get("x_axis_bearing_deg"), (int, float)):
         public["orientation"] = {"x_axis_bearing_deg": round(geo["x_axis_bearing_deg"])}
-    assert "surroundings" not in public, "the surroundings layer fixes the location; it never goes public"
+    assert "surroundings" not in public, (
+        "the surroundings layer fixes the location; it never goes public"
+    )
     out = Path(outdir)
     out.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(SRC / "viewer.html", out / "index.html")
     shutil.copyfile(SRC / "house3d.js", out / "house3d.js")
     shutil.copytree(SRC / "scene", out / "scene", dirs_exist_ok=True)
     shutil.copytree(SRC / "vendor", out / "vendor", dirs_exist_ok=True)
-    (out / "model.json").write_text(json.dumps(public, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    (out / "model.json").write_text(
+        json.dumps(public, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+    )
     print(f"built {out}")
     return run_scan(house3d_model.merge(layers, house3d_model.LAYERS), [out])
 

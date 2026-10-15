@@ -12,5 +12,9 @@ for f in scripts/*.sh; do
 done
 bash scripts/house3d-test.sh || fail "house3d tests"
 
+RUFF=${RUFF:-.venv/bin/ruff}
+$RUFF check scripts || fail "ruff check"
+$RUFF format --check scripts || fail "ruff format"
+
 [ "$rc" -eq 0 ] && echo "check: all passed"
 exit "$rc"
