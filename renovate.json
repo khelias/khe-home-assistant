@@ -1,0 +1,30 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "labels": ["dependencies"],
+  "timezone": "Europe/Tallinn",
+  "schedule": ["every weekend"],
+  "dependencyDashboard": true,
+  "prConcurrentLimit": 5,
+  "pinDigests": true,
+  "platformAutomerge": true,
+  "packageRules": [
+    {
+      "description": "Major updates need manual review",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true,
+      "labels": ["dependencies", "breaking"]
+    },
+    {
+      "description": "Automerge GitHub Actions non-major updates",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    },
+    {
+      "description": "Automerge digest and pin updates",
+      "matchUpdateTypes": ["digest", "pin"],
+      "automerge": true
+    }
+  ]
+}

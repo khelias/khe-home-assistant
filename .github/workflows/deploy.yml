@@ -1,0 +1,81 @@
+name: Deploy to Homelab
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'config/**'
+      - 'house3d/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, homelab]
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Without it, the -v below would create an empty volume under the name
+      # compose expects, and HA would start on it at the next homelab deploy.
+      - name: Config volume exists
+        run: |
+          if ! docker volume inspect homeassistant_ha_config >/dev/null 2>&1; then
+            echo "::error::Volume homeassistant_ha_config is missing: the cutover has not run."
+            exit 1
+          fi
+
+      # One throwaway container of the running HA image: check_config on a
+      # copy first, then each managed path replaced through a .new sibling.
+      # The sh entrypoint keeps the image's s6 /init from starting a second HA.
+      - name: Check and copy into the volume
+        run: |
+          image=$(docker inspect homeassistant --format '{{.Config.Image}}')
+          echo "HA image: $image"
+          docker run --rm --network none --entrypoint sh \
+            -v homeassistant_ha_config:/config \
+            -v "$PWD:/src:ro" \
+            "$image" -c '
+          set -e
+          if [ ! -d /config/.storage ]; then
+            echo "volume has no .storage, refusing to write" >&2
+            exit 1
+          fi
+          rm -rf /tmp/c
+          mkdir /tmp/c
+          cp -R /src/config/. /tmp/c/
+          python3 -m homeassistant --script check_config --config /tmp/c
+          for d in packages tuya_local_devices; do
+            rm -rf "/config/.$d.new"
+            cp -R "/src/config/$d" "/config/.$d.new"
+            rm -rf "/config/$d"
+            mv "/config/.$d.new" "/config/$d"
+          done
+          mkdir -p /config/www
+          rm -rf /config/www/.house3d.new
+          cp -R /src/house3d /config/www/.house3d.new
+          rm -rf /config/www/house3d
+          mv /config/www/.house3d.new /config/www/house3d
+          cp /src/config/configuration.yaml /config/.configuration.yaml.new
+          mv /config/.configuration.yaml.new /config/configuration.yaml
+          echo "copied configuration.yaml, packages/, tuya_local_devices/ and www/house3d/"
+          '
+
+      - name: Summary
+        run: |
+          {
+            echo "### Config copied into homeassistant_ha_config"
+            echo
+            echo "HA was not restarted. It reads the new YAML at the next reload or"
+            echo "restart, done through the API (AGENTS.md, \"Working on Home Assistant\")."
+            echo "The 3D view under /local/house3d/ is live now."
+          } >> "$GITHUB_STEP_SUMMARY"
