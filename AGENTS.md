@@ -24,6 +24,9 @@ config/            what deploy copies into HA's /config
   configuration.yaml
   packages/        one package per device or concern
   tuya_local_devices/  device definitions copied into tuya-local at HA start
+demo/              page and script of the public 3D view demo (simulated hass);
+                   not deployed to HA
+docs/              operational notes, the README screenshot
 house3d/           3D house view: engine (core house3d.js, scene/ layer
                    modules, kit and sun), HA card, standalone viewer,
                    placement page, vendored three.js
@@ -49,6 +52,11 @@ tests/house3d/     3D view tests on a made-up fixture house: model and build
   anything failed. CI runs it with `RUFF=ruff`, the workspace commit gate
   before each commit.
 - `ruff check --fix scripts && ruff format scripts` before committing Python.
+- `python3 -I scripts/house3d-build.py --demo OUTDIR` builds the 3D view demo
+  from the made-up test house only (`tests/house3d/fixture-model.md`):
+  the card, the engine and `demo/`. khe-sites runs it and publishes the result
+  at <https://khe.ee/house3d/> on its next deploy: a push to khe-sites, its
+  weekly schedule, or `gh workflow run deploy.yml -R khelias/khe-sites`.
 - `ha-ws.py` and `ha-dashboard.py` import `websockets`, and `pv-sim.py`
   needs numpy and scipy (plus websockets for its `fetch`). The `.venv` above
   carries only ruff; run those scripts from a venv that has them.

@@ -258,7 +258,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   georeference's origin. Never scan with `tests/house3d/fixture-model.md`
   as the files to check: it has a `devices` key, which the scan always
   flags. The same script builds the standalone viewer from the shareable
-  layers only.
+  layers only, and with `--demo` the public demo of the HA card on the test
+  fixture (khe.ee/house3d/, published by khe-sites), which reads no model.
 - **Tests:** `scripts/house3d-test.sh` runs the model and build tests
   (`tests/house3d/test_house3d_model.py`), the engine tests in Node
   (`tests/house3d/engine.test.mjs`: every layer builds, the simple style
@@ -304,7 +305,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   unless ETAK's house footprint matches the model's walls within 1 m and a
   street runs along the lot's front. The licence (Maa- ja Ruumiamet open
   data, 01.01.2025) asks for the licensor, the dataset and its date, which
-  the card shows top left.
+  the card shows top left, only for a layer whose source starts with `ETAK,`
+  (the test fixture's made-up layer gets no credit line).
 
 ## HVAC integrations
 

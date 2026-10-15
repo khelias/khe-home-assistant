@@ -1,17 +1,38 @@
 # khe-home-assistant
 
-The Home Assistant configuration of one house, public as a
-reference: YAML packages for the heat pump, ventilation, alarm, pergola,
-energy prices and the TV, a generator for the dashboard, small tools for HA's
-API, and a 3D view of the house that shows the devices in place.
+The Home Assistant configuration of one house, public as a reference: the
+YAML packages, a generator for the dashboard, small tools for HA's API, and a
+3D view of the house that shows the devices in place.
 
-## What is not here
+[![The 3D view of a made-up test house, with device markers, the car parked under the carport and the surroundings](docs/house3d.png)](https://khe.ee/house3d/)
 
-Nothing that identifies the house or the family: device ids, local keys,
-addresses, room and family names and the house model live in private
-storage. HA's `.storage` (users, tokens, integration credentials) and the
-recorder stay on the server. The container that runs HA, its image and its
-backup are in [khe-homelab](https://github.com/khelias/khe-homelab).
+**[Try the 3D view](https://khe.ee/house3d/)** on a made-up test house with
+simulated devices: tap a light, plug, blind, the heating or the alarm panel to
+control it as in Home Assistant, and let the car drive in through the gate.
+
+## What is interesting here
+
+- **One package per device or concern.** The heat pump, ventilation, alarm,
+  pergolas, energy prices and the TV each sit in their own file under
+  `config/packages/`, with the reasoning in its header comment.
+- **The dashboard is generated, not clicked together.** A Python script
+  writes the whole Lovelace config through HA's WebSocket API, so the layout
+  is reviewed and versioned like the rest.
+- **Local first.** The ventilation unit is read over Modbus, the heat pump
+  through its local API, the alarm panel through MQTT, and the pergolas
+  through tuya-local, because their roof control is reachable over the LAN
+  only (and they report no roof position at all).
+- **The deploy checks before it copies.** A push runs `check_config` inside
+  the running HA image, and only a passing configuration reaches HA.
+- **Identifying data never enters the repo.** Device ids, local keys,
+  addresses and names live in private storage, and every piece of code that
+  needs them leaves its card or entity out when they are missing.
+- **The 3D view** is generated from a private model of the house: walls,
+  roofs, rooms, the yard, the neighbourhood from the national topographic
+  database, and live device markers. It runs as a custom card inside HA.
+
+The quirks behind each of these are in
+[docs/operational-notes.md](docs/operational-notes.md).
 
 ## How it deploys
 
@@ -19,7 +40,9 @@ A push to `main` that changes the configuration or the 3D view runs a
 workflow on the homelab's own runner. It validates the configuration with
 `check_config` inside the running HA image, then copies it into HA's config
 volume. It never restarts HA: a reload or a restart through the API makes
-the new configuration live.
+the new configuration live. HA's `.storage`, the recorder, the container and
+its backup stay on the server and in
+[khe-homelab](https://github.com/khelias/khe-homelab).
 
 ## Checks
 
