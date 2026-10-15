@@ -232,7 +232,7 @@ export function guardLayer(L, off) {
  *   bloom            default true; always off below 720 px width and in the real style
  *   mode             the starting mode, 'roof' (default) or 'open'
  *   style            'simple' (default) or 'real'; another style is another mount
- *   view             { position, target, fog? } as the view getter gives it: the first framing puts
+ *   view             { position, target } as the view getter gives it: the first framing puts
  *                    the camera there instead of the home view, so a remount keeps the user's orbit
  *   labels(roomId)   room label text; the room's own name when it returns nothing
  *   layers           { id: bool }: the starting state of the switchable layers, default on
@@ -255,7 +255,7 @@ export function guardLayer(L, off) {
  *   the L-EST97 grid azimuth of the model's +x axis (georef.x_axis_bearing_deg); null or any
  *   missing value gives a fixed afternoon sun. setTime(date | null): the sun's time, null for
  *   live (recomputed once a minute). time is the time in use. Both do nothing visible in the
- *   simple style. view is { position, target, fog: [near, far] } for options.view.
+ *   simple style. view is { position, target } for options.view; the fog follows the camera.
  * layers: [{ id, on }] for the switchable layers present and listed now; setLayer(id, on) switches
  *   one and ignores an unknown id. Switchable: 'markers' (the overlay; off hides every marker but
  *   an alert), 'fans' (listed while a marker has a look), 'trees', 'surroundings' and 'car' (off
@@ -608,7 +608,7 @@ export function mount(element, model, options = {}) {
   renderer.domElement.addEventListener('pointermove', onMove);
   renderer.domElement.addEventListener('pointerdown', onDown);
   renderer.domElement.addEventListener('pointerup', onUp);
-  controls.addEventListener('change', () => invalidate());
+  controls.addEventListener('change', () => { fitFog(); invalidate(); });
   controls.addEventListener('start', () => invalidate());
 
   /* ---------- framing and size ---------- */
@@ -617,26 +617,29 @@ export function mount(element, model, options = {}) {
     const a = camera.aspect;
     return (a >= 1 ? Math.max(46, 58 / a) : 42 / Math.pow(a, 1.05)) * E;
   }
+  // the fog starts just past the orbit target, never nearer than from the home view: fixed to the
+  // home distance, a zoom-out sank the house itself into it
+  function fitFog() {
+    const d = Math.max(homeDistance(), camera.position.distanceTo(controls.target));
+    scene.fog.near = d * 0.95;
+    scene.fog.far = d * 2.2;
+  }
   function reset() {
     controls.target.copy(HOME_TARGET);
-    scene.fog.near = homeDistance() * 0.95;
-    scene.fog.far = homeDistance() * 2.2;
     camera.position.copy(HOME_TARGET).addScaledVector(camera.aspect < 1 ? PORTRAIT_DIR : HOME_DIR, homeDistance());
     controls.update();
+    fitFog();
     invalidate();
   }
-  // a remount's first framing: the camera, and the fog when given, where the last mount left
-  // them (its fog was set for its own size, which may differ); otherwise the fog as reset() sets it
+  // a remount's first framing: the camera where the last mount left it
   const isVec = (p, n) => Array.isArray(p) && p.length === n && p.every(Number.isFinite);
   const startView = options.view && isVec(options.view.position, 3) && isVec(options.view.target, 3) ? options.view : null;
   function frameFirst() {
     if (!startView) return reset();
-    const fog = isVec(startView.fog, 2) ? startView.fog : [homeDistance() * 0.95, homeDistance() * 2.2];
-    scene.fog.near = fog[0];
-    scene.fog.far = fog[1];
     controls.target.fromArray(startView.target);
     camera.position.fromArray(startView.position);
     controls.update();
+    fitFog();
     invalidate();
   }
   function resize() {
@@ -656,7 +659,7 @@ export function mount(element, model, options = {}) {
       }
     }
     // frame once, at the first real size: a later hide and show keeps the user's orbit
-    if (!framed && w > 1 && h > 1) { framed = true; frameFirst(); }
+    if (!framed && w > 1 && h > 1) { framed = true; frameFirst(); } else fitFog();
     invalidate();
   }
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => resize()) : null;
@@ -762,7 +765,7 @@ export function mount(element, model, options = {}) {
     setCar: s => { if (byId.car) byId.car.api.setCar(s); },
     get mode() { return mode; },
     get time() { return sunTime ? new Date(sunTime) : new Date(); },
-    get view() { return { position: camera.position.toArray(), target: controls.target.toArray(), fog: [scene.fog.near, scene.fog.far] }; },
+    get view() { return { position: camera.position.toArray(), target: controls.target.toArray() }; },
     get carState() { return byId.car ? byId.car.api.carState : 'away'; },
     get carScreen() { return byId.car ? byId.car.api.carScreen : null; },
     get layers() { return layers.filter(e => e.L.toggle && !e.failed && (!e.L.listed || e.L.listed())).map(e => ({ id: e.L.id, on: e.on })); }
