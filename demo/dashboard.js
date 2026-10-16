@@ -7,7 +7,7 @@ const OUTDOOR = 'oues';
 const TOGGLES = new Set(['light', 'switch', 'fan', 'input_boolean', 'cover']);
 
 // device types per view, in the order their tiles show
-const HOME_TYPES = ['light', 'plug', 'cover', 'sensor', 'door'];
+const HOME_TYPES = ['light', 'plug', 'cover', 'sensor'];
 const SENSOR_TYPES = ['door', 'motion', 'smoke'];
 
 export function tile(entity) {
@@ -68,7 +68,8 @@ export function buildViews(model) {
     ...(car ? [{ type: 'entity', entity: car.entity }] : []),
     ...doors.map(d => ({ type: 'entity', entity: d.entity, visibility: [{ condition: 'state', entity: d.entity, state: 'on' }] }))
   ];
-  const homeDevices = byType(all, HOME_TYPES);
+  const placed = new Set([...rooms.map(r => r.id), OUTDOOR]);
+  const homeDevices = byType(all, HOME_TYPES).filter(d => placed.has(d.room));
   const roomGroups = [...rooms.map(r => r.id), OUTDOOR].map(id => ({
     title: id === OUTDOOR ? 'Õu' : rooms.find(r => r.id === id).name,
     parts: [tiles(homeDevices.filter(d => d.room === id))]
@@ -77,13 +78,6 @@ export function buildViews(model) {
   // Kliima: heating as thermostats, then the hot water and the air, then the temperatures
   const heating = ofDomain('climate');
   const air = ofDomain('water_heater', 'fan');
-  const climateSections = [];
-  if (heating.length) climateSections.push({ type: 'grid', cards: [heading('Küte'), ...heating.map(d => ({ type: 'thermostat', entity: d.entity }))] });
-  climateSections.push(...tileSections([
-    { title: 'Vesi ja õhk', parts: [tiles(air)] },
-    { title: 'Temperatuurid', parts: [tiles(ofDomain('sensor'))] }
-  ], 'Muu'));
-
   // Valve: the alarm panel, the sensors by type, the cameras
   const sensors = byType(all, SENSOR_TYPES);
   const cameras = ofDomain('camera');
@@ -93,10 +87,17 @@ export function buildViews(model) {
     ...(cameras.length ? [{ type: 'grid', cards: [heading('Kaamerad'), ...cameras.map(d => ({ type: 'picture-entity', entity: d.entity, camera_view: 'auto' }))] }] : [])
   ];
 
-  // devices no view above shows still get a tile, so a new device type is never lost
+  // devices no view above shows still get a tile on Kliima, so a new device type is never lost;
+  // they share its tile sections so that a single one does not stand alone
   const shown = new Set([...homeDevices, ...heating, ...air, ...ofDomain('sensor'), ...alarm, ...sensors, ...cameras].map(d => d.entity));
   const rest = all.filter(d => !shown.has(d.entity));
-  if (rest.length) climateSections.push(...tileSections([{ title: 'Muud seadmed', parts: [tiles(rest)] }], 'Muud seadmed'));
+  const climateSections = [];
+  if (heating.length) climateSections.push({ type: 'grid', cards: [heading('Küte'), ...heating.map(d => ({ type: 'thermostat', entity: d.entity }))] });
+  climateSections.push(...tileSections([
+    { title: 'Vesi ja õhk', parts: [tiles(air)] },
+    { title: 'Temperatuurid', parts: [tiles(ofDomain('sensor'))] },
+    { title: 'Muud seadmed', parts: [tiles(rest)] }
+  ], 'Muud seadmed'));
 
   return [
     { title: '3D', path: '3d', icon: 'cube', type: 'panel', cards: [{ type: 'custom:house3d-card' }] },

@@ -114,6 +114,11 @@ test('a room with one tile shares a section; a last lone one joins the section b
 test('a device of an unknown type still shows, and a thinned house keeps the idiom', () => {
   const extra = { ...model, devices: [...model.devices, { entity: 'select.test_mode', type: 'mode', room: 'r1', name: 'x', pos: [0, 0, 0] }] };
   assert.ok(buildViews(extra).slice(1).flatMap(entities).includes('select.test_mode'));
+  // a light in a room the model does not list, alone among the unshown devices
+  const stray = { ...model, devices: [...model.devices, { entity: 'light.test_stray', type: 'light', room: 'nowhere', name: 'x', pos: [0, 0, 0] }] };
+  const sv = buildViews(stray);
+  assert.ok(sv.slice(1).flatMap(entities).includes('light.test_stray'));
+  assert.deepEqual(idiomProblems(sv), []);
   // every other device gone: rooms drop to one tile and pool
   const thin = { ...model, devices: model.devices.filter((d, i) => i % 2) };
   const tv = buildViews(thin);
@@ -133,5 +138,16 @@ test('the demo files name no fixture entity or device and hold no devices key', 
     const text = readFileSync(join(dir, f), 'utf8');
     for (const s of strings) assert.ok(!new RegExp(`(?<![\\p{L}\\p{N}_])${esc(s)}(?![\\p{L}\\p{N}_])`, 'u').test(text), `${f}: ${s}`);
     assert.ok(!devicesKey.test(text), `${f}: a devices key`);
+  }
+});
+
+// nginx caches .js for 30 days, so a demo module imported without ?v= would ship stale
+test('every relative import in the demo files carries a version', () => {
+  const dir = join(ROOT, 'demo');
+  for (const f of readdirSync(dir).filter(f => f.endsWith('.js') || f === 'index.html')) {
+    const text = readFileSync(join(dir, f), 'utf8');
+    const refs = [...text.matchAll(/(?:from|import\(?|src=)\s*["'](\.{0,2}\/?[\w./-]+\.js[^"']*)["']/g)].map(m => m[1]);
+    assert.ok(f !== 'demo.js' || refs.length >= 4, 'demo.js imports found');
+    for (const r of refs) assert.match(r, /\?v=__(HOUSE3D|DEMO)_VERSION__$/, `${f}: ${r}`);
   }
 });

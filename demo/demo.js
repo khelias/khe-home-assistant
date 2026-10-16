@@ -172,7 +172,7 @@ function publish() {
   const h = hass();
   if (card && current && current.view.type === 'panel') card.hass = h;
   if (current && current.rendered) current.rendered.update(h);
-  if (dialog.open) renderInfo();
+  if (dialog.open && states[openEntity] !== shownState) renderInfo();
 }
 
 // last_changed moves only when the state does, as in HA
@@ -242,6 +242,8 @@ function act(e, what, value) {
 /* ---------- more-info dialog ---------- */
 
 let openEntity = null;
+// the state object the dialog shows; a change to another entity leaves the dialog alone
+let shownState = null;
 let dragging = false;
 
 function ago(iso) {
@@ -295,6 +297,7 @@ function controls(e, st) {
 function renderInfo() {
   const e = openEntity, st = states[e];
   if (!st) return dialog.close();
+  shownState = st;
   dialog.querySelector('.state').textContent = formatEntityState(st);
   dialog.querySelector('.when').textContent = `Muudetud ${ago(st.last_changed)}`;
   const box = dialog.querySelector('.controls');
