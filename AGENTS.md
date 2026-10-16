@@ -84,10 +84,12 @@ tests/dashboard/   dashboard config and demo catalogue tests (Python unittest)
    `house/house-model.md`. Run `scripts/house3d-build.py --scan <model>
    house3d/` with the real model before every commit that touches
    `house3d/`, and before publishing anything built from the model.
-   `check.sh` scans `house3d/`, `demo/`, `scripts/dashboard_demo.py` and a
-   fresh demo build with `--count` whenever the model is at hand (the main
-   checkout's khe-meta or `HOUSE3D_MODEL`), so the commit gate covers the
-   demo; CI has no model. The ids and labels the scan flags are spelled once,
+   `check.sh` scans `house3d/`, `demo/`, `scripts/dashboard_demo.py`, the
+   test house and the whole fresh demo build with `--count` whenever the
+   model is at hand (the main checkout's khe-meta or `HOUSE3D_MODEL`), so the
+   commit gate covers the demo; CI has no model. What the test house may
+   carry anyway (its `devices` key, device names judged generic) is allowed
+   per file in `check.sh`, with the reason, not by loosening a pattern. The ids and labels the scan flags are spelled once,
    in `dashboard_config.py`, and the demo takes them from there.
 3. **Modules under `house3d/scene/` import nothing**
    ([notes](docs/operational-notes.md#the-3d-house-view-house3d)); the engine

@@ -119,7 +119,7 @@ model, never this file.
 
 ```json house3d:private
 {
- "room_names": { "r1": "Köök-elutuba", "r2": "Vanemate tuba" },
+ "room_names": { "r1": "Köök-elutuba", "r2": "Suur magamistuba" },
  "devices": [
   {"entity": "light.test_living", "name": "Elutoa lamp", "type": "light", "room": "r1", "pos": [4.317, 2.313, 7.137]},
   {"entity": "light.test_kitchen", "name": "Köögi valgus", "type": "light", "room": "r1", "pos": [3.513, 2.313, 3.937]},

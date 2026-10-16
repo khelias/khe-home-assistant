@@ -255,9 +255,11 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   publishing anything built from the model. It fails on any device name, entity id,
   family room name or device coordinate, on the car's name, entity, path and
   outline points, on the surroundings' building and road vertices and on the
-  georeference's origin. Never scan with `tests/house3d/fixture-model.md`
-  as the files to check: it has a `devices` key, which the scan always
-  flags. The same script builds the standalone viewer from the shareable
+  georeference's origin. `tests/house3d/fixture-model.md` and the demo's
+  `model.json` have a `devices` key by design, so scanning them takes
+  `--allow-devices-key FILE` for each; `--allow-device-name ENTITY FILE`
+  lets a test house device name that matches a real one, judged generic,
+  stay in that file. The same script builds the standalone viewer from the shareable
   layers only, and with `--demo` the public demo on the test fixture
   (khe.ee/house3d/, published by khe-sites), which reads no model: the real
   dashboard from `dashboard_config.build()`, rewritten by
@@ -266,7 +268,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   `demo/cards.js` on a simulated hass, 3D first. Every `demo/` file and the
   generated JSON are versioned by one hash (`__DEMO_VERSION__`), the card and
   engine by `HOUSE3D_VERSION`. The generator names the real house's devices,
-  so `check.sh` scans the demo build with the real model when it is at hand.
+  so `check.sh` scans the whole demo build and the test house with the real
+  model when it is at hand.
 - **Tests:** `scripts/house3d-test.sh` runs the model and build tests
   (`tests/house3d/test_house3d_model.py`), the engine tests in Node
   (`tests/house3d/engine.test.mjs`: every layer builds, the simple style

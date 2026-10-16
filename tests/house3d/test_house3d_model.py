@@ -231,6 +231,31 @@ class BuildAndScan(unittest.TestCase):
             self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
             self.assertIn(f"private string {entity!r}", r.stdout)
 
+    def test_scan_allows_a_devices_key_only_in_the_named_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            allowed, other = Path(tmp) / "model.json", Path(tmp) / "other.json"
+            entity = layers()["private"]["devices"][0]["entity"]
+            allowed.write_text(f'{{"devices": ["{entity}"]}}', encoding="utf-8")
+            other.write_text('{"devices": []}', encoding="utf-8")
+            r = run("--scan", "--allow-devices-key", allowed, FIXTURE, tmp)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn(f"{other}:1: a devices key", r.stdout)
+            self.assertNotIn(f"{allowed}:1: a devices key", r.stdout)
+            self.assertIn(f"{allowed}:1: private string {entity!r}", r.stdout)
+
+    def test_scan_allows_a_test_house_device_name_only_in_the_named_file(self):
+        device = layers()["private"]["devices"][0]
+        with tempfile.TemporaryDirectory() as tmp:
+            allowed, other = Path(tmp) / "model.json", Path(tmp) / "other.json"
+            for f in (allowed, other):
+                f.write_text(f'"{device["name"]}"', encoding="utf-8")
+            r = run("--scan", "--allow-device-name", device["entity"], allowed, FIXTURE, tmp)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn(f"{other}:1: private string {device['name']!r}", r.stdout)
+            self.assertNotIn(str(allowed), r.stdout)
+            r = run("--scan", "--allow-device-name", "light.nowhere", allowed, FIXTURE, tmp)
+            self.assertIn("no device light.nowhere", r.stderr)
+
 
 class Demo(unittest.TestCase):
     DEMO_FILES = ("index.html", "demo.js", "house3d-card.js", "house3d.js", "model.json")

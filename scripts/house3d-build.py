@@ -3,7 +3,8 @@
 
 Usage:  house3d-build.py MODEL OUTDIR                   build, then scan OUTDIR
         house3d-build.py --demo OUTDIR                  build the HA dashboard demo of the test house
-        house3d-build.py --scan [--count] MODEL PATH... scan files or trees, exit 1 on any hit
+        house3d-build.py --scan [--count] [ALLOW]... MODEL PATH...
+                                                        scan files or trees, exit 1 on any hit
 
 The build writes OUTDIR/index.html (viewer.html), house3d.js, scene/, vendor/ and model.json
 from the geometry, rooms and showcase layers of MODEL (khe-meta house/house-model.md). The
@@ -34,7 +35,9 @@ model and in whole metres; their labels name the layer and an index, never the
 values. Run it over
 house3d/ before every commit that touches it. With --count it prints only the number of hits
 per kind (private strings, devices keys, coordinates), never the matched text, so its output
-can go into a log.
+can go into a log. Each ALLOW lets one file carry one thing the scan would flag:
+--allow-devices-key FILE a `devices` key, --allow-device-name ENTITY FILE the name of the test
+house's device ENTITY, which keeps a private name that was judged generic out of the command.
 """
 
 import hashlib
@@ -56,6 +59,7 @@ DEMO = ROOT / "demo"
 FIXTURE = ROOT / "tests/house3d/fixture-model.md"
 DEMO_SUFFIXES = (".html", ".js", ".css", ".svg")
 DEVICES_KEY = re.compile(r"""["']?\bdevices["']?\s*:""")
+DEVICES_KEY_LABEL = "a devices key"
 
 
 def _num(v):
@@ -79,7 +83,7 @@ def patterns(model):
         (f"private string {s!r}", re.compile(r"(?<!\w)" + re.escape(s) + r"(?!\w)"))
         for s in house3d_model.private_strings(model)
     ]
-    out.append(("a devices key", DEVICES_KEY))
+    out.append((DEVICES_KEY_LABEL, DEVICES_KEY))
     for d in model.get("devices", []):
         x, y, z = d["pos"]
         out.append((f"position of {d['entity']}", _seq([x, y, z])))
@@ -119,8 +123,10 @@ def _decimals(v):
     return len(format(Decimal(repr(float(v))), "f").partition(".")[2].rstrip("0"))
 
 
-def scan(model, paths):
+def scan(model, paths, allow=()):
+    """allow: (file, label) pairs, a hit with that label in that file is not one."""
     pats = patterns(model)
+    allowed = {(Path(p).resolve(), label) for p, label in allow}
     hits = []
     files = []
     for p in map(Path, paths):
@@ -133,11 +139,21 @@ def scan(model, paths):
             text = f.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
+        here = f.resolve() if allowed else None
         for label, rx in pats:
+            if (here, label) in allowed:
+                continue
             for m in rx.finditer(text):
                 line = text.count("\n", 0, m.start()) + 1
                 hits.append(f"{f}:{line}: {label}")
     return hits, len(files)
+
+
+def fixture_device_name(fixture, entity):
+    names = [d["name"] for d in fixture["private"]["devices"] if d["entity"] == entity]
+    if not names:
+        raise SystemExit(f"scan: the test house has no device {entity}")
+    return names[0]
 
 
 def full_model(path):
@@ -152,11 +168,11 @@ def _kind(hit):
     label = hit.rsplit(": ", 1)[1]
     if label.startswith("private string"):
         return "private strings"
-    return "devices keys" if label == "a devices key" else "coordinates"
+    return "devices keys" if label == DEVICES_KEY_LABEL else "coordinates"
 
 
-def run_scan(model, paths, count=False):
-    hits, n = scan(model, paths)
+def run_scan(model, paths, count=False, allow=()):
+    hits, n = scan(model, paths, allow)
     if count:
         kinds = {k: 0 for k in ("private strings", "devices keys", "coordinates")}
         for h in hits:
@@ -266,10 +282,27 @@ def build_demo(outdir):
 
 
 def main(argv):
-    count = argv[1:2] == ["--count"]
-    if argv[:1] == ["--scan"] and len(argv) >= 3 + count:
-        layers = full_model(argv[1 + count])
-        return run_scan(house3d_model.merge(layers, house3d_model.LAYERS), argv[2 + count :], count)
+    if argv[:1] == ["--scan"]:
+        args = argv[1:]
+        count = args[:1] == ["--count"]
+        args = args[count:]
+        allow = []
+        fixture = None
+        while True:
+            if args[:1] == ["--allow-devices-key"] and len(args) >= 2:
+                allow.append((args[1], DEVICES_KEY_LABEL))
+                args = args[2:]
+            elif args[:1] == ["--allow-device-name"] and len(args) >= 3:
+                fixture = fixture or full_model(FIXTURE)
+                name = fixture_device_name(fixture, args[1])
+                allow.append((args[2], f"private string {name!r}"))
+                args = args[3:]
+            else:
+                break
+        if len(args) >= 2:
+            layers = full_model(args[0])
+            model = house3d_model.merge(layers, house3d_model.LAYERS)
+            return run_scan(model, args[1:], count, allow)
     if len(argv) == 2 and argv[0] == "--demo":
         return build_demo(argv[1])
     if len(argv) == 2 and not argv[0].startswith("-"):
