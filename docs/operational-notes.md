@@ -295,7 +295,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   `device_tracker`, not the tracker itself: the tracker's `last_changed` also
   moves on every cloud outage and HA restart, which would replay the drive,
   while the helper restores its state and sets `arrived_at` only on a real
-  arrival. Without an entity the car stays hidden.
+  arrival. Without an entity the car stays hidden; `ha-dashboard.py` fills a
+  missing one from the house file's `car_entity`.
 - **Gates** are `site.gates` in the geometry layer, drawn closed in the fence
   line; `kind` (`sliding`, `swing1`, `swing2`) is data. The gate the car's
   path crosses is the drive gate: on an arrival it opens first (1.2 s, the car

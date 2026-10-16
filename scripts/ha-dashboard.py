@@ -31,7 +31,9 @@ URL = "lovelace"  # the Overview, a dashboard entry since the 2026.9 migration
 # "leave the card out" when they are missing:
 #   ~/.config/khe/ha-house.json   {"cams": [[slug, label], ...], "phone": "sensor.<device>",
 #                                  "nvr_app_url": "<scheme>://", "updates": [["update.<x>", "<name>"]],
-#                                  "tv_profiles": [[<picker position>, "<name>"], ...]}  (Google TV)
+#                                  "tv_profiles": [[<picker position>, "<name>"], ...],  (Google TV)
+#                                  "car_entity": "<domain>.<id>"}  (the 3D car's entity when the
+#                                  model's car has none; without one the card hides the car)
 #   ~/.config/khe/ha-people.json  [[entity_id, label], ...]
 #   HOUSE3D_MODEL                 path to khe-meta's house/house-model.md (the 3D view's walls, rooms and
 #                                 devices); unset, the khe-meta checkout beside this repo is used
@@ -59,11 +61,21 @@ def house3d_card_model():
     return house3d_model.with_room_names(house3d_model.merge(layers, house3d_model.CARD))
 
 
+# The model's own car entity wins; the house file's only fills a missing one.
+def with_car_entity(model, entity):
+    car = (model or {}).get("car")
+    if not entity or not car or car.get("entity"):
+        return model
+    if not (isinstance(entity, str) and "." in entity):
+        raise SystemExit("ha-house.json: car_entity is not an entity id")
+    return {**model, "car": {**car, "entity": entity}}
+
+
 def local_config():
     """The real dashboard: build() with the local house files and the model."""
-    return dashboard_config.build(
-        _local("ha-house.json", {}), _local("ha-people.json", []), house3d_card_model()
-    )
+    house = _local("ha-house.json", {})
+    model = with_car_entity(house3d_card_model(), house.get("car_entity"))
+    return dashboard_config.build(house, _local("ha-people.json", []), model)
 
 
 async def main(config):
