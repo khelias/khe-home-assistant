@@ -265,7 +265,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   dashboard from `dashboard_config.build()`, rewritten by
   `scripts/dashboard_demo.py` (every entity id to a demo or fixture entity,
   templated cards to sample text, charts to made-up series), drawn by
-  `demo/cards.js` on a simulated hass, 3D first. Every `demo/` file and the
+  `demo/cards.js` on a simulated hass, 3D first. Its bars and views start
+  below `--host-h`, 0 here, where khe-sites puts the khe.ee site header. Every `demo/` file and the
   generated JSON are versioned by one hash (`__DEMO_VERSION__`), the card and
   engine by `HOUSE3D_VERSION`. The generator names the real house's devices,
   so `check.sh` scans the whole demo build and the test house with the real

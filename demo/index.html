@@ -37,7 +37,9 @@
   --state-media-color: #4caf50;
   --ha-font: Roboto, Noto, system-ui, -apple-system, "Segoe UI", sans-serif;
   --bar-h: 56px;
-  --top: calc(var(--bar-h) + 1px + env(safe-area-inset-top, 0px));
+  /* the height of a host page's own bar above the app bar: khe.ee sets it for its site header */
+  --host-h: 0px;
+  --top: calc(var(--host-h) + var(--bar-h) + 1px + env(safe-area-inset-top, 0px));
 }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
@@ -48,7 +50,7 @@ a { color: var(--primary-color); }
 :focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
 
 /* the top app bar: menu, dashboard title, icon-only view tabs */
-.toolbar { position: fixed; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; gap: 4px;
+.toolbar { position: fixed; top: var(--host-h); left: 0; right: 0; z-index: 3; display: flex; align-items: center; gap: 4px;
   height: var(--bar-h); padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
   background: var(--app-header-background-color); border-bottom: 1px solid var(--divider-color); }
 .icon-button { display: grid; place-items: center; flex: none; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 50%;
