@@ -1,152 +1,144 @@
-// A mock Home Assistant dashboard on the made-up test house: the 3D view (the real house3d card)
-// and three sections views (demo/dashboard.js, drawn by demo/cards.js), all fed by one simulated
-// hass instead of Home Assistant. Taps open a more-info dialog like HA's, whose controls change
-// the simulated states. Devices come from model.json by domain and type, so this file names no
-// entity and works for any model.
+// A mock Home Assistant dashboard on the made-up test house. The views are the house's real
+// dashboard, made by the same generator (dashboard.json, scripts/dashboard_demo.py), drawn by
+// demo/cards.js on one simulated hass (demo/sim.js, starting from states.json); the 3D view is
+// the real house3d card. Taps run as HA runs them: more-info opens a dialog like HA's, toggles
+// and service calls change the simulated states, navigate opens a view or a subview. This file
+// names no entity: the data names them, so it works for any generated dashboard.
 import './house3d-card.js?v=__HOUSE3D_VERSION__';
-import { icon } from './house3d.js?v=__HOUSE3D_VERSION__';
-import { buildViews } from './dashboard.js?v=__DEMO_VERSION__';
-import { renderSections, shellIcon, stateColor, thermostat, modeButtons } from './cards.js?v=__DEMO_VERSION__';
+import { svg, entityIcon } from './icons.js?v=__DEMO_VERSION__';
+import { createSim } from './sim.js?v=__DEMO_VERSION__';
+import { renderSections, renderPanel, runAction, formatState, stateColor, ago } from './cards.js?v=__DEMO_VERSION__';
 
+const toolbar = document.querySelector('.toolbar');
 const tabs = document.querySelector('.tabs');
+const titleEl = document.querySelector('.main-title');
+const backBtn = document.querySelector('[data-act="back"]');
+const menuBtn = document.querySelector('[data-act="menu"]');
 const viewsEl = document.querySelector('.views');
 const drawer = document.querySelector('dialog.drawer');
 const dialog = document.querySelector('dialog.info');
-const nf1 = new Intl.NumberFormat('et-EE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const confirmDlg = document.querySelector('dialog.confirm');
 const nf0 = new Intl.NumberFormat('et-EE', { maximumFractionDigits: 0 });
-const rtf = new Intl.RelativeTimeFormat('et-EE', { numeric: 'auto' });
-const esc = s => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
+const nf1 = new Intl.NumberFormat('et-EE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
 const domainOf = entity => entity.split('.')[0];
 
-document.querySelector('[data-act="menu"]').innerHTML = shellIcon('menu');
-document.querySelectorAll('[data-act="close"].icon-button').forEach(b => { b.innerHTML = icon('close'); });
-document.querySelector('.d-icon').outerHTML = shellIcon('home');
+menuBtn.innerHTML = svg('menu');
+backBtn.innerHTML = svg('arrow-left');
+document.querySelectorAll('[data-act="close"].icon-button').forEach(b => { b.innerHTML = svg('close'); });
+document.querySelector('.d-icon').outerHTML = svg('home');
 
-let model;
+const load = name => fetch(`./${name}?v=__DEMO_VERSION__`).then(r => { if (!r.ok) throw new Error(name); return r.json(); });
+let model, dashboard, data, series;
 try {
-  model = await (await fetch('./model.json')).json();
+  [model, dashboard, data, series] = await Promise.all(['model.json', 'dashboard.json', 'states.json', 'series.json'].map(load));
 } catch (e) {
-  viewsEl.innerHTML = '<div class="fallback">Mudeli laadimine ebaõnnestus.</div>';
+  viewsEl.innerHTML = '<div class="fallback">Töölaua laadimine ebaõnnestus.</div>';
   throw e;
 }
 
-const list = model.devices || [];
-const byEntity = new Map(list.map(d => [d.entity, d]));
+const sim = createSim(data);
+const byEntity = new Map((model.devices || []).map(d => [d.entity, d]));
 const roomName = id => (id === 'oues' ? 'Õu' : ((model.rooms || []).find(r => r.id === id) || {}).name || '');
-const carEntity = model.car && model.car.entity;
-const nameOf = e => (e === carEntity ? model.car.name || e : (byEntity.get(e) || {}).name || e);
+const nameOf = e => (sim.states[e] && sim.states[e].attributes.friendly_name) || (byEntity.get(e) || {}).name || e;
 const areaOf = e => (byEntity.has(e) ? roomName(byEntity.get(e).room) : '');
-const iconOf = e => (e === carEntity ? shellIcon('car') : icon((byEntity.get(e) || {}).type));
+const carEntity = model.car && model.car.entity;
+const hass = () => ({ states: sim.states, config: { latitude: 58.6, longitude: 25.0 }, formatEntityState: formatState });
 
-// a starting state per domain, varied by position in the list so the house is not all off
-function initial(d, i) {
-  const temp = d.room === 'oues' ? 7.5 : 20.6 + (i % 4) * 0.4;
-  switch (domainOf(d.entity)) {
-    case 'light': return i % 2 ? ['off', {}] : ['on', { brightness: 200 }];
-    case 'sensor': return [temp.toFixed(1), { unit_of_measurement: '°C', device_class: 'temperature' }];
-    case 'binary_sensor': return ['off', { device_class: d.type === 'door' ? 'door' : d.type }];
-    case 'switch': case 'input_boolean': return [i % 2 ? 'off' : 'on', {}];
-    case 'fan': return ['on', { percentage: 40 }];
-    case 'cover': return i % 2 ? ['closed', {}] : ['open', { current_position: 100 }];
-    case 'climate': return ['heat', { hvac_modes: ['off', 'heat'], current_temperature: 20.8 + (i % 3) * 0.4, temperature: 21, min_temp: 5, max_temp: 30 }];
-    case 'water_heater': return ['eco', { current_temperature: 48, temperature: 50, min_temp: 40, max_temp: 65 }];
-    case 'alarm_control_panel': return ['disarmed', {}];
-    case 'camera': return ['idle', {}];
-    default: return ['off', {}];
-  }
+/* ---------- confirmation, as HA asks before an action that has one ---------- */
+
+let answer = null;
+function confirm(text) {
+  // one question at a time: a second tap while one is open is no answer
+  if (confirmDlg.open) return Promise.resolve(false);
+  confirmDlg.querySelector('.c-text').textContent = text;
+  confirmDlg.showModal();
+  return new Promise(resolve => { answer = resolve; });
 }
-
-// HA-shaped state objects; the cards compare them by identity, so every change makes a new one
-const now = () => new Date().toISOString();
-let states = {};
-list.forEach((d, i) => {
-  const [state, attributes] = initial(d, i);
-  states[d.entity] = { entity_id: d.entity, state, attributes: { friendly_name: d.name, ...attributes }, last_changed: now(), last_updated: now() };
+confirmDlg.addEventListener('click', ev => {
+  const b = ev.target.closest('button[data-ok]');
+  if (b) confirmDlg.close(b.dataset.ok);
 });
-if (carEntity) states[carEntity] = { entity_id: carEntity, state: 'not_home', attributes: { friendly_name: nameOf(carEntity), arrived_at: null }, last_changed: now(), last_updated: now() };
-
-const TEXT = {
-  on: 'Sees', off: 'Väljas', idle: 'Ootel', home: 'Kodus', not_home: 'Eemal',
-  open: 'Avatud', closed: 'Suletud', opening: 'Avaneb', closing: 'Sulgub',
-  heat: 'Küte', eco: 'Säästlik', performance: 'Jõudlus',
-  disarmed: 'Valvest maas', armed_home: 'Valves (kodus)', armed_away: 'Valves (eemal)', triggered: 'Häire!'
-};
-const BINARY = { door: ['Suletud', 'Avatud'], motion: ['Vaikne', 'Liikumine'], smoke: ['Korras', 'Suits!'] };
-
-function formatEntityState(st) {
-  const a = st.attributes || {};
-  if (domainOf(st.entity_id) === 'binary_sensor' && BINARY[a.device_class]) return BINARY[a.device_class][st.state === 'on' ? 1 : 0];
-  const n = Number(st.state);
-  if (a.unit_of_measurement && st.state !== '' && Number.isFinite(n)) return `${nf1.format(n)} ${a.unit_of_measurement}`;
-  if (domainOf(st.entity_id) === 'light' && st.state === 'on' && a.brightness) return `Sees, ${nf0.format(a.brightness / 2.55)}%`;
-  if (domainOf(st.entity_id) === 'water_heater') return `${TEXT[st.state] || st.state}, ${nf0.format(a.temperature)} °C`;
-  return TEXT[st.state] || st.state;
-}
+confirmDlg.addEventListener('close', () => { if (answer) answer(confirmDlg.returnValue === 'yes'); answer = null; confirmDlg.returnValue = ''; });
 
 /* ---------- views and routing ---------- */
 
-const views = buildViews(model);
-const panes = views.map(view => {
-  const tab = document.createElement('a');
-  tab.className = 'tab';
-  tab.href = `#${view.path}`;
-  tab.setAttribute('role', 'tab');
-  tab.title = view.title;
-  tab.setAttribute('aria-label', view.title);
-  tab.innerHTML = shellIcon(view.icon);
-  tabs.append(tab);
+const isHouse3d = v => v.type === 'panel' && (v.cards || [])[0] && v.cards[0].type === 'custom:house3d-card';
+const pathOf = nav => (/^\/lovelace\/([\w-]+)$/.exec(nav || '') || [])[1];
+const panes = dashboard.views.map(view => {
   const el = document.createElement('div');
-  el.className = `view ${view.type}`;
+  el.className = `view view-${view.type}`;
   el.setAttribute('role', 'tabpanel');
   el.setAttribute('aria-label', view.title);
   el.hidden = true;
   viewsEl.append(el);
+  let tab = null;
+  if (!view.subview) {
+    tab = document.createElement('a');
+    tab.className = 'tab';
+    tab.href = `#${view.path}`;
+    tab.setAttribute('role', 'tab');
+    tab.title = view.title;
+    tab.setAttribute('aria-label', view.title);
+    tab.innerHTML = svg(view.icon);
+    tabs.append(tab);
+  }
   return { view, tab, el, rendered: null };
 });
-let current = null;
-let card = null;
+// a subview's way back: the view whose cards or badges link to it, else the first view
+const linksTo = (view, path) => JSON.stringify(view).includes(`"navigation_path":"/lovelace/${path}"`);
+const parentOf = pane => panes.find(p => !p.view.subview && linksTo(p.view, pane.view.path)) || panes.find(p => p.view.subview && p !== pane && linksTo(p.view, pane.view.path)) || panes[0];
 
-const ctx = { nameOf, iconOf, format: formatEntityState, moreInfo: openInfo, act };
+let current = null, cameFrom = null, card3d = null;
 
-function hass() {
-  return { states, config: { latitude: 58.6, longitude: 25.0 }, formatEntityState };
-}
-
-// the card is mounted on the 3D view's first show and kept, hidden, afterwards: its camera,
-// style and Kihid state survive tab switches
-function mountCard(el) {
-  card = document.createElement('house3d-card');
-  card.setAttribute('aria-label', 'Maja kolmemõõtmeline mudel');
-  card.setConfig({ model });
-  el.append(card);
-  card.isPanel = true;
-  card.hass = hass();
-}
+const resizers = new Map();
+const ro = new ResizeObserver(entries => entries.forEach(en => { const fn = resizers.get(en.target); if (fn && en.contentRect.width) fn(); }));
+const ctx = {
+  nameOf,
+  series,
+  now: () => new Date(),
+  act: (action, entity) => runAction(action, entity, api),
+  resize: (el, fn) => { resizers.set(el, fn); ro.observe(el); },
+  house3d: () => {
+    const el = document.createElement('house3d-card');
+    el.setAttribute('aria-label', 'Maja kolmemõõtmeline mudel');
+    el.setConfig({ model });
+    card3d = el;
+    return { el, update: h => { el.hass = h; } };
+  }
+};
+const api = {
+  confirm,
+  moreInfo: openInfo,
+  toggle: e => sim.toggle(e),
+  callService: (d, s, dt, t) => sim.callService(d, s, dt, t),
+  navigate: nav => { const p = pathOf(nav); if (p && panes.some(x => x.view.path === p)) location.hash = p; },
+  openUrl: url => window.open(url, '_blank', 'noopener')
+};
 
 function show(pane) {
   if (current === pane) return;
+  if (pane.view.subview && current && current !== pane) cameFrom = current.view.subview ? cameFrom : current;
   current = pane;
   for (const p of panes) {
     p.el.hidden = p !== pane;
-    p.tab.setAttribute('aria-selected', String(p === pane));
-    p.tab.tabIndex = p === pane ? 0 : -1;
+    if (p.tab) { p.tab.setAttribute('aria-selected', String(p === pane)); p.tab.tabIndex = p === pane ? 0 : -1; }
   }
   const v = pane.view;
-  if (v.type === 'panel') {
-    if (!card) mountCard(pane.el);
-    else { card.hass = hass(); card.isPanel = true; }
-  } else {
-    if (!pane.rendered) {
-      pane.rendered = renderSections(v, ctx);
-      pane.el.append(pane.rendered.el);
-    }
-    pane.rendered.update(hass());
+  toolbar.classList.toggle('sub', !!v.subview);
+  titleEl.textContent = v.subview ? v.title : dashboard.title;
+  if (!pane.rendered) {
+    pane.rendered = v.type === 'panel' ? renderPanel(v, ctx) : renderSections(v, ctx);
+    pane.el.append(pane.rendered.el);
   }
-  pane.tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  carOnFirstShow(v.type === 'panel');
+  if (isHouse3d(v) && card3d) card3d.isPanel = true;
+  pane.rendered.update(hass());
+  if (pane.tab) pane.tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  pane.el.scrollTop = 0;
+  carOnFirstShow(isHouse3d(v));
 }
 
-// the hash is matched against the views' paths, never used as a selector; anything else is 3D
+// the hash is matched against the views' paths, never used as a selector; anything else is the first view
 function route() {
   let path;
   try { path = decodeURIComponent(location.hash.slice(1)); } catch (e) { path = null; }
@@ -155,150 +147,156 @@ function route() {
   show(pane || panes[0]);
 }
 window.addEventListener('hashchange', route);
+// back as HA goes back: through history when the subview was opened from here, else to the
+// view that links it
+backBtn.addEventListener('click', () => {
+  const came = cameFrom && cameFrom !== current;
+  cameFrom = null;
+  if (came) history.back();
+  else location.hash = parentOf(current).view.path;
+});
 
 // HA's tab bar: arrow keys move between tabs
 tabs.addEventListener('keydown', ev => {
-  const i = panes.indexOf(current), d = { ArrowRight: 1, ArrowLeft: -1 }[ev.key];
+  const list = panes.filter(p => p.tab), i = list.indexOf(current), d = { ArrowRight: 1, ArrowLeft: -1 }[ev.key];
   if (!d) return;
-  const next = panes[(i + d + panes.length) % panes.length];
+  const next = list[(Math.max(0, i) + d + list.length) % list.length];
   location.hash = next.view.path;
   next.tab.focus();
   ev.preventDefault();
 });
 
-/* ---------- the simulated hass ---------- */
+/* ---------- the simulated hass reaching the page ---------- */
 
-function publish() {
+sim.subscribe(() => {
   const h = hass();
-  if (card && current && current.view.type === 'panel') card.hass = h;
   if (current && current.rendered) current.rendered.update(h);
-  if (dialog.open && states[openEntity] !== shownState) renderInfo();
-}
-
-// last_changed moves only when the state does, as in HA
-function set(entity, state, attrs = {}) {
-  const old = states[entity];
-  const changed = old.state !== state;
-  states = { ...states, [entity]: { ...old, state, attributes: { ...old.attributes, ...attrs }, last_changed: changed ? now() : old.last_changed, last_updated: now() } };
-  publish();
-}
-
-const timers = new Map();
-function later(entity, ms, fn) {
-  clearTimeout(timers.get(entity));
-  timers.set(entity, setTimeout(fn, ms));
-}
+  if (dialog.open && sim.states[openEntity] !== shownState) renderInfo();
+});
 
 // The car drives in by itself once, on the 3D view's first show and not at page load: a card
 // that is hidden would take the arrival without the drive. Leaving the view before it comes
-// puts it off to the next show; driving it from its badge first cancels it.
+// puts it off to the next show; driving it from its dialog first cancels it.
 let carDone = !carEntity;
 let carTimer = null;
 function carOnFirstShow(visible) {
   clearTimeout(carTimer);
   if (carDone || !visible) return;
-  carTimer = setTimeout(() => { carDone = true; set(carEntity, 'home', { arrived_at: now() }); }, 3000);
-}
-
-function act(e, what, value) {
-  const st = states[e], a = st.attributes, dom = domainOf(e);
-  if (what === 'toggle') {
-    if (dom === 'cover') return act(e, st.state === 'closed' || st.state === 'closing' ? 'open' : 'close');
-    const on = st.state !== 'on';
-    if (dom === 'light') return set(e, on ? 'on' : 'off', on ? { brightness: a.brightness || 255 } : {});
-    return set(e, on ? 'on' : 'off');
-  }
-  if (what === 'level') {
-    if (dom === 'light') return set(e, 'on', { brightness: Math.round(value * 2.55) });
-    return set(e, 'on', { percentage: Number(value) });
-  }
-  if (what === 'open' || what === 'close') {
-    const [moving, done, pos] = what === 'open' ? ['opening', 'open', 100] : ['closing', 'closed', 0];
-    set(e, moving);
-    return later(e, 1800, () => set(e, done, 'current_position' in a ? { current_position: pos } : {}));
-  }
-  if (what === 'stop') { clearTimeout(timers.get(e)); return set(e, 'open', 'current_position' in a ? { current_position: 50 } : {}); }
-  if (what.startsWith('mode:')) return set(e, what.slice(5));
-  if (what === 'up' || what === 'down') {
-    const sign = what === 'up' ? 1 : -1;
-    if (dom === 'sensor') return set(e, (Math.round((Number(st.state) + sign * 0.5) * 10) / 10).toFixed(1));
-    const step = dom === 'water_heater' ? 1 : 0.5;
-    const t = Math.min(a.max_temp, Math.max(a.min_temp, a.temperature + sign * step));
-    return set(e, st.state, { temperature: t });
-  }
-  if (what === 'arm_home') return set(e, 'armed_home');
-  if (what === 'arm_away') return set(e, 'armed_away');
-  if (what === 'disarm') return set(e, 'disarmed');
-  if (what === 'trigger') return set(e, 'triggered');
-  if (what === 'flip') return set(e, st.state === 'on' ? 'off' : 'on');
-  if (what === 'pulse') { set(e, 'on'); return later(e, 4000, () => set(e, 'off')); }
-  if (what === 'arrive' || what === 'leave') {
-    carDone = true;
-    clearTimeout(carTimer);
-    return set(e, what === 'arrive' ? 'home' : 'not_home', { arrived_at: what === 'arrive' ? now() : null });
-  }
+  carTimer = setTimeout(() => { carDone = true; sim.set(carEntity, 'home', { arrived_at: new Date().toISOString() }); }, 3000);
 }
 
 /* ---------- more-info dialog ---------- */
 
 let openEntity = null;
-// the state object the dialog shows; a change to another entity leaves the dialog alone
 let shownState = null;
 let dragging = false;
 
-function ago(iso) {
-  const s = Math.round((Date.parse(iso) - Date.now()) / 1000);
-  if (s > -45) return 'just praegu';
-  if (s > -3600) return rtf.format(Math.round(s / 60), 'minute');
-  return rtf.format(Math.round(s / 3600), 'hour');
-}
-
-const btn = (act, label, extra = '') => `<button type="button" data-do="${act}" ${extra}>${esc(label)}</button>`;
-const iconBtn = (act, label, k, off) => `<button type="button" data-do="${act}" aria-label="${esc(label)}"${off ? ' disabled' : ''}>${shellIcon(k)}</button>`;
-const power = on => `<button type="button" class="round" data-do="toggle" aria-pressed="${on}" aria-label="${on ? 'Lülita välja' : 'Lülita sisse'}">${shellIcon('power')}</button>`;
+const btn = (act, label, extra = '') => `<button type="button" data-do="${esc(act)}" ${extra}>${esc(label)}</button>`;
+const iconBtn = (act, label, k, off) => `<button type="button" data-do="${act}" aria-label="${esc(label)}"${off ? ' disabled' : ''}>${svg(k)}</button>`;
+const power = on => `<button type="button" class="round" data-do="toggle" aria-pressed="${on}" aria-label="${on ? 'Lülita välja' : 'Lülita sisse'}">${svg('power')}</button>`;
 const slider = (label, value, min) => `<div class="pill slider" role="slider" tabindex="0" data-level aria-label="${esc(label)}"
   aria-valuemin="${min}" aria-valuemax="100" aria-valuenow="${value}" aria-valuetext="${value}%" style="--v:${value}%"><span class="fill"></span></div>`;
+
+// the arc of HA's thermostat card, 270 degrees open at the bottom
+const ARC = { cx: 100, cy: 100, r: 84, from: 135, sweep: 270 };
+const polar = deg => { const t = (deg * Math.PI) / 180; return [ARC.cx + ARC.r * Math.cos(t), ARC.cy + ARC.r * Math.sin(t)]; };
+function arcPath(f0, f1) {
+  const a0 = ARC.from + ARC.sweep * f0, a1 = ARC.from + ARC.sweep * f1;
+  const [x0, y0] = polar(a0), [x1, y1] = polar(a1);
+  return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${ARC.r} ${ARC.r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+}
+function thermostat(e, st) {
+  const a = st.attributes || {}, off = st.state === 'off';
+  const min = a.min_temp ?? 5, max = a.max_temp ?? 30, target = a.temperature;
+  const f = Math.min(1, Math.max(0, (target - min) / (max - min)));
+  const step = domainOf(e) === 'water_heater' ? 1 : 0.5;
+  const big = off ? 'Väljas' : `${step < 1 ? nf1.format(target) : Math.round(target)}<span class="unit">°C</span>`;
+  return `<div class="thermo" style="--c:${stateColor(e, st)}">
+    <svg viewBox="0 0 200 200" aria-hidden="true"><path class="track" d="${arcPath(0, 1)}"/>${off ? '' : `<path class="value" d="${arcPath(0, f)}"/>`}</svg>
+    <div class="t-mid"><span class="t-label">${off ? '' : 'Soovitud'}</span><span class="t-big" aria-live="polite">${big}</span>
+      <span class="t-now">${svg('thermometer')} ${nf1.format(a.current_temperature)} °C</span></div>
+  </div>
+  <div class="t-steps">${iconBtn('down', 'Sihttemperatuur alla', 'minus', off)}${iconBtn('up', 'Sihttemperatuur üles', 'plus', off)}</div>`;
+}
+const MODE_TEXT = { off: 'Väljas', heat: 'Küte', cool: 'Jahutus', auto: 'Automaatne', on: 'Tavaline', performance: 'Kiirsoojendus', eco: 'Säästlik' };
+const modeButtons = (modes, s, prefix) => (modes.length ? `<div class="modes" role="group" aria-label="Režiim">${modes.map(m => btn(`${prefix}:${m}`, MODE_TEXT[m] || m, `aria-pressed="${s === m}"`)).join('')}</div>` : '');
+const options = (st, label) => `<div class="pill seg options" role="group" aria-label="${esc(label)}">${(st.attributes.options || []).map(o => btn(`option:${o}`, o, `aria-pressed="${st.state === o}"`)).join('')}</div>`;
 
 function controls(e, st) {
   const a = st.attributes, s = st.state, on = s === 'on';
   switch (domainOf(e)) {
-    case 'light':
-      return slider('Heledus', on ? Math.round((a.brightness || 255) / 2.55) : 0, 1) + power(on);
-    case 'fan':
-      return slider('Kiirus', on ? a.percentage || 40 : 0, 10) + power(on);
+    case 'light': return slider('Heledus', on ? Math.round((a.brightness || 255) / 2.55) : 0, 1) + power(on);
+    case 'fan': return slider('Kiirus', on ? a.percentage || 40 : 0, 10) + power(on);
     case 'switch': case 'input_boolean':
       return `<button type="button" class="pill switch" role="switch" data-do="toggle" aria-checked="${on}" aria-label="Lülita"><span class="fill"></span></button>`;
     case 'cover':
       return `<div class="pill buttons" role="group" aria-label="Juhtimine">
-        ${iconBtn('open', 'Ava', 'up', s === 'open' || s === 'opening')}${iconBtn('stop', 'Peata', 'stop', s !== 'opening' && s !== 'closing')}${iconBtn('close', 'Sulge', 'down', s === 'closed' || s === 'closing')}</div>`
+        ${iconBtn('open', 'Ava', 'chevron-up', s === 'open' && 'current_position' in a)}${iconBtn('stop', 'Peata', 'stop')}${iconBtn('close', 'Sulge', 'chevron-down', s === 'closed' && 'current_position' in a)}</div>`
         + ('current_position' in a ? '' : '<p class="note">See seade asendit ei teata, nii et olek on viimane käsk.</p>');
-    case 'climate':
-      return `<div class="thermostat">${thermostat(e, st)}${modeButtons(st)}</div>`;
-    case 'water_heater':
-      return `<div class="thermostat">${thermostat(e, st)}</div>`;
+    case 'climate': return `<div class="thermostat">${thermostat(e, st)}${modeButtons(a.hvac_modes || [], s, 'hvac')}</div>`;
+    case 'water_heater': return `<div class="thermostat">${thermostat(e, st)}${modeButtons(a.operation_list || [], s, 'op')}</div>`;
     case 'alarm_control_panel':
       return `<div class="pill seg" role="group" aria-label="Valvestus">${btn('arm_away', 'Valves (eemal)', `aria-pressed="${s === 'armed_away'}"`)}${btn('arm_home', 'Valves (kodus)', `aria-pressed="${s === 'armed_home'}"`)}${btn('disarm', 'Valvest maas', `aria-pressed="${s === 'disarmed'}"`)}</div>`
         + (s === 'disarmed' ? '' : `<div class="row">${btn('trigger', 'Testhäire', s === 'triggered' ? 'disabled' : '')}</div>`);
     case 'binary_sensor':
-      if (a.device_class === 'door') return `<div class="row">${btn('flip', s === 'on' ? 'Sulge uks' : 'Ava uks')}</div><p class="note">Simulatsioon: päris majas muudab seda andur.</p>`;
-      if (a.device_class === 'motion') return `<div class="row">${btn('pulse', 'Simuleeri liikumist', s === 'on' ? 'disabled' : '')}</div>`;
-      return `<div class="row">${s === 'on' ? btn('flip', 'Lähtesta') : btn('flip', 'Testi andurit')}</div>`;
+      if (a.device_class === 'door') return `<div class="row">${btn('flip', on ? 'Sulge uks' : 'Ava uks')}</div><p class="note">Simulatsioon: päris majas muudab seda andur.</p>`;
+      if (a.device_class === 'motion') return `<div class="row">${btn('pulse', 'Simuleeri liikumist', on ? 'disabled' : '')}</div>`;
+      return `<div class="row">${on ? btn('flip', 'Lähtesta') : btn('flip', 'Testi andurit')}</div><p class="note">Simulatsioon: päris majas muudab seda andur.</p>`;
     case 'sensor':
-      return `<div class="row">${btn('down', 'Jahedamaks')}${btn('up', 'Soojemaks')}</div><p class="note">Simulatsioon: päris majas tuleb väärtus andurilt.</p>`;
+      if (a.device_class === 'temperature') return `<div class="row">${btn('down', 'Jahedamaks')}${btn('up', 'Soojemaks')}</div><p class="note">Simulatsioon: päris majas tuleb väärtus andurilt.</p>`;
+      return '';
+    case 'select': case 'input_select': return options(st, 'Valikud');
+    case 'number': case 'input_number':
+      return `<div class="row stepper">${iconBtn('dec', 'Vähem', 'minus', Number(s) <= a.min)}${iconBtn('inc', 'Rohkem', 'plus', Number(s) >= a.max)}</div>`;
+    case 'media_player': return power(s !== 'off') + (a.app_name && s !== 'off' ? `<p class="note">Rakendus: ${esc(a.app_name)}</p>` : '');
+    case 'update':
+      return `<p class="note">Paigaldatud ${esc(a.installed_version)}, uusim ${esc(a.latest_version)}</p>${on ? `<div class="row">${btn('install', 'Paigalda')}</div>` : ''}`;
+    case 'button': return `<div class="row">${btn('press', 'Vajuta')}</div>`;
     case 'camera':
-      return `<div class="cam" role="img" aria-label="Kaamerapildi asemik">${icon('camera')}</div><p class="note">Päris majas näitab Home Assistant siin otsepilti. 3D-vaates on kaamera vaatesektor.</p>`;
+      return `<div class="cam" role="img" aria-label="Kaamerapildi asemik">${svg('cctv')}</div><p class="note">Päris majas näitab Home Assistant siin otsepilti. 3D-vaates on kaamera vaatesektor.</p>`;
     case 'device_tracker':
       return `<div class="row">${btn('arrive', 'Saabub', s === 'home' ? 'disabled' : '')}${btn('leave', 'Lahkub', s === 'home' ? '' : 'disabled')}</div>`;
-    default:
-      return '';
+    default: return '';
   }
 }
 
+// what a dialog control does: the service HA's dialog would call, or for a sensor, a simulated reading
+function act(e, what) {
+  const st = sim.states[e], a = st.attributes, d = domainOf(e);
+  const call = (dom, service, dt = {}) => sim.callService(dom, service, dt, { entity_id: e });
+  if (what === 'toggle') return sim.toggle(e);
+  if (what === 'open' || what === 'close' || what === 'stop') return call('cover', `${what}_cover`);
+  if (what.startsWith('option:')) return call(d, 'select_option', { option: what.slice(7) });
+  if (what.startsWith('hvac:')) return call('climate', 'set_hvac_mode', { hvac_mode: what.slice(5) });
+  if (what.startsWith('op:')) return call('water_heater', 'set_operation_mode', { operation_mode: what.slice(3) });
+  if (what === 'inc' || what === 'dec') return call(d, 'set_value', { value: Number(st.state) + (what === 'inc' ? 1 : -1) * (a.step || 1) });
+  if (what === 'up' || what === 'down') {
+    const sign = what === 'up' ? 1 : -1;
+    if (d === 'sensor') return sim.set(e, (Math.round((Number(st.state) + sign * 0.5) * 10) / 10).toFixed(1));
+    return call(d, 'set_temperature', { temperature: a.temperature + sign * (d === 'water_heater' ? 1 : 0.5) });
+  }
+  if (what === 'arm_home' || what === 'arm_away' || what === 'disarm' || what === 'trigger') return call('alarm_control_panel', `alarm_${what}`);
+  if (what === 'install') return call('update', 'install');
+  if (what === 'press') return call('button', 'press');
+  if (what === 'flip') return sim.set(e, st.state === 'on' ? 'off' : 'on');
+  if (what === 'pulse') { sim.set(e, 'on'); return setTimeout(() => sim.set(e, 'off'), 4000); }
+  if (what === 'arrive' || what === 'leave') {
+    carDone = true;
+    clearTimeout(carTimer);
+    return sim.set(e, what === 'arrive' ? 'home' : 'not_home', { arrived_at: what === 'arrive' ? new Date().toISOString() : null });
+  }
+}
+
+function level(e, v) {
+  if (domainOf(e) === 'light') sim.callService('light', 'turn_on', { brightness_pct: v }, { entity_id: e });
+  else sim.callService('fan', 'set_percentage', { percentage: v }, { entity_id: e });
+}
+
 function renderInfo() {
-  const e = openEntity, st = states[e];
+  const e = openEntity, st = sim.states[e];
   if (!st) return dialog.close();
   shownState = st;
-  dialog.querySelector('.state').textContent = formatEntityState(st);
+  dialog.querySelector('.state').textContent = formatState(st);
   dialog.querySelector('.when').textContent = `Muudetud ${ago(st.last_changed)}`;
   const box = dialog.querySelector('.controls');
   box.style.setProperty('--c', stateColor(e, st));
@@ -321,8 +319,9 @@ function renderInfo() {
 }
 
 function openInfo(entity) {
-  if (!states[entity]) return;
+  if (!sim.states[entity]) return;
   openEntity = entity;
+  dialog.querySelector('.i-icon').innerHTML = svg(entityIcon(entity, sim.states[entity]));
   dialog.querySelector('.i-name').textContent = nameOf(entity);
   const area = areaOf(entity);
   dialog.querySelector('.i-area').textContent = area;
@@ -332,7 +331,7 @@ function openInfo(entity) {
   if (!dialog.open) dialog.showModal();
 }
 setInterval(() => {
-  if (dialog.open && states[openEntity]) dialog.querySelector('.when').textContent = `Muudetud ${ago(states[openEntity].last_changed)}`;
+  if (dialog.open && sim.states[openEntity]) dialog.querySelector('.when').textContent = `Muudetud ${ago(sim.states[openEntity].last_changed)}`;
 }, 30000);
 
 // taps on a dialog's backdrop land on the dialog element, outside its box
@@ -340,7 +339,6 @@ const outside = (d, ev) => {
   const r = d.getBoundingClientRect();
   return ev.target === d && (ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom);
 };
-
 dialog.addEventListener('click', ev => {
   if (outside(dialog, ev) || ev.target.closest('[data-act="close"]')) return dialog.close();
   const b = ev.target.closest('button[data-do]');
@@ -354,7 +352,7 @@ function levelAt(el, y) {
 }
 function slide(el, v) {
   el.style.setProperty('--v', `${v}%`);
-  act(openEntity, 'level', v);
+  level(openEntity, v);
 }
 dialog.addEventListener('pointerdown', ev => {
   const el = ev.target.closest('[data-level]');
@@ -377,17 +375,17 @@ dialog.addEventListener('keydown', ev => {
   const step = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1, PageUp: 10, PageDown: -10 }[ev.key];
   if (!step) return;
   ev.preventDefault();
-  const now = Number(el.getAttribute('aria-valuenow'));
+  const v = Number(el.getAttribute('aria-valuenow'));
   // turning down leaves an off device off; the power button switches it
-  if (now === 0 && step < 0) return;
+  if (v === 0 && step < 0) return;
   const min = Number(el.getAttribute('aria-valuemin'));
-  slide(el, Math.max(min, Math.min(100, now + step)));
+  slide(el, Math.max(min, Math.min(100, v + step)));
 });
 dialog.addEventListener('close', () => { dragging = false; });
 
 /* ---------- the drawer and the card's taps ---------- */
 
-document.querySelector('[data-act="menu"]').addEventListener('click', () => drawer.showModal());
+menuBtn.addEventListener('click', () => drawer.showModal());
 drawer.addEventListener('click', ev => {
   if (outside(drawer, ev) || ev.target.closest('[data-act="close"]')) drawer.close();
 });

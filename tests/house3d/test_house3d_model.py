@@ -234,6 +234,7 @@ class BuildAndScan(unittest.TestCase):
 
 class Demo(unittest.TestCase):
     DEMO_FILES = ("index.html", "demo.js", "house3d-card.js", "house3d.js", "model.json")
+    DATA_FILES = ("dashboard.json", "states.json", "series.json")
 
     def build(self, tmp, env=None):
         r = run("--demo", tmp, env=env)
@@ -256,9 +257,19 @@ class Demo(unittest.TestCase):
             self.assertNotIn("showcase", model)
             self.assertNotIn("room_names", model)
 
+    def test_demo_writes_the_dashboard_states_and_series(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = self.build(tmp)
+            data = {n: json.loads((out / n).read_text(encoding="utf-8")) for n in self.DATA_FILES}
+            self.assertEqual(data["dashboard.json"]["views"][0]["path"], "maja-3d")
+            self.assertIn("states", data["states.json"])
+            self.assertTrue(data["series.json"])
+            self.assertFalse((out / "dashboard.js").exists())
+
     def test_demo_carries_the_card_and_demo_versions(self):
         version = re.search(r"^const HOUSE3D_VERSION = (\d+);", (ENGINE / "house3d-card.js").read_text(), re.M).group(1)
         demo = hb.demo_version(version)
+        self.assertEqual(demo, hb.demo_version(version, data=hb.demo_data(hb.demo_model())))
         self.assertRegex(demo, r"^[0-9a-f]{10}$")
         with tempfile.TemporaryDirectory() as tmp:
             out = self.build(tmp)

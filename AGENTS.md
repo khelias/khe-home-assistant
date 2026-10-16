@@ -24,14 +24,18 @@ config/            what deploy copies into HA's /config
   configuration.yaml
   packages/        one package per device or concern
   tuya_local_devices/  device definitions copied into tuya-local at HA start
-demo/              the public demo: a mock HA dashboard of the test house (3D
-                   view, then Kodu, Kliima, Valve) on a simulated hass; config
-                   in dashboard.js, cards in cards.js; not deployed to HA
+demo/              the public demo: the real dashboard's views on made-up
+                   data, 3D first, on a simulated hass (sim.js); the sections
+                   view and its cards in cards.js, charts.js, icons.js, the
+                   page in demo.js and index.html; not deployed to HA
 docs/              operational notes, the README screenshot
 house3d/           3D house view: engine (core house3d.js, scene/ layer
                    modules, kit and sun), HA card, standalone viewer,
                    placement page, vendored three.js
-scripts/           ha-dashboard.py (HA Overview generator),
+scripts/           dashboard_config.py (the HA Overview as data, no I/O),
+                   ha-dashboard.py (reads the private inputs, saves it),
+                   dashboard_demo.py (the demo's made-up entities, texts and
+                   series for the same config),
                    ha-ws.py (HA WebSocket commands from the CLI),
                    house3d-* and house3d_model.py (3D view build, vendoring,
                    device and tree placement, ETAK surroundings, model),
@@ -41,6 +45,7 @@ scripts/           ha-dashboard.py (HA Overview generator),
 tests/house3d/     3D view tests on a made-up fixture house: model and build
                    (Python unittest), engine, simple-style snapshot and demo
                    dashboard (node:test)
+tests/dashboard/   dashboard config and demo catalogue tests (Python unittest)
 ```
 
 ## Commands
@@ -49,16 +54,18 @@ tests/house3d/     3D view tests on a made-up fixture house: model and build
   ruff==0.17.0` (the version `ci.yml` pins), then
   `bash scripts/install-hooks.sh` for the gitleaks pre-commit hook.
 - `bash scripts/check.sh` is the whole check: `bash -n` on every
-  `scripts/*.sh`, `scripts/house3d-test.sh` (needs `node` and `python3`) and
-  ruff lint and format over `scripts/`. It runs everything and exits 1 if
-  anything failed. CI runs it with `RUFF=ruff`, the workspace commit gate
-  before each commit.
+  `scripts/*.sh`, `scripts/house3d-test.sh` (needs `node` and `python3`), the
+  dashboard tests, the privacy scan of the demo when the real model is at
+  hand (skipped in CI) and ruff lint and format over `scripts/`. It runs
+  everything and exits 1 if anything failed. CI runs it with `RUFF=ruff`, the
+  workspace commit gate before each commit.
 - `ruff check --fix scripts && ruff format scripts` before committing Python.
-- `python3 -I scripts/house3d-build.py --demo OUTDIR` builds the 3D view demo
-  from the made-up test house only (`tests/house3d/fixture-model.md`):
-  the card, the engine and `demo/`. khe-sites runs it and publishes the result
-  at <https://khe.ee/house3d/> on its next deploy: a push to khe-sites, its
-  weekly schedule, or `gh workflow run deploy.yml -R khelias/khe-sites`.
+- `python3 -I scripts/house3d-build.py --demo OUTDIR` builds the demo from the
+  made-up test house only (`tests/house3d/fixture-model.md`): the card, the
+  engine, `demo/` and the generated dashboard, states and series. khe-sites
+  runs it and publishes the result at <https://khe.ee/house3d/> on its next
+  deploy: a push to khe-sites, its weekly schedule, or
+  `gh workflow run deploy.yml -R khelias/khe-sites`.
 - `ha-ws.py` and `ha-dashboard.py` import `websockets`, and `pv-sim.py`
   needs numpy and scipy (plus websockets for its `fetch`). The `.venv` above
   carries only ruff; run those scripts from a venv that has them.
@@ -73,10 +80,15 @@ tests/house3d/     3D view tests on a made-up fixture house: model and build
    consumer degrades to leaving the card out when a file is missing. The
    gitleaks hook covers secrets; personal-data patterns are caught by the
    khe-workspace commit gate; names and street addresses by nobody.
-2. **The 3D view carries no house data.** The model is khe-meta's
+2. **The 3D view and the demo carry no house data.** The model is khe-meta's
    `house/house-model.md`. Run `scripts/house3d-build.py --scan <model>
    house3d/` with the real model before every commit that touches
    `house3d/`, and before publishing anything built from the model.
+   `check.sh` scans `house3d/`, `demo/`, `scripts/dashboard_demo.py` and a
+   fresh demo build with `--count` whenever the model is at hand (the main
+   checkout's khe-meta or `HOUSE3D_MODEL`), so the commit gate covers the
+   demo; CI has no model. The ids and labels the scan flags are spelled once,
+   in `dashboard_config.py`, and the demo takes them from there.
 3. **Modules under `house3d/scene/` import nothing**
    ([notes](docs/operational-notes.md#the-3d-house-view-house3d)); the engine
    tests enforce it.
@@ -127,11 +139,15 @@ HA is operated through its API: not the UI, not SSH.
   ([notes](docs/operational-notes.md#reloads-restarts-and-prices)).
 - **Helpers come up at their minimum.** Set the first value through the API;
   `initial:` would overwrite the household's choice on every restart.
-- **The dashboard is generated** by `scripts/ha-dashboard.py`, and HA adds
-  sections to the stored config by itself when a new device appears. Before
-  rerunning, diff the generator's output against the live config: exec the
-  script up to `async def main`, dump `config`, compare with a WebSocket
-  `lovelace/config` read.
+- **The dashboard is generated**: `dashboard_config.build()` makes it and
+  `scripts/ha-dashboard.py` saves it, and HA adds sections to the stored
+  config by itself when a new device appears. Before rerunning, diff the
+  generator's output against the live config: load `ha-dashboard.py` with
+  `importlib` (it needs no `websockets` until it saves), dump
+  `local_config()`, compare with a WebSocket `lovelace/config` read. The
+  public demo is the same `build()` on made-up inputs, so a new entity id
+  needs an entry in `dashboard_demo.CATALOGUE` (the dashboard tests name it)
+  and a new templated card a sample text in `TEXTS`.
 - **Keep the house idiom in a new view**, and read two existing views first.
   A row is a `horizontal-stack` of 2-4 vertical tiles or `third()`, never a
   lone full-width tile; full width is for charts, forecast cards and alerts.

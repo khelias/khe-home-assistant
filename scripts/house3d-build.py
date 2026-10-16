@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build the standalone house 3D viewer, and scan files for private house data.
 
-Usage:  house3d-build.py MODEL OUTDIR           build, then scan OUTDIR
-        house3d-build.py --demo OUTDIR          build the HA card demo of the test house
-        house3d-build.py --scan MODEL PATH...   scan files or trees, exit 1 on any hit
+Usage:  house3d-build.py MODEL OUTDIR                   build, then scan OUTDIR
+        house3d-build.py --demo OUTDIR                  build the HA dashboard demo of the test house
+        house3d-build.py --scan [--count] MODEL PATH... scan files or trees, exit 1 on any hit
 
 The build writes OUTDIR/index.html (viewer.html), house3d.js, scene/, vendor/ and model.json
 from the geometry, rooms and showcase layers of MODEL (khe-meta house/house-model.md). The
@@ -13,10 +13,13 @@ sun. Publishing the folder is a separate decision.
 
 The demo build reads only the made-up test house (tests/house3d/fixture-model.md), never a
 model argument or HOUSE3D_MODEL, and writes every .html, .js, .css and .svg of demo/, the HA
-card, the engine and model.json with every layer the card gets in HA. In the demo's files
-__HOUSE3D_VERSION__ becomes the card's version and __DEMO_VERSION__ a hash of the demo's files
-and that version. khe-sites publishes it at khe.ee/house3d/. The fixture is public in this
-repo, so there is nothing to scan.
+card, the engine, model.json with every layer the card gets in HA, and the dashboard: the real
+generator's views on made-up data (scripts/dashboard_demo.py) as dashboard.json, their starting
+states as states.json and their chart data as series.json. In the demo's files
+__HOUSE3D_VERSION__ becomes the card's version and __DEMO_VERSION__ a hash of the demo's files,
+the three JSON files and that version. khe-sites publishes it at khe.ee/house3d/. The fixture is
+public; the dashboard comes from the generator, which names the real house's devices, so
+check.sh scans the demo build with the real model whenever one is at hand.
 
 The scan reads the private layer of MODEL and fails on every occurrence of an entity id,
 a device name, a family room name or the car's entity and name
@@ -29,7 +32,9 @@ the vendored three.js. So do the surroundings layer's building and road vertices
 same two-decimal rule, and the georeference's origin_E and origin_N, as written in the
 model and in whole metres; their labels name the layer and an index, never the
 values. Run it over
-house3d/ before every commit that touches it.
+house3d/ before every commit that touches it. With --count it prints only the number of hits
+per kind (private strings, devices keys, coordinates), never the matched text, so its output
+can go into a log.
 """
 
 import hashlib
@@ -42,6 +47,7 @@ from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import dashboard_demo
 import house3d_model
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -142,11 +148,25 @@ def full_model(path):
     return layers
 
 
-def run_scan(model, paths):
+def _kind(hit):
+    label = hit.rsplit(": ", 1)[1]
+    if label.startswith("private string"):
+        return "private strings"
+    return "devices keys" if label == "a devices key" else "coordinates"
+
+
+def run_scan(model, paths, count=False):
     hits, n = scan(model, paths)
-    for h in hits:
-        print(h)
-    print(f"scan: {len(hits)} hit(s) in {n} file(s)")
+    if count:
+        kinds = {k: 0 for k in ("private strings", "devices keys", "coordinates")}
+        for h in hits:
+            kinds[_kind(h)] += 1
+        detail = ", ".join(f"{k} {v}" for k, v in kinds.items())
+        print(f"scan: {len(hits)} hit(s) in {n} file(s): {detail}")
+    else:
+        for h in hits:
+            print(h)
+        print(f"scan: {len(hits)} hit(s) in {n} file(s)")
     return 1 if hits else 0
 
 
@@ -197,36 +217,59 @@ def demo_files(demo=DEMO):
     return sorted(f for f in Path(demo).iterdir() if f.is_file() and f.suffix in DEMO_SUFFIXES)
 
 
-def demo_version(card, demo=DEMO):
-    """First 10 hex of a SHA-256 over the demo's files and the card version they import."""
+def demo_model():
+    layers = full_model(FIXTURE)
+    return house3d_model.with_room_names(house3d_model.merge(layers, house3d_model.CARD))
+
+
+def demo_data(model):
+    """The demo dashboard's generated files, name -> text: the config, states and series."""
+    dump = lambda o: json.dumps(o, ensure_ascii=False, separators=(",", ":"))
+    return {
+        "dashboard.json": dump(dashboard_demo.demo_config(model)),
+        "states.json": dump(dashboard_demo.demo_states(model)),
+        "series.json": dump(dashboard_demo.demo_series()),
+    }
+
+
+def demo_version(card, demo=DEMO, data=None):
+    """First 10 hex of a SHA-256 over the demo's files, its generated JSON and the card version
+    they import: a generator change moves the version as a demo file change does."""
+    if data is None:
+        data = demo_data(demo_model())
     h = hashlib.sha256(card.encode())
     for f in demo_files(demo):
         h.update(b"\0" + f.name.encode() + b"\0" + f.read_bytes())
+    for name in sorted(data):
+        h.update(b"\0" + name.encode() + b"\0" + data[name].encode())
     return h.hexdigest()[:10]
 
 
 def build_demo(outdir):
-    layers = full_model(FIXTURE)
-    model = house3d_model.with_room_names(house3d_model.merge(layers, house3d_model.CARD))
+    model = demo_model()
+    data = demo_data(model)
     out = copy_engine(outdir)
     shutil.copyfile(SRC / "house3d-card.js", out / "house3d-card.js")
     # nginx and Cloudflare cache .js for 30 days: ?v= on every module, as on HA's resource URL.
     # The card and engine keep the card's version, so HA's resource URL moves only with them.
     version = card_version()
-    demo = demo_version(version)
+    demo = demo_version(version, data=data)
     for f in demo_files():
         text = f.read_text(encoding="utf-8")
         text = text.replace("__HOUSE3D_VERSION__", version).replace("__DEMO_VERSION__", demo)
         (out / f.name).write_text(text, encoding="utf-8")
     write_model(out, model)
+    for name, text in data.items():
+        (out / name).write_text(text, encoding="utf-8")
     print(f"built demo {out} (card v{version}, demo {demo})")
     return 0
 
 
 def main(argv):
-    if len(argv) >= 3 and argv[0] == "--scan":
-        layers = full_model(argv[1])
-        return run_scan(house3d_model.merge(layers, house3d_model.LAYERS), argv[2:])
+    count = argv[1:2] == ["--count"]
+    if argv[:1] == ["--scan"] and len(argv) >= 3 + count:
+        layers = full_model(argv[1 + count])
+        return run_scan(house3d_model.merge(layers, house3d_model.LAYERS), argv[2 + count :], count)
     if len(argv) == 2 and argv[0] == "--demo":
         return build_demo(argv[1])
     if len(argv) == 2 and not argv[0].startswith("-"):

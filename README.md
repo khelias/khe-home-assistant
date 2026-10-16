@@ -6,11 +6,11 @@ YAML packages, a generator for the dashboard, small tools for HA's API, and a
 
 [![The 3D view of a made-up test house under Home Assistant's top bar, with device markers, the car parked under the carport and the surroundings](docs/house3d.png)](https://khe.ee/house3d/)
 
-**[Try the dashboard](https://khe.ee/house3d/)**: a mock Home Assistant
-dashboard of a made-up test house with simulated devices. The 3D view comes
-first, with the room views, heating and security behind the tabs; tap a
-light, plug, blind, the heating or the alarm panel to control it as in Home
-Assistant, and watch the car drive in through the gate.
+**[Try the dashboard](https://khe.ee/house3d/)**: the house's own dashboard,
+made by the same generator, on a made-up test house with simulated devices
+and made-up charts. The 3D view comes first, then home, energy, heat pump,
+ventilation, pergola, alarm, cameras and TV; tap a tile to control it as in
+Home Assistant, and watch the car drive in through the gate.
 
 ## What is interesting here
 
