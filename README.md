@@ -4,11 +4,13 @@ The Home Assistant configuration of one house, public as a reference: the
 YAML packages, a generator for the dashboard, small tools for HA's API, and a
 3D view of the house that shows the devices in place.
 
-[![The 3D view of a made-up test house, with device markers, the car parked under the carport and the surroundings](docs/house3d.png)](https://khe.ee/house3d/)
+[![The 3D view of a made-up test house under Home Assistant's top bar, with device markers, the car parked under the carport and the surroundings](docs/house3d.png)](https://khe.ee/house3d/)
 
-**[Try the 3D view](https://khe.ee/house3d/)** on a made-up test house with
-simulated devices: tap a light, plug, blind, the heating or the alarm panel to
-control it as in Home Assistant, and let the car drive in through the gate.
+**[Try the dashboard](https://khe.ee/house3d/)**: a mock Home Assistant
+dashboard of a made-up test house with simulated devices. The 3D view comes
+first, with the room views, heating and security behind the tabs; tap a
+light, plug, blind, the heating or the alarm panel to control it as in Home
+Assistant, and watch the car drive in through the gate.
 
 ## What is interesting here
 

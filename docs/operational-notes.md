@@ -258,13 +258,18 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   georeference's origin. Never scan with `tests/house3d/fixture-model.md`
   as the files to check: it has a `devices` key, which the scan always
   flags. The same script builds the standalone viewer from the shareable
-  layers only, and with `--demo` the public demo of the HA card on the test
-  fixture (khe.ee/house3d/, published by khe-sites), which reads no model.
+  layers only, and with `--demo` the public demo on the test fixture
+  (khe.ee/house3d/, published by khe-sites), which reads no model: a mock HA
+  dashboard whose first view is the card, with every `demo/` file versioned by
+  a hash of the demo files (`__DEMO_VERSION__`) and the card and engine by
+  `HOUSE3D_VERSION`.
 - **Tests:** `scripts/house3d-test.sh` runs the model and build tests
   (`tests/house3d/test_house3d_model.py`), the engine tests in Node
   (`tests/house3d/engine.test.mjs`: every layer builds, the simple style
   matches `simple-snapshot.json`, failure isolation, the sun, the real
-  style's materials and shadow flags, the scene import rule) and a syntax
+  style's materials and shadow flags, the scene import rule), the demo
+  dashboard's tests (`tests/house3d/demo.test.mjs`: every device in a view,
+  the house idiom's rows, no fixture name in `demo/`) and a syntax
   check of every engine module, all on a made-up house,
   `tests/house3d/fixture-model.md`. `scripts/check.sh` runs it, so CI and
   the workspace commit gate do too. A deliberate change to the simple

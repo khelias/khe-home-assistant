@@ -24,8 +24,9 @@ config/            what deploy copies into HA's /config
   configuration.yaml
   packages/        one package per device or concern
   tuya_local_devices/  device definitions copied into tuya-local at HA start
-demo/              page and script of the public 3D view demo (simulated hass);
-                   not deployed to HA
+demo/              the public demo: a mock HA dashboard of the test house (3D
+                   view, then Kodu, Kliima, Valve) on a simulated hass; config
+                   in dashboard.js, cards in cards.js; not deployed to HA
 docs/              operational notes, the README screenshot
 house3d/           3D house view: engine (core house3d.js, scene/ layer
                    modules, kit and sun), HA card, standalone viewer,
@@ -38,7 +39,8 @@ scripts/           ha-dashboard.py (HA Overview generator),
                    pv-sim.py (rooftop PV, battery and EV simulation against
                    the Estfeed hourly load), check.sh, install-hooks.sh
 tests/house3d/     3D view tests on a made-up fixture house: model and build
-                   (Python unittest), engine and simple-style snapshot (node:test)
+                   (Python unittest), engine, simple-style snapshot and demo
+                   dashboard (node:test)
 ```
 
 ## Commands

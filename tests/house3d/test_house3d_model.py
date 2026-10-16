@@ -13,6 +13,10 @@ BUILD = ROOT / "scripts/house3d-build.py"
 _spec = importlib.util.spec_from_file_location("house3d_model", ROOT / "scripts/house3d_model.py")
 hm = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(hm)
+_bspec = importlib.util.spec_from_file_location("house3d_build", BUILD)
+hb = importlib.util.module_from_spec(_bspec)
+_bspec.loader.exec_module(hb)
+DEMO = ROOT / "demo"
 
 
 def layers():
@@ -252,14 +256,41 @@ class Demo(unittest.TestCase):
             self.assertNotIn("showcase", model)
             self.assertNotIn("room_names", model)
 
-    def test_demo_carries_the_card_version(self):
+    def test_demo_carries_the_card_and_demo_versions(self):
         version = re.search(r"^const HOUSE3D_VERSION = (\d+);", (ENGINE / "house3d-card.js").read_text(), re.M).group(1)
+        demo = hb.demo_version(version)
+        self.assertRegex(demo, r"^[0-9a-f]{10}$")
         with tempfile.TemporaryDirectory() as tmp:
             out = self.build(tmp)
+            self.assertIn(f"?v={version}", (out / "demo.js").read_text(encoding="utf-8"))
             for name in ("index.html", "demo.js"):
+                self.assertIn(f"?v={demo}", (out / name).read_text(encoding="utf-8"), name)
+
+    def test_demo_copies_every_demo_file_without_placeholders(self):
+        names = [f.name for f in hb.demo_files()]
+        self.assertIn("index.html", names)
+        self.assertIn("demo.js", names)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = self.build(tmp)
+            for name in names:
                 text = (out / name).read_text(encoding="utf-8")
-                self.assertNotIn("__HOUSE3D_VERSION__", text)
-                self.assertIn(f"?v={version}", text)
+                self.assertNotIn("__HOUSE3D_VERSION__", text, name)
+                self.assertNotIn("__DEMO_VERSION__", text, name)
+            self.assertFalse(any(p.name.startswith(".") for p in out.iterdir()))
+
+    def test_demo_version_follows_the_demo_files_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = Path(tmp) / "demo"
+            shutil.copytree(DEMO, copy)
+            base = hb.demo_version("18", copy)
+            self.assertEqual(base, hb.demo_version("18", DEMO))
+            (copy / ".DS_Store").write_bytes(b"\0\1")
+            (copy / "notes.txt").write_text("not shipped", encoding="utf-8")
+            self.assertEqual(hb.demo_version("18", copy), base)
+            self.assertNotEqual(hb.demo_version("19", copy), base)
+            f = copy / "demo.js"
+            f.write_bytes(f.read_bytes() + b"\n")
+            self.assertNotEqual(hb.demo_version("18", copy), base)
 
     def test_demo_ignores_house3d_model(self):
         with tempfile.TemporaryDirectory() as tmp:

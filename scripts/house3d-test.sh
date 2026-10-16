@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# The house 3D view's tests: the model and build tests, the engine tests in Node, and a syntax
-# check of every engine, demo and test module (vendored three.js excepted). Runs from any directory;
-# exits 1 when anything fails, after running everything.
+# The house 3D view's tests: the model and build tests, the engine and demo dashboard tests in
+# Node, and a syntax check of every engine, demo and test module (vendored three.js excepted).
+# Runs from any directory; exits 1 when anything fails, after running everything.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
@@ -17,6 +17,7 @@ fail() { echo "house3d-test: FAILED: $1" >&2; rc=1; }
 
 python3 -I -m unittest discover -s tests/house3d || fail "python tests"
 node --test tests/house3d/engine.test.mjs || fail "engine tests"
+node --test tests/house3d/demo.test.mjs || fail "demo tests"
 
 engine=house3d
 while IFS= read -r f; do

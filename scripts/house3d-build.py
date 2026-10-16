@@ -12,9 +12,11 @@ plan's grid bearing in whole degrees as orientation.x_axis_bearing_deg, for the 
 sun. Publishing the folder is a separate decision.
 
 The demo build reads only the made-up test house (tests/house3d/fixture-model.md), never a
-model argument or HOUSE3D_MODEL, and writes OUTDIR/index.html and demo.js (from demo/), the HA
-card, the engine and model.json with every layer the card gets in HA. khe-sites publishes it at
-khe.ee/house3d/. The fixture is public in this repo, so there is nothing to scan.
+model argument or HOUSE3D_MODEL, and writes every .html, .js, .css and .svg of demo/, the HA
+card, the engine and model.json with every layer the card gets in HA. In the demo's files
+__HOUSE3D_VERSION__ becomes the card's version and __DEMO_VERSION__ a hash of the demo's files
+and that version. khe-sites publishes it at khe.ee/house3d/. The fixture is public in this
+repo, so there is nothing to scan.
 
 The scan reads the private layer of MODEL and fails on every occurrence of an entity id,
 a device name, a family room name or the car's entity and name
@@ -30,6 +32,7 @@ values. Run it over
 house3d/ before every commit that touches it.
 """
 
+import hashlib
 import json
 import math
 import re
@@ -45,6 +48,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "house3d"
 DEMO = ROOT / "demo"
 FIXTURE = ROOT / "tests/house3d/fixture-model.md"
+DEMO_SUFFIXES = (".html", ".js", ".css", ".svg")
 DEVICES_KEY = re.compile(r"""["']?\bdevices["']?\s*:""")
 
 
@@ -188,18 +192,34 @@ def card_version():
     return m.group(1)
 
 
+def demo_files(demo=DEMO):
+    """The demo's own files, flat and sorted; nothing else (a .DS_Store) goes out."""
+    return sorted(f for f in Path(demo).iterdir() if f.is_file() and f.suffix in DEMO_SUFFIXES)
+
+
+def demo_version(card, demo=DEMO):
+    """First 10 hex of a SHA-256 over the demo's files and the card version they import."""
+    h = hashlib.sha256(card.encode())
+    for f in demo_files(demo):
+        h.update(b"\0" + f.name.encode() + b"\0" + f.read_bytes())
+    return h.hexdigest()[:10]
+
+
 def build_demo(outdir):
     layers = full_model(FIXTURE)
     model = house3d_model.with_room_names(house3d_model.merge(layers, house3d_model.CARD))
     out = copy_engine(outdir)
     shutil.copyfile(SRC / "house3d-card.js", out / "house3d-card.js")
-    # nginx and Cloudflare cache .js for 30 days: ?v= on the card and demo.js, as on HA's resource URL
+    # nginx and Cloudflare cache .js for 30 days: ?v= on every module, as on HA's resource URL.
+    # The card and engine keep the card's version, so HA's resource URL moves only with them.
     version = card_version()
-    for name in ("index.html", "demo.js"):
-        text = (DEMO / name).read_text(encoding="utf-8")
-        (out / name).write_text(text.replace("__HOUSE3D_VERSION__", version), encoding="utf-8")
+    demo = demo_version(version)
+    for f in demo_files():
+        text = f.read_text(encoding="utf-8")
+        text = text.replace("__HOUSE3D_VERSION__", version).replace("__DEMO_VERSION__", demo)
+        (out / f.name).write_text(text, encoding="utf-8")
     write_model(out, model)
-    print(f"built demo {out} (card v{version})")
+    print(f"built demo {out} (card v{version}, demo {demo})")
     return 0
 
 
