@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Seadmete ja puude paigutus</title>
+<title>Seadmete, puude ja tuleviku paigutus</title>
 <style>
 :root { --bg: #060c1b; --panel: #0c1631; --edge: rgba(111, 227, 255, 0.18); --line: #6fe3ff; --ink: #e4ecff; --muted: #8a9bc2; --amber: #ffc56e; --ok: #6fe3b4; color-scheme: dark; }
 * { box-sizing: border-box; }
@@ -53,7 +53,12 @@ svg#plan { width: 100%; height: 100%; display: block; cursor: crosshair; touch-a
 .fan.sel { fill: rgba(255, 197, 110, .16); stroke: var(--amber); }
 .crown { fill: rgba(71, 217, 196, .07); stroke: rgba(71, 217, 196, .6); stroke-width: .05; stroke-dasharray: .3 .2; pointer-events: none; }
 .crown.sel { fill: rgba(255, 197, 110, .12); stroke: var(--amber); }
-#cam[hidden], #tree[hidden] { display: none; }
+.foot { fill: rgba(179, 123, 255, .1); stroke: #b37bff; stroke-width: .05; stroke-dasharray: .3 .2; pointer-events: none; }
+.foot.sel { fill: rgba(255, 197, 110, .12); stroke: var(--amber); }
+#rot .row { display: flex; gap: 6px; }
+#rot button[aria-pressed="true"] { color: var(--bg); background: var(--amber); border-color: var(--amber); }
+#cam[hidden], #tree[hidden], #rot[hidden] { display: none; }
+#rot { display: grid; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--edge); font-size: 13px; }
 #cam, #tree { display: grid; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--edge); }
 #cam label, #tree label { display: grid; grid-template-columns: 78px 1fr 52px; gap: 8px; align-items: center; font-size: 13px; }
 #cam output, #tree output { text-align: right; font: 12px ui-monospace, Menlo, monospace; color: var(--amber); }
@@ -65,14 +70,15 @@ svg#plan { width: 100%; height: 100%; display: block; cursor: crosshair; touch-a
 <body>
 <aside>
   <header>
-    <h1>Seadmete ja puude paigutus</h1>
-    <p>Vali seade või puu nimekirjast või plaanilt, siis klõpsa plaanil õigesse kohta. Seadet või puud saab ka lohistada. Kaamerat pööra liuguriga Suund, puu suurust muuda liuguritega Kõrgus ja Võra. Tänav on üleval. Näpista või Ctrl+ratas suumib, kahe sõrmega libistus nihutab.</p>
+    <h1>Seadmete, puude ja tuleviku paigutus</h1>
+    <p>Vali seade, puu või tuleviku asi nimekirjast või plaanilt, siis klõpsa plaanil õigesse kohta. Kõiki saab ka lohistada. Kaamerat pööra liuguriga Suund, puu suurust muuda liuguritega Kõrgus ja Võra, tuleviku asja pööra nuppudega Pööre. Tänav on üleval. Näpista või Ctrl+ratas suumib, kahe sõrmega libistus nihutab.</p>
   </header>
   <div id="list"></div>
   <footer>
     <div id="cam" hidden>
       <label>Suund <input type="range" id="dir" min="0" max="359" step="1"><output id="dirV"></output></label>
     </div>
+    <div id="rot" hidden><span>Pööre</span><div class="row"><button class="btn ghost" data-rot="0" aria-pressed="false">0°</button><button class="btn ghost" data-rot="90" aria-pressed="false">90°</button><button class="btn ghost" data-rot="180" aria-pressed="false">180°</button><button class="btn ghost" data-rot="270" aria-pressed="false">270°</button></div></div>
     <div id="tree" hidden>
       <label>Kõrgus <input type="range" id="height" min="1" max="25" step="0.5"><output id="heightV"></output></label>
       <label>Võra <input type="range" id="crown" min="0.5" max="15" step="0.5"><output id="crownV"></output></label>
@@ -89,8 +95,8 @@ svg#plan { width: 100%; height: 100%; display: block; cursor: crosshair; touch-a
   <div id="coords"></div>
 </main>
 <script type="module">
-// Placement page for the house 3D model's devices (private layer) and trees (geometry layer),
-// served with the model by scripts/house3d-place.py; it holds no house data itself.
+// Placement page for the house 3D model's devices and future items (private layer) and trees
+// (geometry layer), served with the model by scripts/house3d-place.py; it holds no house data itself.
 import { icon } from './house3d.js';
 const NS = 'http://www.w3.org/2000/svg';
 const esc = s => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
@@ -124,6 +130,18 @@ const devs = model.devices.map(d => restore(d.entity, d, editable));
 const byId = Object.fromEntries(devs.map(d => [d.entity, d]));
 const trees = (model.site.trees || []).map(t => restore(tkey(t), t, treeEditable));
 const treeByKey = Object.fromEntries(trees.map(t => [tkey(t), t]));
+// future items are keyed future:<id>; they move by their centre and turn in quarter turns
+const fkey = f => `future:${f.id}`;
+const isFuture = k => !!k && k.startsWith('future:');
+const futureList = (model.future && model.future.items) || [];
+const origF = Object.fromEntries(futureList.map(f => [fkey(f), clone(f)]));
+const futureEditable = f => ({ pos: f.pos, rot: f.rot || 0 });
+const futures = futureList.map(f => restore(fkey(f), f, futureEditable));
+const futureByKey = Object.fromEntries(futures.map(f => [fkey(f), f]));
+// the plan footprint as the engine draws it; a tub does not turn
+const FOOT = { greenhouse: [3, 4], tub: [2, 2], charger: [0.3, 0.3], battery: [0.6, 0.3] };
+const footOf = f => f.size || FOOT[f.kind] || [0.5, 0.5];
+const turns = f => f.kind !== 'tub';
 const KINDS = { apple: 'Õunapuu', birch: 'Kask', maple: 'Vaher' };
 const treeName = {};
 {
@@ -134,8 +152,8 @@ const treeName = {};
     treeName[tkey(t)] = !KINDS[t.kind] ? t.id : total[t.kind] > 1 ? `${KINDS[t.kind]} ${seen[t.kind]}` : KINDS[t.kind];
   });
 }
-const nameOf = k => (isTree(k) ? treeName[k] : byId[k].name);
-const planPos = k => (isTree(k) ? treeByKey[k].pos : [byId[k].pos[0], byId[k].pos[2]]);
+const nameOf = k => (isTree(k) ? treeName[k] : isFuture(k) ? futureByKey[k].name : byId[k].name);
+const planPos = k => (isTree(k) ? treeByKey[k].pos : isFuture(k) ? futureByKey[k].pos : [byId[k].pos[0], byId[k].pos[2]]);
 
 // room of a point: the rectangle it is in, else the nearest within a wall's thickness; outdoor devices stay outdoor
 function roomAt(x, z, d) {
@@ -215,11 +233,13 @@ function marker(key, type, name) {
 }
 devs.forEach(d => marker(d.entity, d.type, d.name));
 trees.forEach(t => marker(tkey(t), 'tree', treeName[tkey(t)]));
+futures.forEach(f => marker(fkey(f), f.kind === 'charger' ? 'plug' : 'info', f.name));
 
 /* ---------- state ---------- */
 let sel = null, dragging = null, dragFrom = null, dragMoved = false;
 const changed = d => JSON.stringify(editable(orig[d.entity])) !== JSON.stringify(editable(d));
 const changedT = t => JSON.stringify(treeEditable(origT[tkey(t)])) !== JSON.stringify(treeEditable(t));
+const changedF = f => JSON.stringify(futureEditable(origF[fkey(f)])) !== JSON.stringify(futureEditable(f));
 // the slider's degrees run clockwise from the street side, up on the plan
 const lookDeg = look => Math.round((Math.atan2(look[0], -look[1]) * 180 / Math.PI + 360) % 360);
 function mark(key, x, z, isChanged) {
@@ -244,20 +264,27 @@ function draw() {
     mark(k, t.pos[0], t.pos[1], changedT(t));
     el('circle', { cx: t.pos[0], cy: t.pos[1], r: t.crown / 2, class: 'crown' + (k === sel ? ' sel' : '') }, fanLayer);
   });
+  futures.forEach(f => {
+    const k = fkey(f), [w, d] = (f.rot || 0) % 180 ? footOf(f).slice().reverse() : footOf(f);
+    mark(k, f.pos[0], f.pos[1], changedF(f));
+    rect([f.pos[0] - w / 2, f.pos[1] - d / 2, f.pos[0] + w / 2, f.pos[1] + d / 2], 'foot' + (k === sel ? ' sel' : ''), fanLayer);
+  });
   if (sel) markerLayer.appendChild(mEls[sel].g);
-  const selRoom = sel && !isTree(sel) ? byId[sel].room : null;
+  const selRoom = sel && !isTree(sel) && !isFuture(sel) ? byId[sel].room : null;
   Object.entries(roomEls).forEach(([id, els]) => els.forEach(e => e.classList.toggle('hl', selRoom === id)));
   renderList();
-  const ch = devs.filter(changed), chT = trees.filter(changedT);
-  const out = {};
+  const ch = devs.filter(changed), chT = trees.filter(changedT), chF = futures.filter(changedF);
+  const out = {}, n = ch.length + chT.length + chF.length;
   if (ch.length) out.devices = Object.fromEntries(ch.map(d => [d.entity, editable(d)]));
   if (chT.length) out.trees = Object.fromEntries(chT.map(t => [t.id, treeEditable(t)]));
-  document.getElementById('out').value = ch.length + chT.length ? JSON.stringify(out) : '';
-  document.getElementById('count').textContent = `Muudetud ${ch.length + chT.length} / ${devs.length + trees.length}`;
+  if (chF.length) out.future = Object.fromEntries(chF.map(f => [f.id, futureEditable(f)]));
+  document.getElementById('out').value = n ? JSON.stringify(out) : '';
+  document.getElementById('count').textContent = `Muudetud ${n} / ${devs.length + trees.length + futures.length}`;
   const keep = [...ch.map(d => [d.entity, { base: editable(orig[d.entity]), now: editable(d) }]),
-    ...chT.map(t => [tkey(t), { base: treeEditable(origT[tkey(t)]), now: treeEditable(t) }])];
+    ...chT.map(t => [tkey(t), { base: treeEditable(origT[tkey(t)]), now: treeEditable(t) }]),
+    ...chF.map(f => [fkey(f), { base: futureEditable(origF[fkey(f)]), now: futureEditable(f) }])];
   try { localStorage.setItem('house3d-place', JSON.stringify(Object.fromEntries(keep))); } catch (e) {}
-  const cam = document.getElementById('cam'), sd = sel && !isTree(sel) && byId[sel];
+  const cam = document.getElementById('cam'), sd = sel && !isTree(sel) && !isFuture(sel) && byId[sel];
   cam.hidden = !(sd && sd.look);
   if (!cam.hidden) {
     const deg = lookDeg(sd.look);
@@ -272,8 +299,12 @@ function draw() {
     document.getElementById('crown').value = st.crown;
     document.getElementById('crownV').textContent = metres(st.crown);
   }
+  const rot = document.getElementById('rot'), sf = isFuture(sel) && futureByKey[sel];
+  rot.hidden = !(sf && turns(sf));
+  if (!rot.hidden) rot.querySelectorAll('[data-rot]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.rot) === (sf.rot || 0))));
   const hint = document.getElementById('hint');
-  if (!sel) hint.innerHTML = 'Vali seade või puu nimekirjast või plaanilt.';
+  if (!sel) hint.innerHTML = 'Vali seade, puu või tuleviku asi nimekirjast või plaanilt.';
+  else if (sf) hint.innerHTML = `<b>${esc(nameOf(sel))}</b>: klõpsa plaanil keskkoha jaoks õigesse kohta või lohista.${turns(sf) ? ' Pööra nuppudega Pööre.' : ''} Suurus ja numbrid on mudelis käsitsi.`;
   else if (st) hint.innerHTML = `<b>${esc(nameOf(sel))}</b>: klõpsa plaanil õigesse kohta või lohista. Suurust muuda liuguritega Kõrgus ja Võra.`;
   else hint.innerHTML = `<b>${esc(nameOf(sel))}</b>: klõpsa plaanil õigesse kohta või lohista. ${sd.look ? 'Pööramiseks kasuta vasakul liugurit Suund.' : ''}`;
 }
@@ -285,7 +316,8 @@ function renderList() {
   const order = [...rooms.map(r => r.id), 'oues'].filter(id => groups[id]);
   list.innerHTML = order.map(id => `<div class="group">${esc(id === 'oues' ? 'Õues' : roomById[id].name)}</div>` +
     groups[id].map(d => row(d.entity, d.type, d.name, changed(d))).join('')).join('') +
-    (trees.length ? '<div class="group">Puud</div>' + trees.map(t => row(tkey(t), 'tree', treeName[tkey(t)], changedT(t))).join('') : '');
+    (trees.length ? '<div class="group">Puud</div>' + trees.map(t => row(tkey(t), 'tree', treeName[tkey(t)], changedT(t))).join('') : '') +
+    (futures.length ? '<div class="group">Tulevik</div>' + futures.map(f => row(fkey(f), f.kind === 'charger' ? 'plug' : 'info', f.name, changedF(f))).join('') : '');
 }
 function select(id) { sel = id; draw(); }
 
@@ -302,6 +334,7 @@ document.getElementById('list').addEventListener('click', ev => {
 });
 function place(key, x, z) {
   if (isTree(key)) { treeByKey[key].pos = [r2(x), r2(z)]; return; }
+  if (isFuture(key)) { futureByKey[key].pos = [r2(x), r2(z)]; return; }
   const d = byId[key];
   d.pos = [r2(x), d.pos[1], r2(z)];
   d.room = roomAt(x, z, d);
@@ -325,6 +358,9 @@ document.getElementById('reset').addEventListener('click', () => {
   if (isTree(sel)) {
     const o = origT[sel], t = treeByKey[sel];
     t.pos = o.pos.slice(); t.height = o.height; t.crown = o.crown;
+  } else if (isFuture(sel)) {
+    const o = origF[sel], f = futureByKey[sel];
+    f.pos = o.pos.slice(); f.rot = o.rot || 0;
   } else {
     const o = orig[sel], d = byId[sel];
     d.pos = o.pos.slice(); d.room = o.room; if (o.look) d.look = o.look.slice();
@@ -332,9 +368,15 @@ document.getElementById('reset').addEventListener('click', () => {
   draw();
 });
 document.getElementById('dir').addEventListener('input', ev => {
-  if (!sel || isTree(sel)) return;
+  if (!sel || isTree(sel) || isFuture(sel)) return;
   const a = Number(ev.target.value) * Math.PI / 180;
   byId[sel].look = [r2(Math.sin(a)), r2(-Math.cos(a))];
+  draw();
+});
+document.getElementById('rot').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-rot]');
+  if (!b || !isFuture(sel)) return;
+  futureByKey[sel].rot = Number(b.dataset.rot);
   draw();
 });
 ['height', 'crown'].forEach(k => document.getElementById(k).addEventListener('input', ev => {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The house 3D view's tests: the model and build tests, the engine and demo dashboard tests in
+# The house 3D view's tests: the model, build and placement tests, the engine and demo dashboard tests in
 # Node, and a syntax check of every engine, demo and test module (vendored three.js excepted).
 # Runs from any directory; exits 1 when anything fails, after running everything.
 set -u

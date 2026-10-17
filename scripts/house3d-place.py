@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Place the house 3D model's devices and trees on a 2D plan, and write the result back.
+"""Place the house 3D model's devices, trees and future items on a 2D plan, and write the result back.
 
 Usage:  house3d-place.py serve MODEL [PORT]         serve the placement page on 127.0.0.1
         house3d-place.py apply MODEL CHANGES.json   write the page's changes into MODEL
@@ -10,12 +10,14 @@ model is served from memory, so the private layer never lands next to the page. 
 port 8731.
 
 apply takes the JSON the page's "Kopeeri muudatused" button copies,
-{"devices": {entity: {pos, look?, room}}, "trees": {id: {pos, height, crown}}}, each group
-only when it has changes, from a file or from stdin with '-' (pbpaste | ... apply MODEL -).
-It rewrites those devices' lines in the private block and those trees' lines in the
-geometry block's "trees" list, one item per line as before, and writes the file once. Any
-other shape, an unknown entity or tree, a changed device height, a tree size that is not a
-positive number or a model that no longer validates stops it before writing.
+{"devices": {entity: {pos, look?, room}}, "trees": {id: {pos, height, crown}},
+"future": {id: {pos, rot?}}}, each group only when it has changes, from a file or from stdin
+with '-' (pbpaste | ... apply MODEL -). It rewrites those devices' lines in the private block,
+those trees' lines in the geometry block's "trees" list and those future items' lines in the
+private block's "items" list (positions and rot only; size and numbers stay hand edits), one
+item per line as before, and writes the file once. Any other shape, an unknown entity, tree
+or item, a changed device height, a tree size that is not a positive number or a model that
+no longer validates (a pv item moved off its roof) stops it before writing.
 """
 
 import functools
@@ -33,8 +35,8 @@ PRIVATE = "```json house3d:private"
 GEOMETRY = "```json house3d:geometry"
 SHAPE = (
     'changes must be {"devices": {entity: {pos: [x, y, z], look?, room?}}, '
-    '"trees": {id: {pos: [x, z], height, crown}}}, each group only when it has changes, '
-    "as the page copies them"
+    '"trees": {id: {pos: [x, z], height, crown}}, "future": {id: {pos: [x, z], rot?}}}, '
+    "each group only when it has changes, as the page copies them"
 )
 
 
@@ -83,7 +85,7 @@ def parse_changes(raw):
     if not (
         isinstance(changes, dict)
         and changes
-        and set(changes) <= {"devices", "trees"}
+        and set(changes) <= {"devices", "trees", "future"}
         and all(isinstance(g, dict) for g in changes.values())
     ):
         sys.exit(SHAPE)
@@ -98,6 +100,11 @@ def parse_changes(raw):
         for k in ("height", "crown"):
             if not (house3d_model._num(c.get(k)) and c[k] > 0):
                 sys.exit(f"tree {tid}: {k} {c.get(k)!r} is not a positive number")
+    for fid, c in changes.get("future", {}).items():
+        if not (isinstance(c, dict) and house3d_model._point(c.get("pos"))):
+            sys.exit(f"future item {fid}: pos is not two numbers [x, z]; {SHAPE}")
+        if "rot" in c and c["rot"] not in house3d_model.FUTURE_ROT:
+            sys.exit(f"future item {fid}: rot {c['rot']!r} is not one of 0, 90, 180, 270")
     return changes
 
 
@@ -155,24 +162,33 @@ def apply_devices(lines, changes, path, report):
     return len(seen)
 
 
-def apply_trees(lines, changes, path, report):
-    rows = block(lines, GEOMETRY, path)
-    start = next((i for i in rows if lines[i].strip() == '"trees": ['), None)
+def list_items(lines, fence, anchor, what, path):
+    """(line index, item) for each line of a one-item-per-line JSON list that opens with the
+    line `anchor` alone in the block `fence` and closes with a ] line."""
+    rows = block(lines, fence, path)
+    start = next((i for i in rows if lines[i].strip() == anchor), None)
     if start is None:
         sys.exit(
-            f'{path}: no line "trees": [ alone in the geometry block; apply needs the trees one per line'
+            f"{path}: no line {anchor} alone in the {fence} block; apply needs one {what} per line"
         )
-    seen = set()
+    out = []
     for i in range(start + 1, rows.stop):
         text = lines[i].strip()
         if text in ("]", "],"):
-            break
+            return out
         try:
-            tree = json.loads(text.rstrip(","))
+            item = json.loads(text.rstrip(","))
         except ValueError:
-            tree = None
-        if not (isinstance(tree, dict) and isinstance(tree.get("id"), str)):
-            sys.exit(f"{path}:{i + 1}: not a whole tree; the trees list keeps one tree per line")
+            item = None
+        if not (isinstance(item, dict) and isinstance(item.get("id"), str)):
+            sys.exit(f"{path}:{i + 1}: not a whole {what}; the list keeps one {what} per line")
+        out.append((i, item))
+    sys.exit(f"{path}: the {anchor} list in the {fence} block has no closing ] line")
+
+
+def apply_trees(lines, changes, path, report):
+    seen = set()
+    for i, tree in list_items(lines, GEOMETRY, '"trees": [', "tree", path):
         new = changes.get(tree["id"])
         if new is None:
             continue
@@ -185,11 +201,35 @@ def apply_trees(lines, changes, path, report):
             f", {k} {old[k]} -> {tree[k]}" for k in ("height", "crown") if old[k] != tree[k]
         )
         report.append(f"tree {tree['id']}: moved {moved:.2f} m{sizes}")
-    else:
-        sys.exit(f"{path}: the trees list in the geometry block has no closing ] line")
     unknown = sorted(set(changes) - seen)
     if unknown:
         sys.exit("not in the geometry block's trees list: " + ", ".join(unknown))
+    return len(seen)
+
+
+def apply_future(lines, changes, path, report):
+    seen = set()
+    for i, item in list_items(lines, PRIVATE, '"items": [', "future item", path):
+        new = changes.get(item["id"])
+        if new is None:
+            continue
+        old = dict(item)
+        item["pos"] = new["pos"]
+        if "rot" in new:
+            item["rot"] = new["rot"]
+        rewrite(lines, i, item)
+        seen.add(item["id"])
+        turned = (
+            f", rot {old.get('rot', 0)} -> {item['rot']}"
+            if item.get("rot", 0) != old.get("rot", 0)
+            else ""
+        )
+        report.append(
+            f"future item {item['id']}: moved {math.dist(old['pos'], item['pos']):.2f} m{turned}"
+        )
+    unknown = sorted(set(changes) - seen)
+    if unknown:
+        sys.exit("not in the private block's future items list: " + ", ".join(unknown))
     return len(seen)
 
 
@@ -205,10 +245,18 @@ def apply(model_path, changes_path):
     lines, report = text.split("\n"), []
     devices = apply_devices(lines, changes["devices"], path, report) if "devices" in changes else 0
     trees = apply_trees(lines, changes["trees"], path, report) if "trees" in changes else 0
+    future = apply_future(lines, changes["future"], path, report) if "future" in changes else 0
     text = "\n".join(lines)
     checked(house3d_model.parse_layers(text))
     path.write_text(text, encoding="utf-8")
-    print("\n".join(report + [f"{devices} device(s) and {trees} tree(s) written to {path}"]))
+    print(
+        "\n".join(
+            report
+            + [
+                f"{devices} device(s), {trees} tree(s) and {future} future item(s) written to {path}"
+            ]
+        )
+    )
     return 0
 
 
