@@ -91,7 +91,7 @@ tests/dashboard/   dashboard config and demo catalogue tests (Python unittest)
    test house and the whole fresh demo build with `--count` whenever the
    model is at hand (the main checkout's khe-meta or `HOUSE3D_MODEL`), so the
    commit gate covers the demo; CI has no model. What the test house may
-   carry anyway (its `devices` key, device names judged generic) is allowed
+   carry anyway (its `devices` key) is allowed
    per file in `check.sh`, with the reason, not by loosening a pattern. The ids and labels the scan flags are spelled once,
    in `dashboard_config.py`, and the demo takes them from there.
 3. **Modules under `house3d/scene/` import nothing**

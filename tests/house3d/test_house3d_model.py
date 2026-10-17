@@ -48,7 +48,7 @@ class FixtureModel(unittest.TestCase):
         self.assertEqual(names["carport"], "Varjualune")
         self.assertNotIn("room_names", model)
         # the shareable rooms layer keeps its neutral names
-        self.assertEqual(L["rooms"]["rooms"][0]["name"], "Elutuba")
+        self.assertEqual(L["rooms"]["rooms"][0]["name"], "Köök-elutuba")
 
     def test_private_strings(self):
         L = layers()
@@ -119,7 +119,7 @@ def _bad_floor(L):
 
 
 def _short_path(L):
-    L["private"]["car"]["path"][0] = [15.137, -7.137]
+    L["private"]["car"]["path"][0] = [35.213, -7.137]
 
 
 def _site(L):
@@ -200,12 +200,12 @@ def _future_pos(L):
 
 
 def _future_off_lot(L):
-    _future(L, "greenhouse")["pos"] = [25.113, 12.113]
+    _future(L, "greenhouse")["pos"] = [43.113, 12.113]
 
 
 def _future_off_walls(L):
     del L["geometry"]["site"]["lot"]
-    _future(L, "greenhouse")["pos"] = [14.513, 12.113]
+    _future(L, "greenhouse")["pos"] = [15.113, 12.113]
 
 
 def _future_rot(L):
@@ -225,12 +225,14 @@ def _future_roof(L):
 
 
 def _future_off_roof(L):
-    _future(L, "pv")["pos"] = [7.013, 7.151]
+    _future(L, "pv")["pos"] = [31.013, 13.013]
 
 
 def _future_off_notch(L):
-    # a notch cut into the roof's south edge under the panels: every corner stays inside, an edge crosses
-    L["geometry"]["roofs"]["roofN"]["outline"] = [[1.7, 6], [6, 6], [6, 7], [8, 7], [8, 6], [12.3, 6], [12.3, 10.3], [1.7, 10.3]]
+    # a notch cut into the roof's north edge under the panels: every corner stays inside, an edge crosses
+    outline = L["geometry"]["roofs"]["wingN"]["outline"]
+    x = outline[1][0]
+    outline[2:2] = [[x, 12], [35, 12], [35, 14], [x, 14]]
 
 
 def _future_kwp(L):
@@ -242,7 +244,7 @@ def _future_panels(L):
 
 
 def _future_too_many(L):
-    _future(L, "pv")["panels"] = 13
+    _future(L, "pv")["panels"] = 21
 
 
 def _future_facts(L):
@@ -298,11 +300,11 @@ MUTATIONS = [
     ("future size not positive", _future_size, "future item greenhouse: size must be [w, d]"),
     ("pv without size", _future_pv_size, "future item pv: size must be [w, d]"),
     ("pv on an unknown roof", _future_roof, "future item pv: roof 'roofX' is not a roof"),
-    ("pv over the roof's edge", _future_off_roof, "future item pv: its rectangle is not inside roof roofN's outline"),
-    ("pv over a notch in the roof", _future_off_notch, "future item pv: its rectangle is not inside roof roofN's outline"),
+    ("pv over the roof's edge", _future_off_roof, "future item pv: its rectangle is not inside roof wingN's outline"),
+    ("pv over a notch in the roof", _future_off_notch, "future item pv: its rectangle is not inside roof wingN's outline"),
     ("pv kwp zero", _future_kwp, "future item pv: kwp is not a positive number"),
     ("pv panels not whole", _future_panels, "future item pv: panels is not a positive whole number"),
-    ("pv panels do not fit", _future_too_many, "future item pv: 13 panels do not fit in 7.2 x 3.6 m (at most 12)"),
+    ("pv panels do not fit", _future_too_many, "future item pv: 21 panels do not fit in 3.5 x 11.5 m (at most 20)"),
     ("seven facts", _future_facts, "future item pv: facts must be a list of at most 6 lines"),
     ("a fact of 81 characters", _future_fact_long, "future item pv: every fact must be a line of 1 to 80 characters"),
     ("as_of not ISO", _future_as_of, "future: as_of '15.01.2026' is not a date YYYY-MM-DD"),
@@ -323,9 +325,9 @@ class Mutations(unittest.TestCase):
 
 class FuturePanels(unittest.TestCase):
     def test_panel_fit_takes_the_better_orientation(self):
-        # landscape 4 x 3, portrait 6 x 2: 12 either way; the fixture's roof holds 18
+        # landscape 4 x 3, portrait 6 x 2: 12 either way; the fixture's strip holds 20 landscape
         self.assertEqual(hm.panel_fit(7.2, 3.6), 12)
-        self.assertEqual(hm.panel_fit(10.6, 4.3), 18)
+        self.assertEqual(hm.panel_fit(3.5, 11.5), 20)
         # 1.8 m deep holds one row either way: two panels landscape, three portrait
         self.assertEqual(hm.panel_fit(3.5, 1.8), 3)
         self.assertEqual(hm.panel_fit(1.0, 1.0), 0)
@@ -342,7 +344,7 @@ class BuildAndScan(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             model = json.loads((Path(tmp) / "model.json").read_text(encoding="utf-8"))
             self.assertNotIn("georef", model)
-            self.assertEqual(model["orientation"], {"x_axis_bearing_deg": 30})
+            self.assertEqual(model["orientation"], {"x_axis_bearing_deg": 354})
             self.assertNotIn("devices", model)
             self.assertNotIn("car", model)
             self.assertNotIn("surroundings", model)

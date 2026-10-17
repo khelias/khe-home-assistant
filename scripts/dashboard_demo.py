@@ -79,13 +79,13 @@ binary(dc.DOORS[2][0], "binary_sensor.demo_back_door", "off", "Tagauks", "door")
 MOTION = [
     ("binary_sensor.test_kitchen_motion", "Köök", 25, "off"),
     ("binary_sensor.test_living_motion", "Elutuba", 1, "on"),
-    ("binary_sensor.test_hall_motion", "Esik", 0, "on"),
+    ("binary_sensor.test_hall_motion", "Eeskoda", 0, "on"),
     ("binary_sensor.test_carport_motion", "Varjualune", 95, "off"),
     ("binary_sensor.test_bath_motion", "Vannituba", 300, "off"),
     ("binary_sensor.test_bedroom_motion", "Magamistuba", 540, "off"),
     ("binary_sensor.demo_room_a_motion", "Tuba 1", 180, "off"),
     ("binary_sensor.demo_room_b_motion", "Tuba 2", 230, "off"),
-    ("binary_sensor.demo_office_motion", "Kabinet", 60, "off"),
+    ("binary_sensor.demo_office_motion", "Töötuba", 60, "off"),
 ]
 assert len(MOTION) == len(dc.SHARED + dc.PRIVATE)
 for real, (demo, name, ago, state) in zip(dc.SHARED + dc.PRIVATE, MOTION, strict=True):

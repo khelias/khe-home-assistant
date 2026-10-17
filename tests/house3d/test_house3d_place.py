@@ -36,14 +36,14 @@ class ApplyFuture(unittest.TestCase):
         return [(a, b) for a, b in zip(old, new) if a != b]
 
     def test_a_moved_item_rewrites_its_line_only_and_stays_valid(self):
-        out = self.apply({"future": {"tub": {"pos": [10.113, 13.317]}, "greenhouse": {"pos": [14.513, 12.113], "rot": 0}}})
+        out = self.apply({"future": {"tub": {"pos": [22.913, 12.317]}, "greenhouse": {"pos": [20.013, 24.513], "rot": 90}}})
         self.assertIn("future item tub: moved", out)
-        self.assertIn("rot 90 -> 0", out)
+        self.assertIn("rot 0 -> 90", out)
         lines = self.changed_lines()
         self.assertEqual(len(lines), 2)
         items = [json.loads(b.strip().rstrip(",")) for _, b in lines]
         tub = next(it for it in items if it["id"] == "tub")
-        self.assertEqual(tub["pos"], [10.113, 13.317])
+        self.assertEqual(tub["pos"], [22.913, 12.317])
         self.assertEqual(tub["facts"], [])
         self.assertTrue(lines[-1][1].rstrip().endswith("}"), "the last item keeps no trailing comma")
         self.assertEqual(hp.house3d_model.validate(hp.house3d_model.read_layers(self.model)), [])
@@ -51,8 +51,8 @@ class ApplyFuture(unittest.TestCase):
     def test_moving_pv_off_its_roof_is_refused_before_writing(self):
         before = self.model.read_text(encoding="utf-8")
         with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as e:
-            self.apply({"future": {"pv": {"pos": [7.013, 3.151]}}})
-        self.assertIn("future item pv: its rectangle is not inside roof roofN's outline", str(e.exception))
+            self.apply({"future": {"pv": {"pos": [34.013, 1.013]}}})
+        self.assertIn("future item pv: its rectangle is not inside roof wingN's outline", str(e.exception))
         self.assertEqual(self.model.read_text(encoding="utf-8"), before)
 
     def test_unknown_item_and_bad_rot_are_refused(self):

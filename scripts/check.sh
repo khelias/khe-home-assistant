@@ -17,8 +17,7 @@ python3 -I -m unittest discover -s tests/dashboard || fail "dashboard tests"
 # main checkout's khe-meta, also from a worktree, or HOUSE3D_MODEL); CI has none and skips.
 # The whole demo build is scanned, as published, with the test house it is built from. Those
 # two carry the test house's devices layer under a `devices` key by design (the card reads it),
-# so that key is allowed in them only. So are two of its device names, which match the real
-# house's but were judged generic (2026-10-16); the scan takes them from the test house.
+# so that key is allowed in them only.
 common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
 model=${HOUSE3D_MODEL:-${common:+$(dirname "$common")/../khe-meta/house/house-model.md}}
 if [ -n "$model" ] && [ -f "$model" ]; then
@@ -28,8 +27,6 @@ if [ -n "$model" ] && [ -f "$model" ]; then
     allow=()
     for f in "$fixture" "$out/model.json"; do
       allow+=(--allow-devices-key "$f")
-      allow+=(--allow-device-name sensor.test_outdoor_temp "$f")
-      allow+=(--allow-device-name cover.test_pergola "$f")
     done
     python3 -I scripts/house3d-build.py --scan --count "${allow[@]}" \
       "$model" house3d demo scripts/dashboard_demo.py "$fixture" "$out" || fail "privacy scan"
