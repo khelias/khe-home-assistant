@@ -226,7 +226,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   sky follows the sun's altitude: day, dusk below 8 degrees, night below 0
   with the sun off. Through dusk a cool moon and sky light come up, so the
   walls, roofs and fences still read at night, and a room with a light on
-  (any marker that warms its floor) glows: its floor and its windows take a
+  (a `light` marker; motion warms a floor by day but lights no window) glows: its floor and its windows take a
   warm emissive scaled by the light's level. Each pane is tagged at build
   with the room it looks into, and each room has its own glass; there are
   no real-time lights, and by day nothing changes. The standalone viewer
@@ -243,8 +243,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   alerts (never hidden); then every chip as its first part alone, at its
   place or just above or below it, so a room's summary survives a crowd;
   then markers at full size; then each chip grown to full where there is
-  room; then the markers that did not fit as 10 px dots. Whatever still
-  does not fit hides.
+  room; then the markers that did not fit as 10 px dots, which still take a
+  tap as a 32 px marker. Whatever still does not fit hides.
   With the roof on, indoor markers hide unless in alert and there are no
   chips, as before.
 - **Focus:** a tap on a chip or a room floor opens the room's sheet and moves

@@ -768,11 +768,11 @@ export function mount(element, model, options = {}) {
     if (rec.aria !== aria) { rec.el.setAttribute('aria-label', aria); rec.el.title = aria; rec.aria = aria; }
   }
   // the markers on screen now, as hitRect() takes them; a marker fading in or out under the roof
-  // takes taps only once it is mostly there
-  const DOT = [10, 10];
+  // takes taps only once it is mostly there; a dot is drawn small but tapped as a whole marker
+  const DOT = [10, 10], DOT_HIT = [32, 32];
   const shownRects = () => {
     const out = [];
-    for (const [id, rec] of markers) if (rec.shown && rec.size && rec.op >= 0.5) { const [w, h] = rec.level === 1 ? DOT : rec.size; out.push({ id: `m:${id}`, x: rec.sx, y: rec.sy, w, h }); }
+    for (const [id, rec] of markers) if (rec.shown && rec.size && rec.op >= 0.5) { const [w, h] = rec.level === 1 ? DOT_HIT : rec.size; out.push({ id: `m:${id}`, x: rec.sx, y: rec.sy, w, h }); }
     for (const [room, rec] of chips) if (rec.shown && rec.size && rec.op >= 0.5) { const [w, h] = rec.level >= 1 ? rec.compact : rec.size; out.push({ id: `c:${room}`, x: rec.sx, y: rec.sy, w, h }); }
     return out;
   };
@@ -823,7 +823,8 @@ export function mount(element, model, options = {}) {
       if (rec.cls !== cls) { rec.el.className = cls + (rec.hover ? ' hover' : ''); rec.cls = cls; }
       const html = `<span class="nm">${esc(name)}</span>` + parts.map(q => `<span class="pt${q.state ? ` ${q.state}` : ''}">${icon(q.icon)}${q.text ? `<span>${esc(q.text)}</span>` : ''}</span>`).join('');
       if (rec.html !== html) { rec.el.innerHTML = html; rec.html = html; rec.size = null; }
-      rec.el.setAttribute('aria-label', [name, ...parts.map(q => q.label || q.text).filter(Boolean)].join(', '));
+      const aria = [name, ...parts.map(q => q.label || q.text).filter(Boolean)].join(', ');
+      if (rec.aria !== aria) { rec.el.setAttribute('aria-label', aria); rec.aria = aria; }
     });
     for (const [room, rec] of chips) if (!seen.has(room)) { rec.el.remove(); chips.delete(room); }
     invalidate();
@@ -1055,14 +1056,18 @@ export function mount(element, model, options = {}) {
   // The overlay: which markers and chips are candidates, the collision pass over them, then each
   // one's opacity eased towards shown or hidden (times the roof's fade). True while a fade runs.
   // An item is measured once per content change, shown for that read at its current opacity.
+  // The full size is read without last frame's dot or compact class, which a content change keeps.
   const measure = rec => {
     if (rec.disp !== '') { rec.el.style.display = ''; rec.disp = ''; }
+    const small = ['dot', 'compact'].filter(c => rec.el.classList.contains(c));
+    small.forEach(c => rec.el.classList.remove(c));
     rec.size = [rec.el.offsetWidth, rec.el.offsetHeight];
     // a chip's compact form is its first part alone, in the same padding and border
     if (rec.compact !== undefined) {
       const pt = rec.el.querySelector('.pt');
       rec.compact = pt ? [pt.offsetWidth + rec.size[0] - rec.el.clientWidth + 18, rec.size[1]] : null;
     }
+    small.forEach(c => rec.el.classList.add(c));
   };
   function overlayFrame(dt) {
     const roofOpen = Math.max(0, 1 - fade.cur * 1.6);

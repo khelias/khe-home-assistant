@@ -897,12 +897,13 @@ test('real style at night: a lit room\'s floor and windows glow, nothing by day'
   assert.ok(of('r1').length >= 3 && of('r2').length >= 1, 'panes tagged with the room they look into');
   assert.notEqual(of('r1')[0].material, of('r2')[0].material, 'a glass per room');
   const light = { id: 'light.x', pos: [4, 2, 6], icon: 'light', room: 'r1', state: 'on', level: 0.8 };
-  L.markers([light]);
+  const motion = { id: 'binary_sensor.y', pos: [12, 2, 4], icon: 'motion', room: 'r2', state: 'on' };
+  L.markers([light, motion]);
   const settle = () => { for (let i = 0; i < 40; i++) L.update(0.05, 0.5); };
   ctx.state.night = 1;
   settle();
   assert.ok(of('r1')[0].material.emissiveIntensity > 0.5, 'the lit room\'s windows glow');
-  assert.equal(of('r2')[0].material.emissiveIntensity, 0, 'another room\'s stay dark');
+  assert.equal(of('r2')[0].material.emissiveIntensity, 0, 'another room\'s stay dark, motion there or not');
   assert.ok(floors.find(f => f.userData.room === 'r1').material.emissiveIntensity > 0, 'and its floor');
   assert.equal(floors.find(f => f.userData.room === 'r2').material.emissiveIntensity, 0);
   ctx.state.night = 0;

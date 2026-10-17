@@ -453,9 +453,9 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     markers(list) {
       const on = list.filter(m => m.state === 'on' && m.warm !== false && roomIds.has(m.room));
       warm = new Set(on.map(m => m.room));
-      // a room's brightest light sets its glow
+      // a room's brightest light sets its glow; motion warms a floor by day but lights no window
       lit = new Map();
-      on.forEach(m => lit.set(m.room, Math.max(lit.get(m.room) || 0, m.level ?? 1)));
+      on.filter(m => m.icon === 'light').forEach(m => lit.set(m.room, Math.max(lit.get(m.room) || 0, m.level ?? 1)));
     },
     // the floors take taps only with the roof off
     hit(ray) {
