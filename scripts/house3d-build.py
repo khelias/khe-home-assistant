@@ -14,11 +14,12 @@ sun. Publishing the folder is a separate decision.
 
 The demo build reads only the made-up test house (tests/house3d/fixture-model.md), never a
 model argument or HOUSE3D_MODEL, and writes every .html, .js, .css and .svg of demo/, the HA
-card, the engine, model.json with every layer the card gets in HA, and the dashboard: the real
-generator's views on made-up data (scripts/dashboard_demo.py) as dashboard.json, their starting
-states as states.json and their chart data as series.json. In the demo's files
-__HOUSE3D_VERSION__ becomes the card's version and __DEMO_VERSION__ a hash of the demo's files,
-the three JSON files and that version. khe-sites publishes it at khe.ee/house3d/. The fixture is
+card, the engine, the dashboard cards (cards/khe-cards.js), model.json with every layer the card
+gets in HA, and the dashboard: the real generator's views on made-up data
+(scripts/dashboard_demo.py) as dashboard.json, their starting states as states.json and their
+chart data as series.json. In the demo's files __HOUSE3D_VERSION__ becomes the card's version,
+__KHE_CARDS_VERSION__ the dashboard cards' version and __DEMO_VERSION__ a hash of the demo's
+files, the three JSON files and those two versions. khe-sites publishes it at khe.ee/house3d/. The fixture is
 public; the dashboard comes from the generator, which names the real house's devices, so
 check.sh scans the demo build with the real model whenever one is at hand.
 
@@ -56,6 +57,7 @@ import house3d_model
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "house3d"
 DEMO = ROOT / "demo"
+CARDS = ROOT / "cards" / "khe-cards.js"
 FIXTURE = ROOT / "tests/house3d/fixture-model.md"
 DEMO_SUFFIXES = (".html", ".js", ".css", ".svg")
 DEVICES_KEY = re.compile(r"""["']?\bdevices["']?\s*:""")
@@ -224,13 +226,20 @@ def write_model(out, model):
     )
 
 
-def card_version():
-    m = re.search(
-        r"^const HOUSE3D_VERSION = (\d+);", (SRC / "house3d-card.js").read_text(), re.MULTILINE
-    )
+def version_of(path, name):
+    """The integer a JS module declares as `[export] const <name> = N;`."""
+    m = re.search(rf"^(?:export )?const {name} = (\d+);", path.read_text(), re.MULTILINE)
     if not m:
-        sys.exit("house3d-card.js: no HOUSE3D_VERSION")
+        sys.exit(f"{path.name}: no {name}")
     return m.group(1)
+
+
+def card_version():
+    return version_of(SRC / "house3d-card.js", "HOUSE3D_VERSION")
+
+
+def cards_version():
+    return version_of(CARDS, "KHE_CARDS_VERSION")
 
 
 def demo_files(demo=DEMO):
@@ -271,18 +280,21 @@ def build_demo(outdir):
     data = demo_data(model)
     out = copy_engine(outdir)
     shutil.copyfile(SRC / "house3d-card.js", out / "house3d-card.js")
+    shutil.copyfile(CARDS, out / CARDS.name)
     # nginx and Cloudflare cache .js for 30 days: ?v= on every module, as on HA's resource URL.
-    # The card and engine keep the card's version, so HA's resource URL moves only with them.
-    version = card_version()
-    demo = demo_version(version, data=data)
+    # The card and engine keep the card's version, and the dashboard cards theirs, so HA's
+    # resource URLs move only with them.
+    version, cards = card_version(), cards_version()
+    demo = demo_version(f"{version}/{cards}", data=data)
     for f in demo_files():
         text = f.read_text(encoding="utf-8")
         text = text.replace("__HOUSE3D_VERSION__", version).replace("__DEMO_VERSION__", demo)
+        text = text.replace("__KHE_CARDS_VERSION__", cards)
         (out / f.name).write_text(text, encoding="utf-8")
     write_model(out, model)
     for name, text in data.items():
         (out / name).write_text(text, encoding="utf-8")
-    print(f"built demo {out} (card v{version}, demo {demo})")
+    print(f"built demo {out} (card v{version}, cards v{cards}, demo {demo})")
     return 0
 
 

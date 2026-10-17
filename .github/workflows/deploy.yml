@@ -6,6 +6,7 @@ on:
     paths:
       - 'config/**'
       - 'house3d/**'
+      - 'cards/**'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
@@ -65,9 +66,13 @@ jobs:
           cp -R /src/house3d /config/www/.house3d.new
           rm -rf /config/www/house3d
           mv /config/www/.house3d.new /config/www/house3d
+          rm -rf /config/www/.khe-cards.new
+          cp -R /src/cards /config/www/.khe-cards.new
+          rm -rf /config/www/khe-cards
+          mv /config/www/.khe-cards.new /config/www/khe-cards
           cp /src/config/configuration.yaml /config/.configuration.yaml.new
           mv /config/.configuration.yaml.new /config/configuration.yaml
-          echo "copied configuration.yaml, packages/, tuya_local_devices/ and www/house3d/"
+          echo "copied configuration.yaml, packages/, tuya_local_devices/, www/house3d/ and www/khe-cards/"
           '
 
       - name: Summary
@@ -77,5 +82,6 @@ jobs:
             echo
             echo "HA was not restarted. It reads the new YAML at the next reload or"
             echo "restart, done through the API (AGENTS.md, \"Working on Home Assistant\")."
-            echo "The 3D view under /local/house3d/ is live now."
+            echo "The 3D view under /local/house3d/ and the dashboard cards under"
+            echo "/local/khe-cards/ are live now."
           } >> "$GITHUB_STEP_SUMMARY"

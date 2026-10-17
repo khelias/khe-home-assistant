@@ -38,8 +38,8 @@ The quirks behind each of these are in
 
 ## How it deploys
 
-A push to `main` that changes the configuration or the 3D view runs a
-workflow on the homelab's own runner. It validates the configuration with
+A push to `main` that changes the configuration, the 3D view or the
+dashboard's own cards runs a workflow on the homelab's own runner. It validates the configuration with
 `check_config` inside the running HA image, then copies it into HA's config
 volume. It never restarts HA: a reload or a restart through the API makes
 the new configuration live. HA's `.storage`, the recorder, the container and

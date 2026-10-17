@@ -80,5 +80,87 @@ class Build(unittest.TestCase):
         self.assertEqual(json.dumps(dc.build(house, people, fixture_model())), before)
 
 
+def kodu(people=()):
+    (view,) = [v for v in dc.build({}, list(people), None)["views"] if v["path"] == "kodu"]
+    return view
+
+
+def typed(o):
+    """Every dict with a type, nested ones included."""
+    if isinstance(o, dict):
+        if isinstance(o.get("type"), str):
+            yield o
+        for v in o.values():
+            yield from typed(v)
+    elif isinstance(o, list):
+        for v in o:
+            yield from typed(v)
+
+
+class Kodu(unittest.TestCase):
+    def test_drawn_with_the_three_own_cards_and_no_badges(self):
+        view = kodu()
+        types = {c["type"] for c in typed(view["sections"])}
+        for t in ("custom:khe-summary-card", "custom:khe-price-card", "custom:khe-tile-card"):
+            self.assertIn(t, types)
+        self.assertNotIn("badges", view)
+        self.assertEqual(view["max_columns"], 2)
+        # Ülevaade has no heading
+        self.assertNotEqual(view["sections"][0]["cards"][0]["type"], "heading")
+
+    def test_every_fault_and_the_meter_freshness_reach_the_summary(self):
+        (s,) = [c for c in typed(kodu()) if c["type"] == "custom:khe-summary-card"]
+        faults = {f["entity"]: f for f in s["faults"]}
+        for e, _ in dc.FAULTS:
+            self.assertIn(e, faults)
+        self.assertEqual(faults[dc.METER_FRESH]["bad"], "off")
+        self.assertEqual([a["entity"] for a in s["alarms"]], [e for e, _ in dc.ALARMS])
+
+    def test_people_names_lose_the_verb_and_no_people_file_means_none(self):
+        (s,) = [c for c in typed(kodu([["person.test", "Test on"]])) if "people" in c]
+        self.assertEqual(s["people"], [{"entity": "person.test", "name": "Test"}])
+        (s,) = [c for c in typed(kodu()) if "people" in c]
+        self.assertEqual(s["people"], [])
+
+    def test_no_tile_toggles_the_read_only_heating_switch(self):
+        heat = "switch.space_heating_climate_control"
+        tiles = [c for c in typed(kodu()) if c.get("entity") == heat]
+        self.assertTrue(tiles)
+        for c in tiles:
+            # an absent icon action does what the body does
+            for a in (c.get("tap_action"), c.get("icon_tap_action")):
+                if a:
+                    self.assertNotIn(a["action"], ("toggle", "perform-action"))
+
+    def test_navigate_targets_are_view_paths(self):
+        views = set(paths(dc.build({}, [], None)))
+        targets = list(_paths(kodu()))
+        self.assertTrue(targets)
+        for t in targets:
+            self.assertTrue(t.startswith("/lovelace/"), t)
+            self.assertIn(t.removeprefix("/lovelace/"), views, t)
+
+    def test_tiles_fill_half_a_section_and_the_mode_tile_the_width(self):
+        tiles = [c for c in typed(kodu()) if c["type"] == "custom:khe-tile-card"]
+        for c in tiles:
+            want = {"columns": "full"} if "modes" in c else {"columns": 6, "rows": 2}
+            self.assertEqual(c["grid_options"], want, c["name"])
+        (vent,) = [c for c in tiles if "modes" in c]
+        self.assertEqual([m["option"] for m in vent["modes"]], ["normal", "kitchen", "boost"])
+
+
+def _paths(o):
+    """Every navigation_path and *_path value under o."""
+    if isinstance(o, dict):
+        for k, v in o.items():
+            if k in ("navigation_path", "energy_path") and isinstance(v, str):
+                yield v
+            else:
+                yield from _paths(v)
+    elif isinstance(o, list):
+        for v in o:
+            yield from _paths(v)
+
+
 if __name__ == "__main__":
     unittest.main()

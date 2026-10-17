@@ -16,13 +16,15 @@ const { CARD_TYPES, FEATURE_TYPES, ACTIONS, visible, actionFor, runAction, markd
 const { CHARTS, points } = await mod('charts.js');
 const { hasIcon, iconFor, GENERIC } = await mod('icons.js');
 const { createSim } = await mod('sim.js');
+const { tileAction, modeAction } = await import(new URL('cards/khe-cards.js', `file://${ROOT}`));
 
 const out = mkdtempSync(join(tmpdir(), 'house3d-demo-'));
-let model, dashboard, data, series;
+let model, dashboard, data, series, built;
 try {
   execFileSync('python3', ['-I', join(ROOT, 'scripts/house3d-build.py'), '--demo', out], { stdio: ['ignore', 'ignore', 'inherit'] });
   const read = f => JSON.parse(readFileSync(join(out, f), 'utf8'));
   [model, dashboard, data, series] = ['model.json', 'dashboard.json', 'states.json', 'series.json'].map(read);
+  built = { files: readdirSync(out), demoJs: readFileSync(join(out, 'demo.js'), 'utf8') };
 } finally {
   rmSync(out, { recursive: true, force: true });
 }
@@ -239,7 +241,55 @@ test('every relative import in the demo files carries a version', () => {
     const text = readFileSync(join(dir, f), 'utf8');
     const refs = [...text.matchAll(/(?:from|import\(?|src=)\s*["'](\.{0,2}\/?[\w./-]+\.js[^"']*)["']/g)].map(m => m[1]);
     assert.ok(f !== 'demo.js' || refs.length >= 4, 'demo.js imports found');
-    for (const r of refs) assert.match(r, /\?v=__(HOUSE3D|DEMO)_VERSION__$/, `${f}: ${r}`);
+    for (const r of refs) assert.match(r, /\?v=__(HOUSE3D|DEMO|KHE_CARDS)_VERSION__$/, `${f}: ${r}`);
   }
   assert.match(readFileSync(join(dir, 'demo.js'), 'utf8'), /\?v=__DEMO_VERSION__`\)/, 'the JSON fetches carry the version');
+});
+
+test('the dashboard cards ship with the demo and Kodu uses all three', () => {
+  assert.ok(built.files.includes('khe-cards.js'));
+  assert.match(built.demoJs, /khe-cards\.js\?v=\d+'/);
+  const kodu = typed(dashboard.views.find(v => v.path === 'kodu'));
+  for (const t of ['custom:khe-summary-card', 'custom:khe-price-card', 'custom:khe-tile-card']) {
+    assert.ok(CARD_TYPES.includes(t), t);
+    assert.ok(kodu.some(c => c.type === t), t);
+  }
+  // the forecast carries a series marker, which demo.js expands into prices
+  const price = kodu.find(c => c.type === 'custom:khe-price-card');
+  const key = data.states[price.forecast].attributes.prices_from;
+  assert.ok(series[`${key}|Kokku`] && series[`${key}|Börs`], key);
+});
+
+// The cards hand HA a hass-action; the demo runs its config through runAction as HA's
+// handleAction would, so a tile tap and a mode tap must reach the simulation.
+test('a tile action and a mode action change the simulated state, the mode after its confirmation', async () => {
+  const kodu = typed(dashboard.views.find(v => v.path === 'kodu'));
+  const sim = createSim(data, noTimers);
+  const asked = [];
+  let answer = true;
+  const api = {
+    confirm: async text => { asked.push(text); return answer; },
+    moreInfo: () => {}, navigate: () => {}, openUrl: () => {},
+    toggle: e => sim.toggle(e),
+    callService: (d, s, dt, t) => sim.callService(d, s, dt, t)
+  };
+  const run = detail => runAction(detail.config.tap_action, detail.config.entity, api);
+
+  const lamp = kodu.find(c => c.type === 'custom:khe-tile-card' && (c.tap_action || {}).action === 'toggle');
+  const before = sim.states[lamp.entity].state;
+  assert.equal(await run(tileAction(lamp)), true);
+  assert.notEqual(sim.states[lamp.entity].state, before);
+  assert.deepEqual(asked, []);
+
+  const vent = kodu.find(c => c.type === 'custom:khe-tile-card' && c.modes);
+  const current = sim.states[vent.entity].state;
+  const other = vent.modes.find(m => m.option !== current);
+  assert.equal(modeAction(vent.entity, vent.modes.find(m => m.option === current), current), null);
+  answer = false;
+  assert.equal(await run(modeAction(vent.entity, other, current)), false);
+  assert.equal(sim.states[vent.entity].state, current);
+  answer = true;
+  assert.equal(await run(modeAction(vent.entity, other, current)), true);
+  assert.equal(sim.states[vent.entity].state, other.option);
+  assert.deepEqual(asked, [other.confirm, other.confirm]);
 });

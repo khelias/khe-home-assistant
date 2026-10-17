@@ -443,12 +443,17 @@ class Demo(unittest.TestCase):
 
     def test_demo_carries_the_card_and_demo_versions(self):
         version = re.search(r"^const HOUSE3D_VERSION = (\d+);", (ENGINE / "house3d-card.js").read_text(), re.M).group(1)
-        demo = hb.demo_version(version)
-        self.assertEqual(demo, hb.demo_version(version, data=hb.demo_data(hb.demo_model())))
+        cards = hb.cards_version()
+        demo = hb.demo_version(f"{version}/{cards}")
+        self.assertEqual(
+            demo, hb.demo_version(f"{version}/{cards}", data=hb.demo_data(hb.demo_model()))
+        )
         self.assertRegex(demo, r"^[0-9a-f]{10}$")
         with tempfile.TemporaryDirectory() as tmp:
             out = self.build(tmp)
             self.assertIn(f"?v={version}", (out / "demo.js").read_text(encoding="utf-8"))
+            self.assertIn(f"khe-cards.js?v={cards}", (out / "demo.js").read_text(encoding="utf-8"))
+            self.assertEqual((out / "khe-cards.js").read_bytes(), hb.CARDS.read_bytes())
             for name in ("index.html", "demo.js"):
                 self.assertIn(f"?v={demo}", (out / name).read_text(encoding="utf-8"), name)
 
@@ -462,6 +467,7 @@ class Demo(unittest.TestCase):
                 text = (out / name).read_text(encoding="utf-8")
                 self.assertNotIn("__HOUSE3D_VERSION__", text, name)
                 self.assertNotIn("__DEMO_VERSION__", text, name)
+                self.assertNotIn("__KHE_CARDS_VERSION__", text, name)
             self.assertFalse(any(p.name.startswith(".") for p in out.iterdir()))
 
     def test_demo_version_follows_the_demo_files_only(self):

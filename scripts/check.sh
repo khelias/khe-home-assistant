@@ -29,7 +29,7 @@ if [ -n "$model" ] && [ -f "$model" ]; then
       allow+=(--allow-devices-key "$f")
     done
     python3 -I scripts/house3d-build.py --scan --count "${allow[@]}" \
-      "$model" house3d demo scripts/dashboard_demo.py "$fixture" "$out" || fail "privacy scan"
+      "$model" house3d cards demo scripts/dashboard_demo.py "$fixture" "$out" || fail "privacy scan"
   else
     fail "demo build"
   fi

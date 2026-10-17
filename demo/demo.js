@@ -1,12 +1,15 @@
 // A mock Home Assistant dashboard on the made-up test house. The views are the house's real
 // dashboard, made by the same generator (dashboard.json, scripts/dashboard_demo.py), drawn by
 // demo/cards.js on one simulated hass (demo/sim.js, starting from states.json); the 3D view is
-// the real house3d card. Taps run as HA runs them: more-info opens a dialog like HA's, toggles
-// and service calls change the simulated states, navigate opens a view or a subview. This file
-// names no entity: the data names them, so it works for any generated dashboard.
+// the real house3d card and Kodu's real cards (khe-cards.js). Taps run as HA runs them: more-info
+// opens a dialog like HA's, toggles and service calls change the simulated states, navigate opens
+// a view or a subview. This file names no entity: the data names them, so it works for any
+// generated dashboard. ?light shows HA's light theme, which the dashboard cards follow.
 import './house3d-card.js?v=__HOUSE3D_VERSION__';
+import './khe-cards.js?v=__KHE_CARDS_VERSION__';
 import { svg, entityIcon } from './icons.js?v=__DEMO_VERSION__';
 import { createSim } from './sim.js?v=__DEMO_VERSION__';
+import { points } from './charts.js?v=__DEMO_VERSION__';
 import { renderSections, renderPanel, runAction, formatState, stateColor, ago } from './cards.js?v=__DEMO_VERSION__';
 
 const toolbar = document.querySelector('.toolbar');
@@ -37,13 +40,27 @@ try {
   throw e;
 }
 
+// The price forecast's hours, which the build cannot bake (it has no clock): a state naming its
+// series in prices_from gets {s, p, t} per hour from them, as the real forecast sensor carries.
+const now0 = new Date();
+for (const st of Object.values(data.states)) {
+  const key = st.attributes && st.attributes.prices_from;
+  if (!key) continue;
+  const spot = new Map(points(series[`${key}|Börs`], now0));
+  const prices = points(series[`${key}|Kokku`], now0).map(([ms, t]) => ({ s: ms / 1000, p: spot.get(ms), t }));
+  const { prices_from, ...rest } = st.attributes;
+  st.attributes = { ...rest, prices };
+}
+
+const light = new URLSearchParams(location.search).has('light');
+document.documentElement.classList.toggle('light', light);
 const sim = createSim(data);
 const byEntity = new Map((model.devices || []).map(d => [d.entity, d]));
 const roomName = id => (id === 'oues' ? 'Õu' : ((model.rooms || []).find(r => r.id === id) || {}).name || '');
 const nameOf = e => (sim.states[e] && sim.states[e].attributes.friendly_name) || (byEntity.get(e) || {}).name || e;
 const areaOf = e => (byEntity.has(e) ? roomName(byEntity.get(e).room) : '');
 const carEntity = model.car && model.car.entity;
-const hass = () => ({ states: sim.states, config: { latitude: 58.6, longitude: 25.0 }, formatEntityState: formatState });
+const hass = () => ({ states: sim.states, config: { latitude: 58.6, longitude: 25.0 }, themes: { darkMode: !light }, formatEntityState: formatState });
 
 /* ---------- confirmation, as HA asks before an action that has one ---------- */
 
@@ -104,6 +121,12 @@ const ctx = {
     el.setAttribute('aria-label', 'Maja kolmemõõtmeline mudel');
     el.setConfig({ model });
     card3d = el;
+    return { el, update: h => { el.hass = h; } };
+  },
+  // a dashboard card from khe-cards.js, as HA mounts a custom: type
+  khe: conf => {
+    const el = document.createElement(conf.type.slice('custom:'.length));
+    el.setConfig(conf);
     return { el, update: h => { el.hass = h; } };
   }
 };
@@ -390,7 +413,12 @@ drawer.addEventListener('click', ev => {
   if (outside(drawer, ev) || ev.target.closest('[data-act="close"]')) drawer.close();
 });
 
-// what HA's frontend does with the card's taps
+// what HA's frontend does with the cards' taps: more-info from the 3D card, hass-action from
+// the dashboard cards, run as HA's handleAction runs it
 viewsEl.addEventListener('hass-more-info', ev => openInfo(ev.detail && ev.detail.entityId));
+viewsEl.addEventListener('hass-action', ev => {
+  const d = ev.detail;
+  if (d && d.action === 'tap' && d.config) ctx.act(d.config.tap_action, d.config.entity);
+});
 
 route();

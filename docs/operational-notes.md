@@ -10,8 +10,8 @@ backup and restore) is in khe-homelab's
 **Every `template/reload` must be followed at once by
 `POST /api/events/khe_price_refresh`.** Trigger-based template sensors do not
 re-run on reload, so the whole price stack (`elektri_hinna_prognoos`, `_tase`,
-`odavaim_aken_*`) goes blank and the Kodu Elekter card renders `None. None`
-until the hourly tick. A restart is safe, the package has a `start` trigger;
+`odavaim_aken_*`) goes blank and the Kodu price card shows "Hind pole teada"
+and "Hinnaprognoosi pole" until the hourly tick. A restart is safe, the package has a `start` trigger;
 only reload breaks it. An `event_template_reloaded` trigger does not fix it,
 the reload races the entities listening for it (core issues #65832, #101835).
 
@@ -167,6 +167,33 @@ things that should be zero and are not.
 `heating`, `twice`). The Estonian labels are template sensors in the device's
 package, and the dashboard tile shows the label with a `more-info` tap action
 on the select (`"entity": <select>`), so the picker is one tap away as before.
+
+## Dashboard cards (`cards`)
+
+Kodu is drawn with the repo's own Lovelace cards in `cards/khe-cards.js`:
+`custom:khe-summary-card`, `custom:khe-price-card` and `custom:khe-tile-card`
+([ADR-002](decisions/002-own-dashboard-cards.md)). Deploy replaces
+`www/khe-cards/` in HA's config volume, so HA serves them as
+`/local/khe-cards/`, and a change arrives without a restart.
+
+- **Resource:** `/local/khe-cards/khe-cards.js?v=N`, a module. Created once
+  with `scripts/ha-ws.py '{"type": "lovelace/resources/create", "res_type":
+  "module", "url": "/local/khe-cards/khe-cards.js?v=1"}'`, then moved with
+  `lovelace/resources/update` and its `resource_id` (from
+  `lovelace/resources`). Without it Kodu shows HA's "Custom element doesn't
+  exist" in every card.
+- **Cache:** every change to the module bumps `KHE_CARDS_VERSION` and the same
+  `?v=` on the resource, as for the 3D card.
+- **Colours** follow `hass.themes.darkMode`, the dark mode of the device or of
+  the HA profile; there is no HA theme. A wall tablet gets the night look from
+  its OS dark schedule.
+- **Actions:** a card fires `hass-action` with the tile's `tap_action` and HA's
+  `handleAction` runs it, confirmation dialogs included. A frontend change
+  there would leave the tiles dead, so after each HA bump tap a Kodu tile and
+  a ventilation mode button and see HA act.
+- **Demo:** the demo mounts the same module on its simulated hass and runs
+  each `hass-action` through its action runner; `?light` shows the light
+  palette.
 
 ## The 3D house view (`house3d`)
 

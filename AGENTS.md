@@ -10,7 +10,8 @@ This file holds rules and pointers; the reference lives in:
 - [docs/operational-notes.md](docs/operational-notes.md) - per-integration
   quirks, measured behaviour and the 3D view
 - [docs/decisions/](docs/decisions/) - this repo's decisions, estate-style
-  ADRs (the estate's own are in khe-architecture)
+  ADRs (the estate's own are in khe-architecture): the 3D engine (ADR-001)
+  and the dashboard's own cards ([ADR-002](docs/decisions/002-own-dashboard-cards.md))
 - [ROADMAP.md](ROADMAP.md) - house automation, near-term and the long form
 
 House documentation (HA rollout, dashboard layout, HVAC protocols, energy)
@@ -22,6 +23,9 @@ own.
 ## Layout
 
 ```
+cards/             the dashboard's own Lovelace cards (khe-cards.js, ADR-002):
+                   summary, price and tile, Kodu drawn with them; deploy
+                   copies them to www/khe-cards/
 config/            what deploy copies into HA's /config
   configuration.yaml
   packages/        one package per device or concern
@@ -42,13 +46,14 @@ scripts/           dashboard_config.py (the HA Overview as data, no I/O),
                    ha-ws.py (HA WebSocket commands from the CLI),
                    house3d-* and house3d_model.py (3D view build, vendoring,
                    device and tree placement, ETAK surroundings, model),
-                   house3d-test.sh (the 3D view's tests),
+                   house3d-test.sh (the 3D view's and the cards' tests),
                    pv-sim.py (rooftop PV, battery and EV simulation against
                    the Estfeed hourly load), check.sh, install-hooks.sh
 tests/house3d/     3D view tests on a made-up fixture house: model and build
                    (Python unittest), engine, simple-style snapshot and demo
                    dashboard (node:test)
 tests/dashboard/   dashboard config and demo catalogue tests (Python unittest)
+tests/cards/       the dashboard cards' pure helpers (node:test)
 ```
 
 ## Commands
@@ -65,7 +70,8 @@ tests/dashboard/   dashboard config and demo catalogue tests (Python unittest)
 - `ruff check --fix scripts && ruff format scripts` before committing Python.
 - `python3 -I scripts/house3d-build.py --demo OUTDIR` builds the demo from the
   made-up test house only (`tests/house3d/fixture-model.md`): the card, the
-  engine, `demo/` and the generated dashboard, states and series. khe-sites
+  engine, the dashboard cards, `demo/` and the generated dashboard, states
+  and series. khe-sites
   runs it and publishes the result at <https://khe.ee/ha/> on its next
   deploy: a push to khe-sites, its weekly schedule, or
   `gh workflow run deploy.yml -R khelias/khe-sites`.
@@ -87,7 +93,7 @@ tests/dashboard/   dashboard config and demo catalogue tests (Python unittest)
    `house/house-model.md`. Run `scripts/house3d-build.py --scan <model>
    house3d/` with the real model before every commit that touches
    `house3d/`, and before publishing anything built from the model.
-   `check.sh` scans `house3d/`, `demo/`, `scripts/dashboard_demo.py`, the
+   `check.sh` scans `house3d/`, `cards/`, `demo/`, `scripts/dashboard_demo.py`, the
    test house and the whole fresh demo build with `--count` whenever the
    model is at hand (the main checkout's khe-meta or `HOUSE3D_MODEL`), so the
    commit gate covers the demo; CI has no model. What the test house may
@@ -104,12 +110,12 @@ tests/dashboard/   dashboard config and demo catalogue tests (Python unittest)
 
 ## Deploy
 
-A push to `main` that touches `config/` or `house3d/` runs `deploy.yml` on
+A push to `main` that touches `config/`, `house3d/` or `cards/` runs `deploy.yml` on
 the homelab runner. A throwaway container of the running HA image (no
 network, entrypoint `sh`, so no second HA starts) checks that the volume
 holds `.storage`, runs `check_config` on a copy of `config/`, then replaces
-`configuration.yaml`, `packages/`, `tuya_local_devices/` and `www/house3d/`
-in HA's config volume `homeassistant_ha_config`. **Deploy never restarts
+`configuration.yaml`, `packages/`, `tuya_local_devices/`, `www/house3d/` and
+`www/khe-cards/` in HA's config volume `homeassistant_ha_config`. **Deploy never restarts
 HA**: that stays the API step below. If the volume does not exist, deploy
 fails instead of creating an empty one.
 
@@ -121,8 +127,8 @@ model in its `SECURITY.md`.
 Automated writers
 ([estate ADR-007](https://github.com/khelias/khe-architecture/blob/main/decisions/007-automated-writers.md)): Renovate
 automerges GitHub Actions minor and patch updates, digests and pins
-(`renovate.json`), and every merge to `main` that touches `config/` or
-`house3d/` deploys the config. The way back is to revert the commit on
+(`renovate.json`), and every merge to `main` that touches `config/`,
+`house3d/` or `cards/` deploys the config. The way back is to revert the commit on
 `main` and push: the revert is a new config deploy, and HA keeps running
 what it loaded last until a restart or reload, so restart or reload it
 after the revert lands. A new automated writer joins the estate's writer
@@ -146,9 +152,9 @@ the operator first; an approval covers that task only.
 - **Config lives in git, not on the VM.** Edit `config/packages/*.yaml`,
   commit, the operator pushes, deploy copies it into the volume, then
   restart or reload HA through the API. Deploy replaces
-  `configuration.yaml`, `packages/`, `tuya_local_devices/` and
-  `www/house3d/` in the volume, so a hand edit there is lost at the next
-  deploy.
+  `configuration.yaml`, `packages/`, `tuya_local_devices/`, `www/house3d/`
+  and `www/khe-cards/` in the volume, so a hand edit there is lost at the
+  next deploy.
 - **YAML platforms need a restart, not a reload:** `input_*`, `rest:`,
   `shell_command:` and the group `cover:`/`light:` platforms. Automations and
   templates reload, but a template reload blanks the trigger-based price
@@ -166,7 +172,13 @@ the operator first; an approval covers that task only.
   public demo is the same `build()` on made-up inputs, so a new entity id
   needs an entry in `dashboard_demo.CATALOGUE` (the dashboard tests name it)
   and a new templated card a sample text in `TEXTS`.
-- **Keep the house idiom in a new view**, and read two existing views first.
+- **Kodu is drawn with the repo's own cards**
+  ([ADR-002](docs/decisions/002-own-dashboard-cards.md)): `khe_tile()`,
+  `summary()` and `price_card` in the generator, `cards/khe-cards.js` in the
+  browser. A change to the cards bumps `KHE_CARDS_VERSION` and the resource's
+  `?v=` ([notes](docs/operational-notes.md#dashboard-cards-cards)). The other
+  views stay on stock cards until each gets its own design round.
+- **Keep the house idiom in a stock-card view**, and read two existing views first.
   A row is a `horizontal-stack` of 2-4 vertical tiles or `third()`, never a
   lone full-width tile; full width is for charts, forecast cards and alerts.
   Each number appears once (turn off a forecast card's `show_current` when a

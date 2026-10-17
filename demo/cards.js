@@ -16,7 +16,7 @@ const nf1 = nf(1);
 const rtf = new Intl.RelativeTimeFormat('et-EE', { numeric: 'auto' });
 const dtf = new Intl.DateTimeFormat('et-EE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-export const CARD_TYPES = ['tile', 'heading', 'horizontal-stack', 'vertical-stack', 'entities', 'markdown', 'button', 'statistics-graph', 'history-graph', 'custom:apexcharts-card', 'weather-forecast', 'picture-glance', 'custom:advanced-camera-card', 'custom:house3d-card'];
+export const CARD_TYPES = ['tile', 'heading', 'horizontal-stack', 'vertical-stack', 'entities', 'markdown', 'button', 'statistics-graph', 'history-graph', 'custom:apexcharts-card', 'weather-forecast', 'picture-glance', 'custom:advanced-camera-card', 'custom:house3d-card', 'custom:khe-summary-card', 'custom:khe-price-card', 'custom:khe-tile-card'];
 export const FEATURE_TYPES = ['cover-open-close', 'light-brightness', 'select-options', 'numeric-input', 'target-temperature', 'bar-gauge', 'alarm-modes'];
 export const ACTIONS = ['more-info', 'toggle', 'navigate', 'perform-action', 'url', 'none'];
 
@@ -227,7 +227,7 @@ function place(el, conf) {
 
 /* ---------- cards ---------- */
 
-// each card: { el, update(hass) }; ctx: { nameOf, act(action, entity), series, now(), resize(el, fn), house3d(conf) }
+// each card: { el, update(hass) }; ctx: { nameOf, act(action, entity), series, now(), resize(el, fn), house3d(conf), khe(conf) }
 const tracked = (entities, fn) => {
   let last = [];
   return hass => {
@@ -512,11 +512,14 @@ function unknownCard(conf) {
   return { el, update() {} };
 }
 
+const kheCard = (conf, ctx) => ctx.khe(conf);
+
 const CARDS = {
   tile: tileCard, heading: headingCard, 'horizontal-stack': stackCard, 'vertical-stack': stackCard, entities: entitiesCard,
   markdown: markdownCard, button: buttonCard, 'statistics-graph': chartCard, 'history-graph': chartCard,
   'custom:apexcharts-card': chartCard, 'weather-forecast': chartCard, 'picture-glance': pictureGlance,
-  'custom:advanced-camera-card': cameraCard, 'custom:house3d-card': (conf, ctx) => ctx.house3d(conf)
+  'custom:advanced-camera-card': cameraCard, 'custom:house3d-card': (conf, ctx) => ctx.house3d(conf),
+  'custom:khe-summary-card': kheCard, 'custom:khe-price-card': kheCard, 'custom:khe-tile-card': kheCard
 };
 
 export function card(conf, ctx) {
