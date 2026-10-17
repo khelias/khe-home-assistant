@@ -2,8 +2,34 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 20;
-const engine = import(`./house3d.js?v=${HOUSE3D_VERSION}`);
+const HOUSE3D_VERSION = 21;
+
+// importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
+// apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
+// for a new one; every failure is logged with its URL.
+export async function importRetry(load, urlFor, { tries = 2, delay = 2000, wait = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
+  let err;
+  for (let n = 0; n < tries; n++) {
+    if (n) await wait(delay);
+    const url = urlFor(n);
+    try {
+      return await load(url);
+    } catch (e) {
+      err = e;
+      console.error(`house3d: loading ${url} failed`, e);
+    }
+  }
+  throw err;
+}
+
+// The engine loads once per page; after a failure the next card render (Proovi uuesti) loads it
+// again. A retry's extra query reaches the engine's scene/ modules, which take its query.
+let engine = null, loads = 0;
+const engineUrl = n => `./house3d.js?v=${HOUSE3D_VERSION}${n ? `&r=${n}` : ''}`;
+function loadEngine() {
+  if (!engine) engine = importRetry(u => import(u), () => engineUrl(loads++)).catch(e => { engine = null; throw e; });
+  return engine;
+}
 
 const nf1 = new Intl.NumberFormat('et-EE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const esc = s => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
@@ -135,10 +161,10 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .sheet { position: absolute; top: 64px; right: 12px; width: 320px; max-height: calc(100% - 80px); overflow: auto;
   background: var(--panel); border: 1px solid var(--edge); border-radius: 14px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
   display: grid; gap: 14px; padding: 16px; box-sizing: border-box; }
-.head { display: grid; grid-template-columns: 1fr 32px; gap: 12px; align-items: start; }
+.head { display: grid; grid-template-columns: 1fr 40px; gap: 12px; align-items: start; }
 .head h2 { margin: 0; font-size: 19px; font-weight: 600; line-height: 1.2; }
 .head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
-.close { width: 32px; height: 32px; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.close { width: 40px; height: 40px; margin: -6px -6px 0 0; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
 .close svg { width: 18px; height: 18px; }
 .list { display: grid; gap: 6px; }
 .list button { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; text-align: left; width: 100%;
@@ -161,16 +187,21 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .slider input { width: 100%; margin: 0; accent-color: var(--line); }
 .now { justify-self: start; font: inherit; font-size: 13px; line-height: 1; color: var(--ink); background: var(--chip); border: 1px solid var(--edge); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
 .now[aria-pressed="true"] { color: var(--bg); background: var(--line); border-color: var(--line); }
-.msg { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; color: var(--muted); text-align: center; background: var(--bg); }
+.msg { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 16px; color: var(--muted); text-align: center; background: var(--bg); }
+.msg small { font-size: 12px; opacity: .8; }
+.msg .now { justify-self: center; }
 .credit { position: absolute; top: 10px; left: 12px; max-width: calc(100% - 24px); font-size: 11px; line-height: 1.3; color: var(--muted); opacity: .8; pointer-events: none; }
-@media (max-width: 600px) {
-  .bar { top: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: 50%; transform: translateX(50%); }
-  .sheet { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 62%; border-radius: 16px 16px 0 0;
-    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
-}
+/* narrow follows the card's own width: a panel view on a wide screen can still be narrow */
+.narrow .bar { top: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: 50%; transform: translateX(50%); }
+/* the sheet ends above the bar, so its buttons stay in reach */
+.narrow .sheet { top: auto; left: 8px; right: 8px; bottom: calc(66px + env(safe-area-inset-bottom, 0px)); width: auto;
+  max-height: calc(100% - 82px - env(safe-area-inset-bottom, 0px)); }
 `;
 
-class House3dCard extends HTMLElement {
+// the helpers above are imported by the Node tests, where there is no DOM to define the card in
+const Base = typeof HTMLElement === 'function' ? HTMLElement : class {};
+
+class House3dCard extends Base {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -186,7 +217,8 @@ class House3dCard extends HTMLElement {
     this._config = config;
     this._devices = config.model.devices || [];
     this._car = config.model.car && config.model.car.profile && config.model.car.path ? config.model.car : null;
-    if (changed) { this._unmount(); this._states.clear(); }
+    // another model starts from its own home view
+    if (changed) { this._unmount(); this._states.clear(); this._keep = null; }
     this._render();
   }
 
@@ -221,19 +253,25 @@ class House3dCard extends HTMLElement {
 
   connectedCallback() {
     this._onResize = this._onResize || (() => this._fit());
+    this._onKey = this._onKey || (ev => { if (ev.key === 'Escape' && this._sheet) this._closeAny(); });
     window.addEventListener('resize', this._onResize);
+    window.addEventListener('keydown', this._onKey);
     if (window.visualViewport) window.visualViewport.addEventListener('resize', this._onResize);
     requestAnimationFrame(this._onResize);
     this._render();
   }
+  // leaving the view and coming back (HA disconnects the card) starts from the same camera and roof
   disconnectedCallback() {
     window.removeEventListener('resize', this._onResize);
+    window.removeEventListener('keydown', this._onKey);
     if (window.visualViewport) window.visualViewport.removeEventListener('resize', this._onResize);
+    if (this._view && !this._view.failed) this._keep = { mode: this._view.mode, view: this._view.view };
     this._unmount();
   }
 
   _unmount() {
     if (this._view) { this._view.dispose(); this._view = null; }
+    if (this._ro) { this._ro.disconnect(); this._ro = null; }
     this._mounting = null;
     this._pushed = false;
     this._carSt = undefined;
@@ -251,18 +289,24 @@ class House3dCard extends HTMLElement {
         <button type="button" class="icon-btn" data-act="layers" aria-label="Kihid" title="Kihid" aria-expanded="false"></button></div>
       <aside class="sheet" hidden aria-live="polite"></aside>${this._credit()}</ha-card>`;
     this._sheet = null;
+    const wrap = sr.querySelector('.wrap');
+    if (typeof ResizeObserver === 'function') {
+      this._ro = new ResizeObserver(() => wrap.classList.toggle('narrow', wrap.clientWidth < 600));
+      this._ro.observe(wrap);
+    }
     const token = (this._mounting = {});
     const keep = this._keep || {};
-    this._keep = null;
-    engine.then(mod => {
+    loadEngine().then(mod => {
       if (this._mounting !== token || !this.isConnected) return;
       this._mounting = null;
+      this._keep = null;
       this._mod = mod;
       sr.querySelector('[data-act="reset"]').innerHTML = mod.icon('reset');
       sr.querySelector('[data-act="layers"]').innerHTML = mod.icon('layers');
       this._view = mod.mount(sr.querySelector('.view'), this._config.model, {
         onMarker: id => this._moreInfo(id),
-        onRoom: id => this._openRoom(id),
+        // a tap on empty space closes either sheet
+        onRoom: id => (id || this._sheet !== 'layers' ? this._openRoom(id) : this._closeSheet()),
         onMode: m => {
           sr.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
           if (m === 'roof') this._openRoom(null);
@@ -299,7 +343,12 @@ class House3dCard extends HTMLElement {
       if (this._hass) this.hass = this._hass;
       if (keep.layers) this._openLayers();
     }).catch(err => {
-      sr.querySelector('.view').innerHTML = `<div class="msg">3D-vaate laadimine ebaõnnestus: ${esc(err && err.message || err)}</div>`;
+      // a newer render or a disconnect owns the card now; a mount that threw has cleared the token
+      if ((this._mounting && this._mounting !== token) || !this.isConnected) return;
+      this._mounting = null;
+      sr.querySelector('.view').innerHTML = `<div class="msg"><span>3D-vaate laadimine ebaõnnestus.</span>
+        <button type="button" class="now" data-act="retry">Proovi uuesti</button><small>${esc(err && err.message || err)}</small></div>`;
+      sr.querySelector('[data-act="retry"]').addEventListener('click', () => this._render());
     });
   }
 
@@ -420,6 +469,11 @@ class House3dCard extends HTMLElement {
     return st.state;
   }
 
+  _closeAny() {
+    if (this._sheet === 'layers') this._closeSheet();
+    else this._openRoom(null);
+  }
+
   _closeSheet() {
     const sheet = this.shadowRoot.querySelector('.sheet');
     this._sheet = null;
@@ -495,7 +549,7 @@ class House3dCard extends HTMLElement {
   }
 }
 
-if (!customElements.get('house3d-card')) {
+if (typeof customElements !== 'undefined' && !customElements.get('house3d-card')) {
   customElements.define('house3d-card', House3dCard);
   window.customCards = window.customCards || [];
   window.customCards.push({ type: 'house3d-card', name: 'House 3D', description: 'The house as a 3D model with live device markers.' });

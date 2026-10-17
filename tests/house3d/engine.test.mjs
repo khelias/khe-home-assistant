@@ -25,6 +25,7 @@ const THREE = await import(new URL('vendor/three-0.186.1/build/three.module.js',
 const { createKit } = await import(new URL('scene/kit.js', E));
 const BUILDERS = await Promise.all(LAYERS.map(id => import(new URL(`scene/layers/${id}.js`, E))));
 const { modelFrame, buildLayer, guardLayer, syncCamera, toScreen, hitRect, releaseVelocity, coast, homeBox, homeDir, homeView } = await import(new URL('house3d.js', E));
+const card = await import(new URL('house3d-card.js', E));
 const { OrbitControls } = await import(new URL('vendor/three-0.186.1/examples/jsm/controls/OrbitControls.js', E));
 const { sunPosition, gridBearing, sunDirection, sunGlow } = await import(new URL('scene/sun.js', E));
 const { cornerBoards } = await import(new URL('scene/layers/building.js', E));
@@ -747,4 +748,26 @@ test('homeView: the house rooms fit with a margin at every aspect, the carport l
     assert.ok(Math.abs((minX + maxX) / 2 - W / 2) < 0.05 * W, `aspect ${aspect}: centred`);
     assert.ok(maxX - minX > 0.4 * W || aspect >= 1.9, `aspect ${aspect}: fills the view`);
   });
+});
+
+test('card: importRetry tries again on a new URL after a failure', async () => {
+  const urls = [], waits = [];
+  const load = async url => { urls.push(url); if (urls.length === 1) throw new Error('fetch failed'); return { mod: url }; };
+  const { result, seen } = await (async () => {
+    const seen = [], orig = console.error;
+    console.error = (...a) => seen.push(a.map(String).join(' '));
+    try { return { result: await card.importRetry(load, n => `./house3d.js?v=1${n ? `&r=${n}` : ''}`, { wait: async ms => waits.push(ms) }), seen }; } finally { console.error = orig; }
+  })();
+  assert.deepEqual(result, { mod: './house3d.js?v=1&r=1' });
+  assert.deepEqual(urls, ['./house3d.js?v=1', './house3d.js?v=1&r=1']);
+  assert.notEqual(urls[0], urls[1]);
+  assert.deepEqual(waits, [2000]);
+  assert.equal(seen.length, 1);
+  assert.match(seen[0], /^house3d: loading \.\/house3d\.js\?v=1 failed/);
+  // two failures reject with the last error
+  const quiet = console.error;
+  console.error = () => {};
+  try {
+    await assert.rejects(card.importRetry(async () => { throw new Error('down'); }, n => `u${n}`, { wait: async () => {} }), /down/);
+  } finally { console.error = quiet; }
 });

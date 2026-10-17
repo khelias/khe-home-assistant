@@ -502,12 +502,14 @@ export function mount(element, model, options = {}) {
     if (e.wrap) e.wrap.visible = on;
     if (e.L.setOn) e.L.setOn(on);
   }
+  const shadowsDirty = () => { if (real) renderer.shadowMap.needsUpdate = true; };
   function setLayer(id, on) {
     const e = layers.find(x => x.L.toggle && x.L.id === id && !x.failed);
     if (!e || e.on === !!on) return;
     switchLayer(e, !!on);
     // a layer switched off under the mouse no longer takes the hover
     if (!e.on) { hovered = null; renderer.domElement.style.cursor = ''; }
+    shadowsDirty();
     invalidate();
   }
   // a stored choice applies before the first frame, also to a layer not listed yet
@@ -538,6 +540,10 @@ export function mount(element, model, options = {}) {
   if (real) {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
+    // the shadow camera is fixed to the lot box, so a camera move needs no shadow pass: the map
+    // renders only when the sun, the roof, a layer or the map itself changes (shadowsDirty)
+    renderer.shadowMap.autoUpdate = false;
+    renderer.shadowMap.needsUpdate = true;
     // neutral keeps the specification's colours closest
     renderer.toneMapping = THREE.NeutralToneMapping;
     scene.background = sky.day.clone();
@@ -618,6 +624,7 @@ export function mount(element, model, options = {}) {
     glow.material.opacity = g.opacity;
     glow.material.color.set('#ffffff').lerp(lowSun, g.warm);
     if (alt > 0) placeSun(dir);
+    shadowsDirty();
     invalidate();
   }
   // place: { lat, lon, bearing } in degrees, bearing the grid azimuth of the model's +x; null
@@ -691,6 +698,7 @@ export function mount(element, model, options = {}) {
     });
     for (const [id, rec] of markers) if (!seen.has(id)) { rec.el.remove(); markers.delete(id); }
     layers.forEach(({ L }) => { if (L.markers) L.markers(list); });
+    shadowsDirty();
     invalidate();
   }
 
@@ -855,6 +863,7 @@ export function mount(element, model, options = {}) {
       if (sun.shadow.mapSize.x !== size) {
         sun.shadow.mapSize.set(size, size);
         if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+        shadowsDirty();
       }
     }
     if (!framed) { framed = true; frameFirst(); } else if (!userMoved) reset(); else fitFog();
@@ -907,7 +916,7 @@ export function mount(element, model, options = {}) {
       samples.push(sampleNow(now));
       while (samples.length > 2 && now - samples[0].t > 200) samples.shift();
     }
-    if (!kit.near(fade.cur, fade.to)) { fade.cur += (fade.to - fade.cur) * k; moving = true; } else fade.cur = fade.to;
+    if (!kit.near(fade.cur, fade.to)) { fade.cur += (fade.to - fade.cur) * k; moving = true; shadowsDirty(); } else if (fade.cur !== fade.to) { fade.cur = fade.to; shadowsDirty(); }
     layers.forEach(({ L }) => {
       if (!L.lift) return;
       L.lift.position.y = (1 - fade.cur) * 4.5;
@@ -924,7 +933,7 @@ export function mount(element, model, options = {}) {
         });
       });
     }
-    layers.forEach(({ L }) => { if (L.update && L.update(dt, k)) moving = true; });
+    layers.forEach(({ L }) => { if (L.update && L.update(dt, k)) { moving = true; shadowsDirty(); } });
     if (!moving && !dirty) { raf = 0; return; }
     dirty = false;
     raf = requestAnimationFrame(frame);

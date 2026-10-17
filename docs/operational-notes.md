@@ -212,7 +212,10 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   `house3d-style`. Switching remounts the engine with the roof mode, camera
   and fog kept. The real style has no bloom; its shadow map is 2048 px, 1024
   below 720 px width, and the roof and the car cast only while fully shown,
-  since the shadow pass ignores opacity.
+  since the shadow pass ignores opacity. The shadow camera is fixed to the
+  lot, so the map is rendered only when the sun moves, the roof fades, a
+  layer animates or is switched, the markers change, the style mounts or a
+  resize replaces the map, never for a camera move.
 - **The sun** in the real style comes from HA's own location
   (`hass.config.latitude`/`longitude`, read at runtime, never stored in the
   card config) and the model's `georef.x_axis_bearing_deg`, the plan's
@@ -247,7 +250,20 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   switches for the devices' markers (an alert always shows), the camera view
   fans, the trees, the car (off, an arrival parks it and the gate stays shut)
   and the neighbours and street; that choice is kept per browser in
-  `localStorage` under `house3d-layers`.
+  `localStorage` under `house3d-layers`. Escape closes any sheet, and so
+  does a tap on empty canvas. Below 600 px of the card's own width (not the
+  screen's) the bar moves to the bottom and a sheet opens just above it, so
+  the bar's buttons stay in reach.
+- **Leaving and coming back:** HA disconnects the card when the view is
+  left; the card keeps its camera and roof mode on the element and the next
+  mount starts from them. A new model starts from the home view.
+- **Load failure:** the card imports the engine when it first renders and,
+  if that fails, once more after 2 s; then it shows "Proovi uuesti". Each
+  try adds `&r=<n>` to the engine's URL, which its `scene/` modules take
+  too, since a failed module URL stays failed in the browser until a
+  reload. The vendored three.js URLs carry no query, so if the console's
+  `house3d: loading ... failed` points at a vendor file, a retry may meet
+  the same failure and only a reload helps.
 - **three.js updates** are manual, Renovate does not see the vendored copy:
   `scripts/house3d-vendor.sh <version>`, point the engine's imports at the new
   directory, bump the version, remove the old directory.
