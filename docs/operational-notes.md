@@ -235,14 +235,19 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   gets the bearing in whole degrees only (`orientation` in `model.json`) and
   puts the sun over the middle of Estonia, never over the house.
 - **Room chips:** with the roof off each house room (every room but the
-  carport) shows one chip at its label: the room's temperature (a sensor's,
-  else a climate unit's), then icons for motion now, lights on, open doors
-  and the alarm, with a count past one; a quiet room shows its name alone,
-  and below 720 px the name is dropped and a quiet room shows nothing. Its
-  devices that are neither on nor in alert are counted in the chip; the
-  others (and everything outdoors or in the carport) show as markers. A
-  collision pass every frame keeps them apart, nearest first in each round:
-  alerts (never hidden); then every chip as its first part alone, at its
+  carport) shows one chip at its label: icons for open doors, smoke alarms
+  going off and the alarm, motion now and lights on, with a count past one,
+  then the room's temperature (a sensor's, else a climate unit's). Alerts
+  come first, then what is on, so the compact chip shows the most urgent
+  part. A quiet room shows its name alone, and below 720 px the name is
+  dropped (the parts stay) and a quiet room shows nothing. Its devices that
+  are neither on nor in alert, and the active ones its parts count (the
+  chip's `ids`), are in the chip and not drawn beside it, so one sensor is
+  one icon; an active device the chip does not count (a heating climate
+  unit, a switch) and everything outdoors or in the carport show as markers.
+  A collision pass every frame keeps them apart, nearest first in each round:
+  alerts (never hidden; a chip in alert compact, grown later where there is
+  room); then every chip as its first part alone, at its
   place or just above or below it, so a room's summary survives a crowd;
   then markers at full size; then each chip grown to full where there is
   room; then the markers that did not fit as 10 px dots, which still take a

@@ -425,12 +425,14 @@ export function coast(v, dt, tau = 0.35) {
 
 /**
  * collide(items, pad = 4) -> Map id -> level: the size index each item is drawn at, -1 hidden.
- * items: [{ id, kind: 'alert' | 'marker' | 'chip', x, y, dist, was, sizes: [[w, h, dx?, dy?], ...] }],
+ * items: [{ id, kind: 'alert' | 'marker' | 'chip', chip?, x, y, dist, was, sizes: [[w, h, dx?, dy?], ...] }],
  * centre in CSS pixels, dist from the camera, was whether it showed last frame, sizes from the
  * full one down, each optionally moved off the centre by (dx, dy). A chip's sizes are its full
- * form, then its compact form in one or more places; a marker's its full form, then a dot.
- * Greedy, in passes: alerts at full size (an alert never hides, so it takes its place even over
- * another); every chip at its first compact size that fits, so a room's summary survives a
+ * form, then its compact form in one or more places; a marker's its full form, then a dot. A chip
+ * in alert is kind 'alert' with chip true.
+ * Greedy, in passes: alerts (an alert never hides, so it takes its place even over another), a
+ * marker at full size, a chip at its first compact size that fits, else its first compact size
+ * anyway; every other chip at its first compact size that fits, so a room's summary survives a
  * crowd; markers at full size; each placed chip grown back to full where that fits; the markers
  * that did not fit at their smaller sizes; what is left hides. Within a pass nearest first, and
  * what showed last frame counts as 15% nearer, so a tie keeps last frame's winner. A size fits
@@ -451,21 +453,26 @@ export function collide(items, pad = 4) {
     for (let i = from; i < to; i++) if (free(box(it, i))) { put(it, i); return true; }
     return false;
   };
-  of('alert').forEach(it => put(it, 0));
+  const small = it => (it.sizes.length > 1 ? 1 : 0);
+  const alerts = of('alert');
+  alerts.forEach(it => { if (!it.chip) put(it, 0); else if (!fit(it, small(it))) put(it, small(it)); });
   const chips = of('chip');
-  chips.forEach(it => { if (!fit(it, it.sizes.length > 1 ? 1 : 0)) out.set(it.id, -1); });
+  chips.forEach(it => { if (!fit(it, small(it))) out.set(it.id, -1); });
   const late = of('marker').filter(it => !fit(it, 0, 1));
-  chips.forEach(it => { if (out.get(it.id) > 0 && free(box(it, 0), it.id)) put(it, 0); });
+  [...alerts.filter(it => it.chip), ...chips].forEach(it => { if (out.get(it.id) > 0 && free(box(it, 0), it.id)) put(it, 0); });
   late.forEach(it => { if (!fit(it, 1)) out.set(it.id, -1); });
   return out;
 }
 
 /**
- * inChip(m, chipRooms, focus) -> true when marker m is counted in its room's chip instead of
- * drawn alone: its room has a chip and is not the focused one, and it is neither 'alert' nor 'on'.
+ * inChip(m, chip, focus) -> true when marker m is counted in its room's chip instead of drawn
+ * alone. chip is the setRoomChips entry of m's room, or null when that room shows no chip (the
+ * roof on). Its room must not be the focused one, and the marker either quiet (neither 'alert'
+ * nor 'on') or listed in the chip's ids; an active marker the chip does not count still shows.
  */
-export function inChip(m, chipRooms, focus) {
-  return !!m.room && chipRooms.has(m.room) && m.room !== focus && m.state !== 'alert' && m.state !== 'on';
+export function inChip(m, chip, focus) {
+  if (!chip || !m.room || chip.room !== m.room || m.room === focus) return false;
+  return (m.state !== 'alert' && m.state !== 'on') || (chip.ids || []).includes(m.id);
 }
 
 /**
@@ -533,14 +540,15 @@ export function inChip(m, chipRooms, focus) {
  *            stateText?, room?, look?: [dx, dz], role?, level?: 0..1, pulse?, warm? }
  *   label and stateText make the marker's accessible name. Markers take no pointer, so a drag
  *   that starts on one orbits; a tap on the canvas tests the shown markers' and chips' rectangles
- *   first. Every frame a collision pass (collide()) places alerts, then each chip compact (its
- *   first part, at its place, just above or just below), markers at full size, chips grown to full
- *   where there is room, the crowded markers as dots, and hides what is left; an alert never hides. Showing and hiding fade over 0.2 s.
- * setRoomChips([{ room, parts: [{ icon, text?, label?, state? }], state: 'idle'|'on'|'alert' }]):
+ *   first. Every frame a collision pass (collide()) places alerts (a chip in alert compact), then
+ *   each chip compact (its first part, at its place, just above or just below), markers at full
+ *   size, chips grown to full where there is room, the crowded markers as dots, and hides what is
+ *   left; an alert never hides. Showing and hiding fade over 0.2 s.
+ * setRoomChips([{ room, parts: [{ icon, text?, label?, state? }], state: 'idle'|'on'|'alert', ids?: [id] }]):
  *   one chip per house room (not a paved one), at the room's label in place of it, with the roof
- *   off only. A chipped room's markers that are neither 'on' nor 'alert' are counted in the chip
- *   instead of drawn (inChip()). Below 720 px a chip drops the room name, and one without parts
- *   hides. A tap on a chip calls onRoom(room).
+ *   off only. A chipped room's markers that are neither 'on' nor 'alert', and those in its ids,
+ *   are counted in the chip instead of drawn (inChip()). Below 720 px a chip keeps its parts and
+ *   drops the room name, and one without parts hides. A tap on a chip calls onRoom(room).
  * focusRoom(id | null): frames that room (0.6 s; at once under reduced motion), shows all its
  *   markers and selects its floor; null returns to the overview and leaves the camera. The card
  *   uses this; setSelection(id) marks a room's floor or a marker by id and is the viewer's.
@@ -1137,18 +1145,12 @@ export function mount(element, model, options = {}) {
     const roofOpen = Math.max(0, 1 - fade.cur * 1.6);
     // chips stand in for their rooms' quiet markers only while the roof is off
     const chipsOn = markerLayer.on && mode === 'open' && roofOpen > 0.02;
-    const chipRooms = chipsOn ? new Set(chips.keys()) : new Set();
+    // a chip off screen still stands in for its quiet markers, but not for the active ones it counts
+    const chipOf = room => {
+      const rec = chipsOn && room ? chips.get(room) : null;
+      return !rec ? null : rec.p ? rec.data : rec.quiet || (rec.quiet = { room });
+    };
     const narrow = width < BLOOM_MIN_WIDTH, items = [], shown = [];
-    for (const [id, rec] of markers) {
-      // an alert indoors shows through the roof, so a closed view never hides it
-      const m = rec.data, covered = isIndoor(m) && m.state !== 'alert';
-      const p = (markerLayer.on || m.state === 'alert') && !(covered && roofOpen <= 0.02) && !inChip(m, chipRooms, focus) ? toScreen(camera, m.pos, width, height, v) : null;
-      rec.fac = covered ? roofOpen : 1;
-      rec.p = p;
-      if (!p) continue;
-      if (!rec.size) measure(rec);
-      items.push({ id: `m:${id}`, kind: m.state === 'alert' ? 'alert' : 'marker', x: p.x, y: p.y, dist: camera.position.distanceTo(v.set(m.pos[0], m.pos[1], m.pos[2])), was: rec.level >= 0, sizes: [rec.size, DOT] });
-    }
     for (const [room, rec] of chips) {
       const parts = rec.data.parts || [];
       const p = chipsOn && room !== focus && !(narrow && !parts.length) ? toScreen(camera, labelPos[room], width, height, v) : null;
@@ -1158,8 +1160,18 @@ export function mount(element, model, options = {}) {
       if (!rec.size) measure(rec);
       // a crowded chip tries its first part alone, at its place, then just above, then just below
       const c = rec.compact, off = rec.size[1] + 6;
-      items.push({ id: `c:${room}`, kind: 'chip', x: p.x, y: p.y, dist: camera.position.distanceTo(labelPos[room]), was: rec.level >= 0, sizes: c ? [rec.size, c, [c[0], c[1], 0, -off], [c[0], c[1], 0, off]] : [rec.size] });
+      items.push({ id: `c:${room}`, kind: rec.data.state === 'alert' ? 'alert' : 'chip', chip: true, x: p.x, y: p.y, dist: camera.position.distanceTo(labelPos[room]), was: rec.level >= 0, sizes: c ? [rec.size, c, [c[0], c[1], 0, -off], [c[0], c[1], 0, off]] : [rec.size] });
       rec.offs = [0, 0, -off, off];
+    }
+    for (const [id, rec] of markers) {
+      // an alert indoors shows through the roof, so a closed view never hides it
+      const m = rec.data, covered = isIndoor(m) && m.state !== 'alert';
+      const p = (markerLayer.on || m.state === 'alert') && !(covered && roofOpen <= 0.02) && !inChip(m, chipOf(m.room), focus) ? toScreen(camera, m.pos, width, height, v) : null;
+      rec.fac = covered ? roofOpen : 1;
+      rec.p = p;
+      if (!p) continue;
+      if (!rec.size) measure(rec);
+      items.push({ id: `m:${id}`, kind: m.state === 'alert' ? 'alert' : 'marker', x: p.x, y: p.y, dist: camera.position.distanceTo(v.set(m.pos[0], m.pos[1], m.pos[2])), was: rec.level >= 0, sizes: [rec.size, DOT] });
     }
     const levels = collide(items);
     let fading = false;
@@ -1181,7 +1193,7 @@ export function mount(element, model, options = {}) {
     for (const [id, rec] of markers) apply(`m:${id}`, rec, 'dot');
     for (const [room, rec] of chips) apply(`c:${room}`, rec, 'compact');
     labels.forEach(l => {
-      const p = roofOpen < 0.02 || chipRooms.has(l.room) ? null : toScreen(camera, l.pos, width, height, v);
+      const p = roofOpen < 0.02 || chipOf(l.room) ? null : toScreen(camera, l.pos, width, height, v);
       place(l, l.el, p ? '' : 'none', Math.round(roofOpen * 80) / 100, p ? at(p) : '');
     });
     return fading;

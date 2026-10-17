@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 29;
+const HOUSE3D_VERSION = 30;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -161,26 +161,37 @@ export function toMarker(d, st) {
 }
 
 // roomChips(markers, rooms) -> the engine's setRoomChips list from toMarker's results: for
-// every house room (not a paved one, the carport) its temperature (a sensor's, else a climate
-// unit's), then what is going on there now, each with its icon and a count past one: motion,
-// lights on, open doors, the alarm armed or triggered. A room with none of these shows its name
-// alone. The chip is 'alert' with a door open or the alarm triggered, 'on' with motion or a light.
+// every house room (not a paved one, the carport) what is going on there now, each with its icon
+// and a count past one: motion, lights on, open doors, smoke alarms going off, the alarm armed or
+// triggered; and its temperature (a sensor's, else a climate unit's). Alert parts come first, then
+// 'on' ones, then the rest, so the compact chip (its first part) is the most urgent. A room with
+// none of these shows its name alone. The chip is 'alert' with a door open, smoke or the alarm
+// triggered, 'on' with motion or a light. ids are the markers counted in a part, which the engine
+// then draws in the chip instead of beside it (inChip()).
 export function roomChips(markers, rooms) {
   const domain = m => m.id.split('.')[0];
-  const count = (list, part, one, many) => {
-    if (list.length) part.push({ ...one, text: list.length > 1 ? String(list.length) : undefined, label: list.length > 1 ? many(list.length) : one.label });
-  };
+  const RANK = { alert: 0, on: 1 };
   return rooms.filter(r => r.floor !== 'paving').map(r => {
-    const ms = markers.filter(m => m.room === r.id), parts = [];
+    const ms = markers.filter(m => m.room === r.id), parts = [], ids = [];
+    const count = (list, one, many) => {
+      if (!list.length) return;
+      ids.push(...list.map(m => m.id));
+      parts.push({ ...one, text: list.length > 1 ? String(list.length) : undefined, label: list.length > 1 ? many(list.length) : one.label });
+    };
     const temp = ms.find(m => domain(m) === 'sensor' && m.value) || ms.find(m => domain(m) === 'climate' && m.value);
     if (temp) parts.push({ icon: 'climate', text: temp.value, label: `temperatuur ${temp.value}` });
-    count(ms.filter(m => m.icon === 'motion' && m.state === 'on'), parts, { icon: 'motion', state: 'on', label: 'liikumine' }, n => `liikumine, ${n} andurit`);
-    count(ms.filter(m => domain(m) === 'light' && m.state === 'on'), parts, { icon: 'light', state: 'on', label: 'valgus põleb' }, n => `${n} valgustit põleb`);
-    count(ms.filter(m => m.icon === 'door' && m.state === 'alert'), parts, { icon: 'door', state: 'alert', label: 'uks on lahti' }, n => `${n} ust on lahti`);
+    count(ms.filter(m => m.icon === 'motion' && m.state === 'on'), { icon: 'motion', state: 'on', label: 'liikumine' }, n => `liikumine, ${n} andurit`);
+    count(ms.filter(m => domain(m) === 'light' && m.state === 'on'), { icon: 'light', state: 'on', label: 'valgus põleb' }, n => `${n} valgustit põleb`);
+    count(ms.filter(m => m.icon === 'door' && m.state === 'alert'), { icon: 'door', state: 'alert', label: 'uks on lahti' }, n => `${n} ust on lahti`);
+    count(ms.filter(m => m.icon === 'smoke' && m.state === 'alert'), { icon: 'smoke', state: 'alert', label: 'suitsuandur annab häiret' }, n => `${n} suitsuandurit annab häiret`);
     const alarm = ms.filter(m => domain(m) === 'alarm_control_panel' && (m.state === 'on' || m.state === 'alert'));
-    if (alarm.length) parts.push(alarm.some(m => m.state === 'alert') ? { icon: 'alarm', state: 'alert', label: 'häire' } : { icon: 'alarm', label: 'valve on peal' });
+    if (alarm.length) {
+      ids.push(...alarm.map(m => m.id));
+      parts.push(alarm.some(m => m.state === 'alert') ? { icon: 'alarm', state: 'alert', label: 'häire' } : { icon: 'alarm', label: 'valve on peal' });
+    }
+    parts.sort((p, q) => (RANK[p.state] ?? 2) - (RANK[q.state] ?? 2));
     const state = parts.some(q => q.state === 'alert') ? 'alert' : parts.some(q => q.state === 'on') ? 'on' : 'idle';
-    return { room: r.id, parts, state };
+    return { room: r.id, parts, state, ids };
   });
 }
 

@@ -842,19 +842,33 @@ test('collide: on a tie the one shown last frame keeps its place', () => {
   assert.equal(near.get('a'), 0);
 });
 
-test('inChip: quiet markers of a chipped room are counted, the rest show alone', () => {
-  const chips = new Set(['r1', 'r2']);
-  assert.equal(inChip({ room: 'r1', state: 'idle' }, chips, null), true);
-  assert.equal(inChip({ room: 'r1', state: 'off' }, chips, null), true);
-  assert.equal(inChip({ room: 'r1', state: 'on' }, chips, null), false, 'on shows alone');
-  assert.equal(inChip({ room: 'r1', state: 'alert' }, chips, null), false, 'alert shows alone');
-  assert.equal(inChip({ room: 'r1', state: 'idle' }, chips, 'r1'), false, 'the focused room shows all');
-  assert.equal(inChip({ room: 'carport', state: 'idle' }, chips, null), false, 'a room without a chip');
-  assert.equal(inChip({ state: 'idle' }, chips, null), false, 'outdoors');
-  assert.equal(inChip({ room: 'r1', state: 'idle' }, new Set(), null), false, 'no chips (the roof on)');
+test('inChip: quiet markers and the ones the chip counts are in it, the rest show alone', () => {
+  const chip = { room: 'r1', ids: ['binary_sensor.motion', 'binary_sensor.door'] };
+  assert.equal(inChip({ room: 'r1', state: 'idle' }, chip, null), true);
+  assert.equal(inChip({ room: 'r1', state: 'off' }, chip, null), true);
+  assert.equal(inChip({ id: 'binary_sensor.motion', room: 'r1', state: 'on' }, chip, null), true, 'an on motion the chip counts');
+  assert.equal(inChip({ id: 'binary_sensor.door', room: 'r1', state: 'alert' }, chip, null), true, 'an alert door the chip counts');
+  assert.equal(inChip({ id: 'climate.floor', room: 'r1', state: 'on' }, chip, null), false, 'an on climate unit it does not count shows alone');
+  assert.equal(inChip({ id: 'binary_sensor.door', room: 'r1', state: 'alert' }, chip, 'r1'), false, 'the focused room shows all');
+  assert.equal(inChip({ room: 'carport', state: 'idle' }, chip, null), false, 'another room\'s chip');
+  assert.equal(inChip({ state: 'idle' }, chip, null), false, 'outdoors');
+  assert.equal(inChip({ id: 'binary_sensor.door', room: 'r1', state: 'alert' }, null, null), false, 'no chip (the roof on)');
 });
 
-test('card: roomChips from the markers, temperature first, counts past one', () => {
+test('collide: a chip in alert never hides, sits compact over a crowd, grows where there is room', () => {
+  const chip = { id: 'c', kind: 'alert', chip: true, x: 50, y: 50, dist: 9, was: false, sizes: [[80, 28], [30, 28], [30, 28, 0, -34], [30, 28, 0, 34]] };
+  const crowd = [0, -34, 34].map((dy, i) => ({ id: `a${i}`, kind: 'alert', x: 50, y: 50 + dy, dist: 1, was: false, sizes: [[40, 32]] }));
+  const levels = collide([...crowd, chip]);
+  assert.equal(levels.get('c'), 1, 'compact, in its place, though nothing fits');
+  crowd.forEach(a => assert.equal(levels.get(a.id), 0));
+  const m = { id: 'm', kind: 'marker', x: 50, y: 50, dist: 1, was: false, sizes: [[32, 32], [10, 10]] };
+  const over = collide([m, chip]);
+  assert.equal(over.get('c'), 0, 'placed before a nearer marker, which then has no room');
+  assert.equal(over.get('m'), -1);
+  assert.equal(collide([chip]).get('c'), 0, 'alone it grows to full');
+});
+
+test('card: roomChips from the markers, alert and on parts first, counts past one', () => {
   const ms = [
     { id: 'sensor.a_temp', icon: 'sensor', room: 'r1', state: 'idle', value: '21,2°' },
     { id: 'climate.a_floor', icon: 'climate', room: 'r1', state: 'on', value: '23,0°' },
@@ -865,19 +879,28 @@ test('card: roomChips from the markers, temperature first, counts past one', () 
     { id: 'binary_sensor.b_door', icon: 'door', room: 'r2', state: 'alert' },
     { id: 'climate.c_floor', icon: 'climate', room: 'r3', state: 'on', value: '22,5°' },
     { id: 'water_heater.c_boiler', icon: 'climate', room: 'r3', state: 'idle', value: '48,0°' },
-    { id: 'binary_sensor.x_motion', icon: 'motion', room: 'carport', state: 'on' }
+    { id: 'binary_sensor.x_motion', icon: 'motion', room: 'carport', state: 'on' },
+    { id: 'binary_sensor.d_smoke', icon: 'smoke', room: 'r4', state: 'alert' },
+    { id: 'sensor.d_temp', icon: 'sensor', room: 'r4', state: 'idle', value: '20,0°' }
   ];
   const chips = card.roomChips(ms, model.rooms);
   assert.deepEqual(chips.map(c => c.room), ['r1', 'r2', 'r3', 'r4'], 'house rooms only, not the carport');
   const [r1, r2, r3, r4] = chips;
-  assert.deepEqual(r1.parts.map(q => [q.icon, q.text]), [['climate', '21,2°'], ['motion', undefined], ['light', '2']]);
+  assert.deepEqual(r1.parts.map(q => [q.icon, q.text]), [['motion', undefined], ['light', '2'], ['climate', '21,2°']], 'motion before the temperature');
   assert.equal(r1.state, 'on');
-  assert.equal(r1.parts[2].label, '2 valgustit põleb');
+  assert.equal(r1.parts[1].label, '2 valgustit põleb');
+  assert.deepEqual(r1.ids, ['binary_sensor.a_motion', 'light.a1', 'light.a2'], 'the counted markers, not the heating climate unit');
   assert.deepEqual(r2.parts.map(q => q.icon), ['door']);
   assert.equal(r2.state, 'alert');
+  assert.deepEqual(r2.ids, ['binary_sensor.b_door']);
   assert.deepEqual(r3.parts.map(q => q.text), ['22,5°'], 'a climate unit\'s, not the boiler\'s');
   assert.equal(r3.state, 'idle', 'heating alone is no activity');
-  assert.deepEqual(r4, { room: 'r4', parts: [], state: 'idle' });
+  assert.deepEqual(r3.ids, []);
+  assert.deepEqual(r4.parts.map(q => [q.icon, q.state, q.label]), [['smoke', 'alert', 'suitsuandur annab häiret'], ['climate', undefined, 'temperatuur 20,0°']]);
+  assert.equal(r4.state, 'alert');
+  assert.deepEqual(r4.ids, ['binary_sensor.d_smoke']);
+  const none = card.roomChips([], model.rooms).find(c => c.room === 'r4');
+  assert.deepEqual(none, { room: 'r4', parts: [], state: 'idle', ids: [] });
 });
 
 test('card: roomChips on the test house\'s own devices', () => {
