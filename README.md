@@ -4,7 +4,7 @@ The Home Assistant configuration of one house, public as a reference: the
 YAML packages, a generator for the dashboard, small tools for HA's API, and a
 3D view of the house that shows the devices in place.
 
-[![The 3D view of a made-up test house under Home Assistant's top bar, with device markers, the car parked under the carport and the surroundings](docs/house3d.png)](https://khe.ee/house3d/)
+[![The 3D view of a made-up courtyard house under Home Assistant's top bar, roof off, with room chips, device markers, the deck and pergola in the courtyard, the car parked under the carport and the surroundings](docs/house3d.png)](https://khe.ee/house3d/)
 
 **[Try the dashboard](https://khe.ee/house3d/)**: the house's own dashboard,
 made by the same generator, on a made-up test house with simulated devices
