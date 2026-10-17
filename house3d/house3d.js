@@ -60,7 +60,7 @@ import { RenderPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/R
 import { UnrealBloomPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/OutputPass.js';
 
-const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'car', 'future', 'fans'];
+const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'lights', 'car', 'future', 'fans'];
 const QUERY = new URL(import.meta.url).search;
 // a layer module that fails to load drops its layer, not the engine; the kit and the sun are required
 const [KIT, SUN, ...LOADED] = await Promise.allSettled(['kit', 'sun', ...LAYERS.map(id => `layers/${id}`)].map(p => import(`./scene/${p}.js${QUERY}`)));

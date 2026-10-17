@@ -8,10 +8,11 @@ has three decimals ending in an odd digit, so the fixture's own privacy scan can
 in the vendored three.js.
 
 A one-storey house of 10 x 8 m: a kitchen-living room on the west side with a glass door to the
-front garden and a floor window to the back deck, a front door clad like the walls, the hall, bathroom and bedroom on the east
-side, and a carport against its east wall, closed by two panel walls, that the car reaches through
-the sliding drive gate. The second garage roof is the canopy over the front door. The play area
-is in the back garden. The future items are 12 PV panels on the back roof, a charger in the
+front garden and a floor window to the back deck, a front door clad like the walls, the hall,
+bathroom and bedroom on the east side, and a carport against its east wall, closed by two panel
+walls, that the car reaches through the sliding drive gate. The second garage roof is the canopy
+over the front door. A ceiling light hangs under the carport roof and a wall light by the back
+deck. The play area is in the back garden. The future items are 12 PV panels on the back roof, a charger in the
 carport, a battery in the hall and a greenhouse and a hot tub in the back garden; only the first
 three have facts. The engine tests count the outer walls, the street wall's openings and the
 site's planters, steps and paving, so change those together with the tests.
@@ -96,6 +97,10 @@ model, never this file.
    { "rect": [8.3, 10.6, 9.8, 11.2], "y": [0, 0.6], "plant": "low", "finish": "cladding" }
   ],
   "steps": [{ "rect": [7.8, 0.5, 8.8, 0.9], "height": 0.115 }],
+  "lights": [
+   { "pos": [14.8, 2.6, 4.1], "kind": "ceiling" },
+   { "pos": [4.5, 2.0, 10.2], "kind": "wall", "face": [0, 1] }
+  ],
   "trees": [
    { "id": "t1", "kind": "apple", "pos": [3.5, -3], "height": 4, "crown": 3 },
    { "id": "t2", "kind": "birch", "pos": [20.5, 19], "height": 12, "crown": 5 },

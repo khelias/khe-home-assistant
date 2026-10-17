@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const E = new URL('../../house3d/', import.meta.url);
 const SNAPSHOT = new URL('./simple-snapshot.json', import.meta.url);
-const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'car', 'future', 'fans'];
+const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'lights', 'car', 'future', 'fans'];
 
 // kit.canvasTexture is the only thing under scene/ that touches the DOM
 globalThis.document = {
@@ -973,6 +973,29 @@ test('real style at night: a lit room\'s floor and windows glow, nothing by day'
   panes.forEach(p => assert.equal(p.material.emissiveIntensity, 0, 'by day nothing glows'));
   floors.forEach(f => assert.equal(f.material.emissiveIntensity, 0));
   assert.ok(Math.abs(of('r1')[0].material.opacity - 0.35) < 1e-9, 'the day glass as it was');
+});
+
+test('lights layer: a fixture, halo and pool per light, lit only at night, casting nothing', () => {
+  const { ctx, byId } = buildAll({ ...options, style: 'real' });
+  const L = byId.lights, of = part => L.group.children.filter(o => o.userData.part === part);
+  const n = model.site.lights.length;
+  assert.equal(n, 2);
+  assert.deepEqual(['fixture', 'halo', 'pool'].map(p => of(p).length), [n, n, n]);
+  L.group.traverse(o => assert.ok(!o.castShadow, 'casts nothing'));
+  const wall = of('fixture').find(o => o.geometry.type === 'BoxGeometry'), [x, , z] = model.site.lights[1].pos;
+  assert.ok(wall.position.z > z && Math.abs(wall.position.x - x) < 1e-9, 'a wall light sits out from the wall along its face');
+  of('pool').forEach(p => assert.ok(Math.abs(p.position.y - 0.14) < 1e-9, 'the pools lie over the decks and the step'));
+  const settle = () => { for (let i = 0; i < 60; i++) L.update(0.05, 0.5); };
+  settle();
+  [...of('halo'), ...of('pool')].forEach(o => assert.equal(o.material.opacity, 0, 'nothing by day'));
+  assert.equal(of('fixture')[0].material.emissiveIntensity, 0);
+  ctx.state.night = 1;
+  settle();
+  [...of('halo'), ...of('pool')].forEach(o => assert.ok(o.material.opacity > 0, 'lit at night'));
+  assert.ok(of('fixture')[0].material.emissiveIntensity > 1);
+  const simple = buildAll().byId.lights;
+  assert.equal(simple.group.children.length, 0, 'the simple style has no night');
+  assert.equal(BUILDERS[LAYERS.indexOf('lights')].default(makeCtx(options, { ...model, site: { ...model.site, lights: [] } }).ctx), null);
 });
 
 // a sun at alt degrees in the model's plane, from the horizontal direction [hx, hz]

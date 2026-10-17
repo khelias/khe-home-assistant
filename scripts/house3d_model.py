@@ -42,6 +42,7 @@ GATE_KINDS = ("sliding", "swing1", "swing2")
 ROOM_FLOORS = ("tile", "paving")  # the real style's floor finishes besides the default oak
 PLANTS = ("thuja", "low")
 PLANTER_FINISHES = ("frame", "cladding")
+LIGHT_KINDS = ("ceiling", "wall")  # site.lights: under a roof or soffit, or on a wall's face
 SLIDE_OFFSET = (
     0.12  # a sliding leaf runs this far to the lot side of the fence line, past its rails
 )
@@ -369,6 +370,23 @@ def validate(layers):
         rect(f"site.steps[{i}]", st.get("rect"))
         if not (_num(st.get("height")) and st["height"] > 0):
             bad(f"site.steps[{i}]: height is not a positive number")
+    lot = site.get("lot")
+    lot = lot if isinstance(lot, list) and len(lot) >= 3 and all(_point(p) for p in lot) else None
+    if not isinstance(site.get("lights", []), list):
+        bad("site.lights: not a list")
+    for i, li in enumerate(site.get("lights", []) if isinstance(site.get("lights"), list) else []):
+        where = f"site.lights[{i}]"
+        if not isinstance(li, dict):
+            bad(f"{where}: not a JSON object")
+            continue
+        if not _point(li.get("pos"), 3):
+            bad(f"{where}: pos must be [x, y, z]")
+        elif lot and not _inside([li["pos"][0], li["pos"][2]], lot):
+            bad(f"{where}: pos is outside the lot")
+        if li.get("kind") not in LIGHT_KINDS:
+            bad(f"{where}: kind {li.get('kind')!r} is not one of {', '.join(LIGHT_KINDS)}")
+        elif li["kind"] == "wall" and not (_point(li.get("face")) and math.hypot(*li["face"]) > 0):
+            bad(f"{where}: a wall light needs face [dx, dz], its outward direction")
     if "garage_roof" in site:
         gr = site["garage_roof"]
         if ("rect" in gr) == ("rects" in gr):

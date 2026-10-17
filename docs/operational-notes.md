@@ -188,8 +188,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   the marker overlay, roof mode, taps, the frame loop, the layer registry) and
   builds no geometry. `scene/kit.js` makes each mount's colours, materials and
   geometry helpers, and `scene/layers/` holds one module per scene layer
-  (ground, site, trees, gates, surroundings, pergola, building, car, future,
-  camera view fans); `scene/sun.js` holds the sun's position and direction, pure
+  (ground, site, trees, gates, surroundings, pergola, building, outdoor
+  lights, car, future, camera view fans); `scene/sun.js` holds the sun's position and direction, pure
   functions loaded like the kit. A new scene layer is a module there plus its
   line in the engine's `LAYERS` list; the contract (`build(ctx)` and its
   hooks) is in the engine's header. Modules under `scene/` load nothing
@@ -243,6 +243,16 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   no real-time lights, and by day nothing changes. The standalone viewer
   gets the bearing in whole degrees only (`orientation` in `model.json`) and
   puts the sun over the middle of Estonia, never over the house.
+- **Outdoor lights:** `site.lights` in the geometry layer lists the
+  luminaires on the building's lighting plan, `{ "pos": [x, y, z], "kind":
+  "ceiling" | "wall", "face"?: [dx, dz] }`, `face` the outward direction a
+  wall light needs. A luminaire is a fixed part of the building like a
+  window, so it is shareable geometry (ADR-001's split) and reaches the
+  standalone viewer. The `lights` layer draws each in the real style as a
+  small anthracite fixture that glows warm whenever it is dark, with a halo
+  and a pool of light on the ground (at 0.14 m, over the decks and the
+  step), all scaled by the night; no real-time light, no shadow. It is a view
+  effect of the dark, not the motion sensors: it follows no HA entity.
 - **Room chips:** with the roof off each house room (every room but the
   carport) shows one chip at its label: icons for open doors, smoke alarms
   going off and the alarm, motion now and lights on, with a count past one,
