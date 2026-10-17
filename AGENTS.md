@@ -117,7 +117,10 @@ model in its `SECURITY.md`.
 
 ## Working on Home Assistant
 
-HA is operated through its API: not the UI, not SSH.
+HA is operated through its API: not the UI, not SSH. Reads the agent makes
+directly. Writes (service calls, restarts and reloads, helper values,
+registry and dashboard changes) change the running house, so the agent asks
+the operator first; an approval covers that task only.
 
 - **Token:** a long-lived token in `~/.config/khe/ha-token` on the operator's
   machine, mode 600. Read it inside scripts; never print or commit it.
