@@ -229,9 +229,9 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   (any marker that warms its floor) glows: its floor and its windows take a
   warm emissive scaled by the light's level. Each pane is tagged at build
   with the room it looks into, and each room has its own glass; there are
-  no real-time lights, and by day nothing changes. The standalone viewer gets the bearing in whole degrees
-  only (`orientation` in `model.json`) and puts the sun over the middle of
-  Estonia, never over the house.
+  no real-time lights, and by day nothing changes. The standalone viewer
+  gets the bearing in whole degrees only (`orientation` in `model.json`) and
+  puts the sun over the middle of Estonia, never over the house.
 - **Room chips:** with the roof off each house room (every room but the
   carport) shows one chip at its label: the room's temperature (a sensor's,
   else a climate unit's), then icons for motion now, lights on, open doors
@@ -253,8 +253,9 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
 - **Markers and taps:** markers are drawn over the canvas but take no
   pointer, so a drag that starts on one orbits and never scrolls the page; a
   tap (no drag past 6 px) tests the shown markers' and chips' rectangles
-  first, nearest centre wins, then the rooms and the car. They stay buttons, so Tab and
-  Enter reach them, and their accessible name carries the state. The overlay
+  first, nearest centre wins, then the rooms and the car. Markers and chips
+  stay buttons, so Tab and Enter reach them, and a marker's accessible name
+  carries its state. The overlay
   is projected after the camera's matrices are refreshed each frame, so it
   does not trail the view. While a finger is down the view follows it 1:1;
   on release it coasts from the last 80 ms of movement (capped at 4 rad/s,
@@ -271,9 +272,9 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   picks the style; in the real style the Kellaaeg (quarter hours) and
   Kuupäev (days of this year) sliders scrub the sun, and Praegu returns to
   live, which moves on once a minute; the time is not stored. Below them the
-  switches for the devices' markers (an alert always shows), the camera view
-  fans, the trees, the car (off, an arrival parks it and the gate stays shut)
-  and the neighbours and street; that choice is kept per browser in
+  switches for the devices' markers and room chips (an alert always shows),
+  the camera view fans, the trees, the car (off, an arrival parks it and the
+  gate stays shut) and the neighbours and street; that choice is kept per browser in
   `localStorage` under `house3d-layers`. Escape closes any sheet, and so
   does a tap on empty canvas. Below 600 px of the card's own width (not the
   screen's) the bar moves to the bottom and a sheet opens just above it, so
