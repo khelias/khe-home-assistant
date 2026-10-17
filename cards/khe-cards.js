@@ -430,7 +430,8 @@ span.disc.pass{pointer-events:none}
 .state{font-size:14px;line-height:1.2;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 ha-card.modes{display:flex;flex-direction:column;gap:10px;padding:12px}
 .modes .head{display:flex;align-items:center;gap:10px;min-height:44px}
-.modes .head .body{position:static;padding:0;flex:1;min-width:0;min-height:44px;justify-content:center}
+.modes .head .body{position:static;padding:0;flex:1;min-width:0;min-height:44px;flex-direction:row;align-items:center;justify-content:flex-start;gap:10px}
+.txt{display:flex;flex-direction:column;min-width:0}
 .modes .disc{position:static;flex:0 0 auto;margin:-3px}
 .seg{display:grid;grid-auto-columns:minmax(0,1fr);grid-auto-flow:column;gap:4px;padding:4px;border-radius:14px;background:var(--inset)}
 .seg button{height:44px;border-radius:10px;border:0;background:transparent;font-size:15px;font-weight:500;text-align:center}
@@ -455,11 +456,13 @@ ha-card.modes{display:flex;flex-direction:column;gap:10px;padding:12px}
     this._actions = new Map([['body', tap], ['icon', iconTap]]);
     const pressed = (c.tap_action || {}).action === 'toggle' ? ` aria-pressed="${ts.lit}"` : '';
     const disc = `<i style="background:${discBg}">${icon(key, 20, iconColor)}</i>`;
-    // the disc is its own button only when its tap differs from the body's
-    // without an icon action of its own a tap on the disc passes through to the body; with one that is none it does nothing
-    const discEl = iconTap ? `<button type="button" class="disc" data-k="icon" aria-label="${esc(c.icon_label || name)}">${disc}</button>` : `<span class="disc${c.icon_tap_action ? '' : ' pass'}">${disc}</span>`;
-    const text = `<span class="name">${esc(name)}</span><span class="state">${esc(ts.text)}</span>`;
-    const body = tap ? `<button type="button" class="body" data-k="body"${pressed} aria-label="${esc(`${name}: ${ts.text}`)}">${text}</button>` : `<span class="body">${text}</span>`;
+    // The disc is its own button only when its tap differs from the body's. Without an icon action
+    // of its own a tap on it reaches the body (on a mode tile the disc sits inside the body); with
+    // one that is none it does nothing.
+    const passes = !c.icon_tap_action;
+    const discEl = iconTap ? `<button type="button" class="disc" data-k="icon" aria-label="${esc(c.icon_label || name)}">${disc}</button>` : `<span class="disc${passes ? ' pass' : ''}">${disc}</span>`;
+    const inner = `${c.modes && passes ? discEl : ''}<span class="txt"><span class="name">${esc(name)}</span><span class="state">${esc(ts.text)}</span></span>`;
+    const body = tap ? `<button type="button" class="body" data-k="body"${pressed} aria-label="${esc(`${name}: ${ts.text}`)}">${inner}</button>` : `<span class="body">${inner}</span>`;
     const cls = `${ts.lit ? 'lit' : ''}${ts.unavailable ? ' off' : ''}`;
     if (!c.modes) return `<ha-card class="${cls}">${body}${discEl}</ha-card>`;
     const current = stateOf(states, c.entity);
@@ -468,7 +471,7 @@ ha-card.modes{display:flex;flex-direction:column;gap:10px;padding:12px}
       this._actions.set(k, modeAction(c.entity, m, current));
       return `<button type="button" data-k="${k}" aria-pressed="${m.option === current}">${esc(m.name)}</button>`;
     }).join('');
-    return `<ha-card class="modes ${cls}"><div class="head">${discEl}${body}</div><div class="seg" role="group" aria-label="${esc(`${name}: režiim`)}">${seg}</div></ha-card>`;
+    return `<ha-card class="modes ${cls}"><div class="head">${passes ? '' : discEl}${body}</div><div class="seg" role="group" aria-label="${esc(`${name}: režiim`)}">${seg}</div></ha-card>`;
   }
 }
 
