@@ -763,7 +763,7 @@ test('card: importRetry tries again on a new URL after a failure', async () => {
   assert.notEqual(urls[0], urls[1]);
   assert.deepEqual(waits, [2000]);
   assert.equal(seen.length, 1);
-  assert.match(seen[0], /^house3d: loading \.\/house3d\.js\?v=1 failed/);
+  assert.match(seen[0], /^house3d: loading \.\/house3d\.js\?v=1 failed: fetch failed/);
   // two failures reject with the last error
   const quiet = console.error;
   console.error = () => {};
@@ -784,16 +784,49 @@ test('collide: accepted rectangles never overlap, a crowded marker becomes a dot
   }
   assert.ok([...levels.values()].includes(1), 'some drop to their small size');
   assert.ok([...levels.values()].includes(-1), 'some hide');
-  assert.equal(levels.get('m1'), 0, 'the nearest marker keeps its full size');
+  assert.ok(levels.get('m0') >= 0, 'the nearest chip keeps at least its compact form');
 });
 
-test('collide: an alert never hides, markers go before chips', () => {
+test('collide: an alert never hides, a chip keeps at least its compact form', () => {
   const at = (id, kind, dist) => ({ id, kind, x: 50, y: 50, dist, was: false, sizes: [[32, 32], [10, 10]] });
   const levels = collide([at('chip', 'chip', 1), at('m', 'marker', 5), at('a1', 'alert', 9), at('a2', 'alert', 8)]);
   assert.equal(levels.get('a1'), 0);
   assert.equal(levels.get('a2'), 0, 'two alerts on one spot both show');
   assert.equal(levels.get('m'), -1);
-  assert.equal(levels.get('chip'), -1, 'a chip yields to a marker even when nearer');
+  assert.equal(levels.get('chip'), -1, 'nothing has room under two alerts');
+  // without the alerts the chip shows, though farther, and the marker on its spot hides
+  const two = collide([at('chip', 'chip', 9), at('m', 'marker', 1)]);
+  assert.ok(two.get('chip') >= 0);
+  assert.equal(two.get('m'), -1);
+  // with room, a chip grows back to its full form after the markers are placed
+  const room = collide([{ id: 'c', kind: 'chip', x: 50, y: 50, dist: 9, was: false, sizes: [[80, 28], [30, 28]] }, { id: 'm', kind: 'marker', x: 200, y: 50, dist: 1, was: false, sizes: [[32, 32], [10, 10]] }]);
+  assert.deepEqual([room.get('c'), room.get('m')], [0, 0]);
+});
+
+test('collide: a chip beats a crowded marker\'s dot', () => {
+  // b does not fit at full size under a; its dot and the chip want the same spot
+  const levels = collide([
+    { id: 'a', kind: 'marker', x: 50, y: 20, dist: 5, was: false, sizes: [[32, 32], [10, 10]] },
+    { id: 'b', kind: 'marker', x: 50, y: 50, dist: 6, was: true, sizes: [[32, 32], [10, 10]] },
+    { id: 'c', kind: 'chip', x: 50, y: 55, dist: 9, was: false, sizes: [[60, 20], [24, 20]] }
+  ]);
+  assert.equal(levels.get('a'), 0);
+  assert.equal(levels.get('c'), 0, 'the chip is shown');
+  assert.equal(levels.get('b'), -1, 'the marker hides rather than take the chip\'s place as a dot');
+  // with no chip in the way the crowded marker still drops to a dot
+  const alone = collide([
+    { id: 'a', kind: 'marker', x: 50, y: 20, dist: 5, was: false, sizes: [[32, 32], [10, 10]] },
+    { id: 'b', kind: 'marker', x: 50, y: 50, dist: 6, was: false, sizes: [[32, 32], [10, 10]] }
+  ]);
+  assert.equal(alone.get('b'), 1);
+});
+
+test('collide: a size can sit off the centre, and is tested where it sits', () => {
+  const block = { id: 'm', kind: 'alert', x: 50, y: 50, dist: 1, was: false, sizes: [[40, 32]] };
+  const chip = { id: 'c', kind: 'chip', x: 50, y: 50, dist: 2, was: false, sizes: [[80, 28], [30, 28], [30, 28, 0, -34], [30, 28, 0, 34]] };
+  assert.equal(collide([block, chip]).get('c'), 2, 'the compact chip just above the alert');
+  const above = { id: 'a', kind: 'alert', x: 50, y: 10, dist: 1, was: false, sizes: [[40, 32]] };
+  assert.equal(collide([block, above, chip]).get('c'), 3, 'then just below');
 });
 
 test('collide: on a tie the one shown last frame keeps its place', () => {

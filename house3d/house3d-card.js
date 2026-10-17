@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 24;
+const HOUSE3D_VERSION = 25;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -16,7 +16,7 @@ export async function importRetry(load, urlFor, { tries = 2, delay = 2000, wait 
       return await load(url);
     } catch (e) {
       err = e;
-      console.error(`house3d: loading ${url} failed`, e);
+      console.error(`house3d: loading ${url} failed: ${(e && e.message) || e}`, e);
     }
   }
   throw err;

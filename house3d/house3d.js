@@ -370,27 +370,38 @@ export function coast(v, dt, tau = 0.35) {
 
 /**
  * collide(items, pad = 4) -> Map id -> level: the size index each item is drawn at, -1 hidden.
- * items: [{ id, kind: 'alert' | 'marker' | 'chip', x, y, dist, was, sizes: [[w, h], ...] }],
+ * items: [{ id, kind: 'alert' | 'marker' | 'chip', x, y, dist, was, sizes: [[w, h, dx?, dy?], ...] }],
  * centre in CSS pixels, dist from the camera, was whether it showed last frame, sizes from the
- * full one down. Greedy: alerts, then markers, then chips, each kind nearest first, and what
- * showed last frame counts as 15% nearer, so a tie keeps last frame's winner. An item takes its
- * first size whose rectangle, grown by pad, overlaps none placed before it; an alert always
- * takes its full size, so it never hides.
+ * full one down, each optionally moved off the centre by (dx, dy). A chip's sizes are its full
+ * form, then its compact form in one or more places; a marker's its full form, then a dot.
+ * Greedy, in passes: alerts at full size (an alert never hides, so it takes its place even over
+ * another); every chip at its first compact size that fits, so a room's summary survives a
+ * crowd; markers at full size; each placed chip grown back to full where that fits; the markers
+ * that did not fit at their smaller sizes; what is left hides. Within a pass nearest first, and
+ * what showed last frame counts as 15% nearer, so a tie keeps last frame's winner. A size fits
+ * when its rectangle, grown by pad, overlaps nothing placed.
  */
 export function collide(items, pad = 4) {
-  const rank = { alert: 0, marker: 1, chip: 2 };
   const score = it => it.dist * (it.was ? 0.85 : 1);
-  const order = items.slice().sort((a, b) => rank[a.kind] - rank[b.kind] || score(a) - score(b));
-  const placed = [], out = new Map();
-  const free = (x, y, w, h) => placed.every(r => Math.abs(x - r.x) * 2 >= w + r.w + 2 * pad || Math.abs(y - r.y) * 2 >= h + r.h + 2 * pad);
-  for (const it of order) {
-    let level = -1;
-    for (let i = 0; i < it.sizes.length; i++) {
-      if (it.kind === 'alert' || free(it.x, it.y, it.sizes[i][0], it.sizes[i][1])) { level = i; break; }
-    }
-    if (level >= 0) placed.push({ x: it.x, y: it.y, w: it.sizes[level][0], h: it.sizes[level][1] });
-    out.set(it.id, level);
-  }
+  const of = kind => items.filter(it => it.kind === kind).sort((a, b) => score(a) - score(b));
+  const placed = new Map(), out = new Map();
+  const box = (it, i) => { const [w, h, dx = 0, dy = 0] = it.sizes[i]; return { x: it.x + dx, y: it.y + dy, w, h }; };
+  const free = (b, self) => {
+    for (const [id, r] of placed) if (id !== self && Math.abs(b.x - r.x) * 2 < b.w + r.w + 2 * pad && Math.abs(b.y - r.y) * 2 < b.h + r.h + 2 * pad) return false;
+    return true;
+  };
+  const put = (it, level) => { placed.set(it.id, box(it, level)); out.set(it.id, level); };
+  // the first size in [from, to) that fits
+  const fit = (it, from, to = it.sizes.length) => {
+    for (let i = from; i < to; i++) if (free(box(it, i))) { put(it, i); return true; }
+    return false;
+  };
+  of('alert').forEach(it => put(it, 0));
+  const chips = of('chip');
+  chips.forEach(it => { if (!fit(it, it.sizes.length > 1 ? 1 : 0)) out.set(it.id, -1); });
+  const late = of('marker').filter(it => !fit(it, 0, 1));
+  chips.forEach(it => { if (out.get(it.id) > 0 && free(box(it, 0), it.id)) put(it, 0); });
+  late.forEach(it => { if (!fit(it, 1)) out.set(it.id, -1); });
   return out;
 }
 
@@ -462,9 +473,9 @@ export function inChip(m, chipRooms, focus) {
  *            stateText?, room?, look?: [dx, dz], role?, level?: 0..1, pulse?, warm? }
  *   label and stateText make the marker's accessible name. Markers take no pointer, so a drag
  *   that starts on one orbits; a tap on the canvas tests the shown markers' and chips' rectangles
- *   first. Every frame a collision pass (collide()) places alerts, then markers, then chips: a
- *   crowded marker shrinks to a dot, then hides, a crowded chip to its first part, then hides; an
- *   alert never hides. Showing and hiding fade over 0.2 s.
+ *   first. Every frame a collision pass (collide()) places alerts, then each chip compact (its
+ *   first part, at its place, just above or just below), markers at full size, chips grown to full
+ *   where there is room, the crowded markers as dots, and hides what is left; an alert never hides. Showing and hiding fade over 0.2 s.
  * setRoomChips([{ room, parts: [{ icon, text?, label?, state? }], state: 'idle'|'on'|'alert' }]):
  *   one chip per house room (not a paved one), at the room's label in place of it, with the roof
  *   off only. A chipped room's markers that are neither 'on' nor 'alert' are counted in the chip
@@ -762,7 +773,7 @@ export function mount(element, model, options = {}) {
   const shownRects = () => {
     const out = [];
     for (const [id, rec] of markers) if (rec.shown && rec.size && rec.op >= 0.5) { const [w, h] = rec.level === 1 ? DOT : rec.size; out.push({ id: `m:${id}`, x: rec.sx, y: rec.sy, w, h }); }
-    for (const [room, rec] of chips) if (rec.shown && rec.size && rec.op >= 0.5) { const [w, h] = rec.level === 1 ? rec.compact : rec.size; out.push({ id: `c:${room}`, x: rec.sx, y: rec.sy, w, h }); }
+    for (const [room, rec] of chips) if (rec.shown && rec.size && rec.op >= 0.5) { const [w, h] = rec.level >= 1 ? rec.compact : rec.size; out.push({ id: `c:${room}`, x: rec.sx, y: rec.sy, w, h }); }
     return out;
   };
 
@@ -822,7 +833,8 @@ export function mount(element, model, options = {}) {
   function setMode(m, instant) {
     mode = m === 'open' ? 'open' : 'roof';
     fade.to = mode === 'roof' ? 1 : 0;
-    if (instant || reduceMotion) fade.cur = fade.to;
+    // an instant switch skips the frames that ease the fade, which would mark the shadows stale
+    if (instant || reduceMotion) { fade.cur = fade.to; shadowsDirty(); }
     invalidate();
     if (options.onMode) options.onMode(mode);
   }
@@ -1075,7 +1087,10 @@ export function mount(element, model, options = {}) {
       rec.p = p;
       if (!p) continue;
       if (!rec.size) measure(rec);
-      items.push({ id: `c:${room}`, kind: 'chip', x: p.x, y: p.y, dist: camera.position.distanceTo(labelPos[room]), was: rec.level >= 0, sizes: rec.compact ? [rec.size, rec.compact] : [rec.size] });
+      // a crowded chip tries its first part alone, at its place, then just above, then just below
+      const c = rec.compact, off = rec.size[1] + 6;
+      items.push({ id: `c:${room}`, kind: 'chip', x: p.x, y: p.y, dist: camera.position.distanceTo(labelPos[room]), was: rec.level >= 0, sizes: c ? [rec.size, c, [c[0], c[1], 0, -off], [c[0], c[1], 0, off]] : [rec.size] });
+      rec.offs = [0, 0, -off, off];
     }
     const levels = collide(items);
     let fading = false;
@@ -1086,7 +1101,7 @@ export function mount(element, model, options = {}) {
       rec.alpha = goal > rec.alpha ? Math.min(goal, rec.alpha + step) : Math.max(goal, rec.alpha - step);
       if (rec.alpha !== goal) fading = true;
       // a hidden item keeps its last place and size while it fades out
-      if (level >= 0) { rec.level = level; rec.sx = rec.p.x; rec.sy = rec.p.y; rec.el.classList.toggle(small, level === 1); }
+      if (level >= 0) { rec.level = level; rec.sx = rec.p.x; rec.sy = rec.p.y + (rec.offs ? rec.offs[level] : 0); rec.el.classList.toggle(small, level >= 1); }
       else if (!rec.p || rec.alpha === 0) rec.level = -1;
       const op = Math.round(rec.alpha * rec.fac * 100) / 100;
       rec.shown = level >= 0;
@@ -1143,6 +1158,7 @@ export function mount(element, model, options = {}) {
     // the shadow pass ignores opacity, so the lift casts only while the roof is fully on
     if (real && liftCasts !== fade.cur > 0.99) {
       liftCasts = fade.cur > 0.99;
+      shadowsDirty();
       layers.forEach(({ L }) => {
         if (L.lift) L.lift.traverse(o => {
           if (!o.isMesh) return;

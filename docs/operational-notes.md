@@ -239,9 +239,12 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   and below 720 px the name is dropped and a quiet room shows nothing. Its
   devices that are neither on nor in alert are counted in the chip; the
   others (and everything outdoors or in the carport) show as markers. A
-  collision pass every frame keeps them apart: alerts first, then markers,
-  then chips, nearest first; a crowded marker shrinks to a dot, then hides,
-  a crowded chip to its first part, then hides, and an alert never hides.
+  collision pass every frame keeps them apart, nearest first in each round:
+  alerts (never hidden); then every chip as its first part alone, at its
+  place or just above or below it, so a room's summary survives a crowd;
+  then markers at full size; then each chip grown to full where there is
+  room; then the markers that did not fit as 10 px dots. Whatever still
+  does not fit hides.
   With the roof on, indoor markers hide unless in alert and there are no
   chips, as before.
 - **Focus:** a tap on a chip or a room floor opens the room's sheet and moves
@@ -286,9 +289,11 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   if that fails, once more after 2 s; then it shows "Proovi uuesti". Each
   try adds `&r=<n>` to the engine's URL, which its `scene/` modules take
   too, since a failed module URL stays failed in the browser until a
-  reload. The vendored three.js URLs carry no query, so if the console's
-  `house3d: loading ... failed` points at a vendor file, a retry may meet
-  the same failure and only a reload helps.
+  reload. Each failure is logged as `house3d: loading <engine URL> failed:`
+  with the browser's own message, which often names only the engine; the
+  file that actually failed shows in the network panel. The vendored
+  three.js URLs carry no query, so when that file is a vendor one, a retry
+  may meet the same failure and only a reload helps.
 - **three.js updates** are manual, Renovate does not see the vendored copy:
   `scripts/house3d-vendor.sh <version>`, point the engine's imports at the new
   directory, bump the version, remove the old directory.
