@@ -46,7 +46,7 @@
 // ctx: THREE, kit, C (kit.C), model, options, style ('simple' | 'real'),
 //   frame { lotBox, wallBox, ext, E, lotCx, lotCz } (modelFrame),
 //   roof { fns, flat, under, topFn, gap }, ceiling, reduceMotion, state (read-only: mode,
-//   roofFade, hovered, selection), layer(id), screen(x, y, z) -> { x, y } | null, invalidate().
+//   roofFade, hovered, selection, night: 0 by day to 1 at night, the real style's only), layer(id), screen(x, y, z) -> { x, y } | null, invalidate().
 //   build() and the first setOn() run before the loop exists: they must not call invalidate()
 //   or screen().
 // The core puts each layer's group and lift under a wrapper group, and switching a layer sets
@@ -79,6 +79,10 @@ const FOCUS_SPAN = 7; // metres: the least a focused room's framing spans
 const SKY = { day: '#a9c4dc', dusk: '#e8b98a', night: '#0b1430' };
 const DUSK_ALT = 8;
 const LOW_SUN = '#ffcf9e';
+// the real style at night: a cool moon from high in the south-west and a cool sky light, so
+// walls, roofs and fences read as silhouettes; tuned by eye on an October evening
+const MOON = { color: '#a9bcff', intensity: 0.55, dir: [-0.45, 0.75, 0.5] };
+const NIGHT_SKY = { sky: '#7d90c8', ground: '#3a4152', intensity: 0.55 };
 // without a place the real style lights the street side from the left, like an afternoon sun
 const FIXED_SUN = [-0.62, 0.62, -0.48];
 
@@ -529,13 +533,14 @@ export function mount(element, model, options = {}) {
   controls.screenSpacePanning = false;
 
   /* ---------- layers ---------- */
-  let mode = 'roof', sel = null, hovered = null;
+  let mode = 'roof', sel = null, hovered = null, night = 0;
   const fade = { cur: 1, to: 1 };
   const state = {
     get mode() { return mode; },
     get roofFade() { return fade.cur; },
     get hovered() { return hovered; },
-    get selection() { return sel; }
+    get selection() { return sel; },
+    get night() { return night; }
   };
   const screenV = new THREE.Vector3();
   const screen = (x, y, z) => toScreen(camera, [x, y, z], width, height, screenV);
@@ -599,11 +604,11 @@ export function mount(element, model, options = {}) {
   const bloomOn = () => !real && options.bloom !== false && width >= BLOOM_MIN_WIDTH;
 
   /* ---------- the real style's sun, sky and shadows ---------- */
-  let sun = null, hemi = null, glow = null, sunPlace = null, sunTime = null, sunTimer = 0, liftCasts = true;
+  let sun = null, hemi = null, moon = null, glow = null, sunPlace = null, sunTime = null, sunTimer = 0, liftCasts = true;
   // towards the sun, unit length, at every altitude (sunV is set only while it is up)
   const sunDir = new THREE.Vector3();
   const sky = Object.fromEntries(Object.entries(SKY).map(([k, v]) => [k, new THREE.Color(v)]));
-  const lowSun = new THREE.Color(LOW_SUN);
+  const lowSun = new THREE.Color(LOW_SUN), nightSky = new THREE.Color(NIGHT_SKY.sky), nightGround = new THREE.Color(NIGHT_SKY.ground);
   if (real) {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -623,7 +628,10 @@ export function mount(element, model, options = {}) {
     sun.shadow.radius = 3;
     sun.shadow.bias = -0.0005;
     sun.shadow.normalBias = 0.02; // the walls are DoubleSide, both faces go into the map
-    scene.add(hemi, sun, sun.target);
+    moon = new THREE.DirectionalLight(MOON.color, 0);
+    moon.position.set(...MOON.dir);
+    moon.visible = false;
+    scene.add(hemi, sun, sun.target, moon);
     // the sun's disc and glow, far out along its direction; buildings and trees hide it through
     // the depth test
     glow = new THREE.Sprite(kit.keep(new THREE.SpriteMaterial({
@@ -684,7 +692,13 @@ export function mount(element, model, options = {}) {
     sun.visible = alt > 0;
     sun.intensity = 1 + 2 * high;
     sun.color.set('#ffffff').lerp(lowSun, Math.max(0, 1 - alt / DUSK_ALT));
-    hemi.intensity = alt < 0 ? 0.15 : 0.5 + 1.9 * high;
+    // night ramps through dusk as the sky does
+    night = alt >= DUSK_ALT ? 0 : alt <= 0 ? 1 : 1 - alt / DUSK_ALT;
+    hemi.intensity = alt < 0 ? NIGHT_SKY.intensity : 0.5 + 1.9 * high;
+    hemi.color.set('#dfe8f0').lerp(nightSky, night);
+    hemi.groundColor.set('#9a9c8c').lerp(nightGround, night);
+    moon.visible = night > 0;
+    moon.intensity = MOON.intensity * night;
     sunDir.set(dir[0], dir[1], dir[2]).normalize();
     const g = sunGlow(alt);
     glow.visible = g.visible;

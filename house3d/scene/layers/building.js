@@ -7,13 +7,17 @@
 // reaches the lower walls. Its exterior walls also carry anthracite opening trims with lined
 // reveals and sill flashings, and corner boards on every outer and inner corner; the roofs have an
 // anthracite edge, the carport roof an anthracite fascia and soffit. A paved room's floor (the
-// carport) carries the paving's stones.
+// carport) carries the paving's stones. At night (ctx.state.night) a room with a light on
+// glows: its floor and its windows, each pane tagged with its room at build, take a warm
+// emissive scaled by the light's level; there are no real-time lights.
 const FRAME = 0.06, FRAME_D = 0.1; // real style: an opening's frame width and depth
 const BASE_H = 0.12; // real style: the dark strip along an exterior wall's foot
 // real style, read off photos: an opening's trim and a corner board, both standing PROUD off the
 // face, and a sill's metal flashing
 const TRIM = 0.1, CORNER = 0.12, PROUD = 0.025, REVEAL = 0.015;
 const FLASH_T = 0.03, FLASH_OUT = 0.06, FLASH_PAST = 0.03;
+// real style at night: the warm glow of a lit room's floor and windows, and how opaque a lit pane gets
+const GLOW = '#ffb45a', FLOOR_GLOW = 0.55, GLASS_GLOW = 1.4, LIT_GLASS = 0.8;
 
 /**
  * cornerBoards(faces, W, D) -> [{ wall, p, dir, from, to, filler? }]
@@ -69,13 +73,20 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   const rooms = model.rooms || [];
   const roomIds = new Set(rooms.map(r => r.id));
   const group = new THREE.Group(), lift = new THREE.Group();
-  let mH, mR, wallMats;
+  let mH, mR, wallMats, glassFor = () => null;
+  const roomGlass = new Map();
   if (real) {
     // walls and roofs are DoubleSide: a roof's remapped extrusion faces inwards
     const two = { side: THREE.DoubleSide }, fades = { ...two, transparent: true };
     const [front, back] = kit.boards();
     const clad = o => ({ front: kit.surface('cladding', { ...o, map: front }), back: kit.surface('cladding', { ...o, map: back }), edge: kit.surface('cladding', o) });
     const inner = kit.surface('interior', two), glass = kit.surface('glass');
+    // one glass per room, so a lit room's windows glow alone; panes in no room share the first
+    glassFor = room => {
+      if (!room) return glass;
+      if (!roomGlass.has(room)) roomGlass.set(room, kit.surface('glass'));
+      return roomGlass.get(room);
+    };
     const frame = kit.surface('frame'), panel = kit.surface('frame', two);
     const boarded = { ...clad(two), inner };
     mH = { furn: kit.surface('interior') };
@@ -125,8 +136,10 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
       const x0 = o.c - o.w / 2, x1 = o.c + o.w / 2, y0 = o.sill || 0, y1 = y0 + o.h;
       if (o.kind === 'door') bar(x0 + FRAME, x1 - FRAME, 0, y1 - FRAME, 0.05);
       else {
-        const p = new THREE.Mesh(new THREE.PlaneGeometry(o.w, o.h), m.glass);
+        const room = paneRoom(w, L, o.c, side);
+        const p = new THREE.Mesh(new THREE.PlaneGeometry(o.w, o.h), glassFor(room));
         p.position.set(o.c, y0 + o.h / 2, 0);
+        p.userData.pane = room;
         g.add(p);
         bar(x0 + FRAME, x1 - FRAME, y0, y0 + FRAME);
       }
@@ -162,6 +175,20 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
       if (a - from > 0.01) bar(from, a, 0, BASE_H, d).position.z = zc;
       from = Math.max(from, b);
     });
+  }
+
+  // the room a pane at c along wall w looks into: a point just inside the wall from the pane's
+  // centre, on the side away from the outer face (either side for a wall with rooms on both)
+  function paneRoom(w, L, c, side) {
+    const ux = (w.b[0] - w.a[0]) / L, uz = (w.b[1] - w.a[1]) / L, k = w.t / 2 + 0.3;
+    const mx = w.a[0] + ux * c, mz = w.a[1] + uz * c;
+    // local +z is (-uz, ux) on the plan
+    for (const s of side ? [-side] : [1, -1]) {
+      const x = mx - uz * k * s, z = mz + ux * k * s;
+      const r = rooms.find(q => q.rects.some(([x0, z0, x1, z1]) => x >= x0 && x <= x1 && z >= z0 && z <= z1));
+      if (r) return r.id;
+    }
+    return null;
   }
 
   // an extruded wall's first group holds both faces, the -z one first, then the +z one; split it
@@ -413,13 +440,22 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
 
   // the real style's light floors tint lighter, towards amber
   const TINT = real ? [[C.amber, 0.5], [C.line, 0.3], [C.sel, 0.45]] : [[C.warm, 0.85], [C.hover, 0.6], [C.sel, 0.7]];
-  let warm = new Set();
+  let warm = new Set(), lit = new Map();
+  const glowColor = new THREE.Color(GLOW);
+  if (real) {
+    floorMeshes.forEach(m => { m.material.emissive.copy(glowColor); m.material.emissiveIntensity = 0; m.userData.glow = 0; });
+    roomGlass.forEach(mt => { mt.emissive.copy(glowColor); mt.emissiveIntensity = 0; mt.userData.glow = 0; mt.userData.day = mt.opacity; });
+  }
   return {
     id: 'building',
     group,
     lift,
     markers(list) {
-      warm = new Set(list.filter(m => m.state === 'on' && m.warm !== false && roomIds.has(m.room)).map(m => m.room));
+      const on = list.filter(m => m.state === 'on' && m.warm !== false && roomIds.has(m.room));
+      warm = new Set(on.map(m => m.room));
+      // a room's brightest light sets its glow
+      lit = new Map();
+      on.forEach(m => lit.set(m.room, Math.max(lit.get(m.room) || 0, m.level ?? 1)));
     },
     // the floors take taps only with the roof off
     hit(ray) {
@@ -438,6 +474,18 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
         });
         m.material.color.copy(u.base).lerp(TINT[0][0], u.warm * TINT[0][1]).lerp(TINT[1][0], u.hover * TINT[1][1]).lerp(TINT[2][0], u.sel * TINT[2][1]);
       });
+      if (!real) return moving;
+      const night = state.night || 0;
+      const ease = (u, goal, apply) => {
+        if (near(u.glow, goal)) u.glow = goal;
+        else { u.glow += (goal - u.glow) * k; moving = true; }
+        apply(u.glow);
+      };
+      floorMeshes.forEach(m => ease(m.userData, (lit.get(m.userData.room) || 0) * night, g => { m.material.emissiveIntensity = g * FLOOR_GLOW; }));
+      roomGlass.forEach((mt, room) => ease(mt.userData, (lit.get(room) || 0) * night, g => {
+        mt.emissiveIntensity = g * GLASS_GLOW;
+        mt.opacity = mt.userData.day + (LIT_GLASS - mt.userData.day) * Math.min(1, g);
+      }));
       return moving;
     }
   };

@@ -47,7 +47,7 @@ function makeCtx(opts = options, m = model) {
   const byId = {};
   const ctx = {
     THREE, kit, C: kit.C, model: m, options: opts, style, reduceMotion: false,
-    state: { mode: 'roof', roofFade: 1, hovered: null, selection: null },
+    state: { mode: 'roof', roofFade: 1, hovered: null, selection: null, night: 0 },
     screen: () => null,
     frame, roof,
     ceiling: m.ceiling,
@@ -850,4 +850,31 @@ test('card: roomChips on the test house\'s own devices', () => {
   const ms = model.devices.map(d => card.toMarker(d, d.type === 'motion' ? { state: 'on' } : undefined));
   const r1 = card.roomChips(ms, model.rooms).find(c => c.room === 'r1');
   assert.equal(r1.parts.find(q => q.icon === 'motion').text, '2', 'the kitchen and the living room sensors');
+});
+
+test('real style at night: a lit room\'s floor and windows glow, nothing by day', () => {
+  const { ctx, byId } = buildAll({ ...options, style: 'real' });
+  const L = byId.building;
+  const panes = [], floors = [];
+  L.group.traverse(o => {
+    if (o.isMesh && 'pane' in o.userData) panes.push(o);
+    if (o.isMesh && o.userData.room && o.userData.base) floors.push(o);
+  });
+  const of = room => panes.filter(p => p.userData.pane === room);
+  assert.ok(of('r1').length >= 3 && of('r2').length >= 1, 'panes tagged with the room they look into');
+  assert.notEqual(of('r1')[0].material, of('r2')[0].material, 'a glass per room');
+  const light = { id: 'light.x', pos: [4, 2, 6], icon: 'light', room: 'r1', state: 'on', level: 0.8 };
+  L.markers([light]);
+  const settle = () => { for (let i = 0; i < 40; i++) L.update(0.05, 0.5); };
+  ctx.state.night = 1;
+  settle();
+  assert.ok(of('r1')[0].material.emissiveIntensity > 0.5, 'the lit room\'s windows glow');
+  assert.equal(of('r2')[0].material.emissiveIntensity, 0, 'another room\'s stay dark');
+  assert.ok(floors.find(f => f.userData.room === 'r1').material.emissiveIntensity > 0, 'and its floor');
+  assert.equal(floors.find(f => f.userData.room === 'r2').material.emissiveIntensity, 0);
+  ctx.state.night = 0;
+  settle();
+  panes.forEach(p => assert.equal(p.material.emissiveIntensity, 0, 'by day nothing glows'));
+  floors.forEach(f => assert.equal(f.material.emissiveIntensity, 0));
+  assert.ok(Math.abs(of('r1')[0].material.opacity - 0.35) < 1e-9, 'the day glass as it was');
 });

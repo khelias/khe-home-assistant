@@ -224,7 +224,12 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   to grid azimuths with the projection's convergence, 0.854 x (lon - 24)
   degrees. Without a location the real style uses a fixed afternoon sun. The
   sky follows the sun's altitude: day, dusk below 8 degrees, night below 0
-  with the sun off. The standalone viewer gets the bearing in whole degrees
+  with the sun off. Through dusk a cool moon and sky light come up, so the
+  walls, roofs and fences still read at night, and a room with a light on
+  (any marker that warms its floor) glows: its floor and its windows take a
+  warm emissive scaled by the light's level. Each pane is tagged at build
+  with the room it looks into, and each room has its own glass; there are
+  no real-time lights, and by day nothing changes. The standalone viewer gets the bearing in whole degrees
   only (`orientation` in `model.json`) and puts the sun over the middle of
   Estonia, never over the house.
 - **Room chips:** with the roof off each house room (every room but the
