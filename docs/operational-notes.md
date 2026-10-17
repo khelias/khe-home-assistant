@@ -188,8 +188,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   the marker overlay, roof mode, taps, the frame loop, the layer registry) and
   builds no geometry. `scene/kit.js` makes each mount's colours, materials and
   geometry helpers, and `scene/layers/` holds one module per scene layer
-  (ground, site, trees, gates, surroundings, pergola, building, car, camera
-  view fans); `scene/sun.js` holds the sun's position and direction, pure
+  (ground, site, trees, gates, surroundings, pergola, building, car, future,
+  camera view fans); `scene/sun.js` holds the sun's position and direction, pure
   functions loaded like the kit. A new scene layer is a module there plus its
   line in the engine's `LAYERS` list; the contract (`build(ctx)` and its
   hooks) is in the engine's header. Modules under `scene/` load nothing
@@ -279,8 +279,10 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   live, which moves on once a minute; the time is not stored. Below them the
   switches for the devices' markers and room chips (an alert always shows),
   the camera view fans, the trees, the car (off, an arrival parks it and the
-  gate stays shut) and the neighbours and street; that choice is kept per browser in
-  `localStorage` under `house3d-layers`. Escape closes any sheet, and so
+  gate stays shut), the neighbours and street and Tulevik (below, off until
+  switched on); that choice is kept per browser in
+  `localStorage` under `house3d-layers`. In the simple style a slider time
+  kept from the real style shows a Praegu button there too. Escape closes any sheet, and so
   does a tap on empty canvas. Below 600 px of the card's own width (not the
   screen's) the bar moves to the bottom and a sheet opens just above it, so
   the bar's buttons stay in reach.
@@ -304,14 +306,35 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   `scripts/ha-dashboard.py` reads it (`HOUSE3D_MODEL`, else the sibling
   khe-meta checkout) and writes everything but the showcase layer into the
   card config, which lives only in HA's `.storage`.
-- **Placing devices and trees:** `scripts/house3d-place.py serve <model>`
+- **The future (Tulevik):** the optional `future` block of the private layer
+  holds things the house does not have yet: rooftop PV, an EV charger, a home
+  battery, a greenhouse and a hot tub (`kind`), each with a centre `pos`, a
+  quarter-turn `rot`, a `size` where the kind has one and up to six `facts`
+  lines written by hand from khe-meta's PV assessment, dated by `as_of`. The
+  `future` layer draws them see-through in one violet tint, casting no
+  shadow: the PV panels (1.72 x 1.13 m, the orientation that fits more) on
+  their roof's slab 5 cm up, in the lift, so they rise and fade with the
+  roof; the rest on the ground. A tap on one opens its sheet ("Plaan ·
+  hinnang <date>", the facts or "Numbreid pole veel lisatud."); the raised
+  panels take no tap, and an item standing in a house room takes one with
+  the roof off only, as the floors do. For PV the sheet adds a clear-sky
+  estimate at the sun's time (`pvNow()`: Meinel's beam irradiance, a tenth
+  more diffuse, 0.86 of it per kWp on the panel's tilt, never over 0.8 kW per
+  kWp as the assessment found at this slope), following the minute tick and
+  the sliders, and left out without a location. It is a ceiling, not a
+  forecast: no clouds, no shading. The sun is computed in both styles for
+  it (`onSun`, the view's `sun`). The standalone viewer never gets the
+  layer; the scan covers the items' positions.
+- **Placing devices, trees and future items:** `scripts/house3d-place.py serve <model>`
   serves `place.html` on 127.0.0.1 with the private layer from memory. Pick a
-  device or a tree, click or drag it into place on the plan, turn a camera
-  with the Suund slider, size a tree with the Kõrgus and Võra sliders, then
-  copy the changes, `{"devices": {...}, "trees": {...}}` with only the groups
+  device, a tree or a future item, click or drag it into place on the plan, turn a camera
+  with the Suund slider, size a tree with the Kõrgus and Võra sliders, turn a
+  future item with the Pööre buttons (its size and numbers stay hand edits), then
+  copy the changes, `{"devices": {...}, "trees": {...}, "future": {...}}` with only the groups
   that changed; `pbpaste | scripts/house3d-place.py apply <model> -` rewrites
-  those device lines in the private block (heights stay by type) and those
-  tree lines in the geometry block's `site.trees`. Trees are geometry, so they
+  those device lines in the private block (heights stay by type), those
+  tree lines in the geometry block's `site.trees` and those item lines in
+  the private block's future `items`, refusing a pv item moved off its roof. Trees are geometry, so they
   show in the standalone viewer too and the privacy scan does not cover them.
   Commit the model in khe-meta and rerun `ha-dashboard.py`. HA serves
   `place.html` too, but without a model it shows nothing.
@@ -319,8 +342,9 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   the real model before every commit that touches the directory, and before
   publishing anything built from the model. It fails on any device name, entity id,
   family room name or device coordinate, on the car's name, entity, path and
-  outline points, on the surroundings' building and road vertices and on the
-  georeference's origin. `tests/house3d/fixture-model.md` and the demo's
+  outline points, on the surroundings' building and road vertices, on the
+  future items' positions (pairs with a decimal) and on the georeference's
+  origin. `tests/house3d/fixture-model.md` and the demo's
   `model.json` have a `devices` key by design, so scanning them takes
   `--allow-devices-key FILE` for each; `--allow-device-name ENTITY FILE`
   lets a test house device name that matches a real one, judged generic,
@@ -337,7 +361,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   so `check.sh` scans the whole demo build and the test house with the real
   model when it is at hand.
 - **Tests:** `scripts/house3d-test.sh` runs the model and build tests
-  (`tests/house3d/test_house3d_model.py`), the engine tests in Node
+  (`tests/house3d/test_house3d_model.py`), the placement apply's tests
+  (`tests/house3d/test_house3d_place.py`), the engine tests in Node
   (`tests/house3d/engine.test.mjs`: every layer builds, the simple style
   matches `simple-snapshot.json`, failure isolation, the sun, the real
   style's materials and shadow flags, the scene import rule), the demo
