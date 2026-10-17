@@ -233,6 +233,13 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   on release it coasts from the last 80 ms of movement (capped at 4 rad/s,
   0.35 s decay, none under reduced motion); zoom keeps OrbitControls' own
   damping.
+- **Framing:** the home view fits the house rooms (every room but a paved
+  one, so not the carport) with the roofs' overhang, ground to roof top,
+  with 12% of the view clear on each side at the card's aspect, from the
+  street side, higher on a portrait screen. A resize (the HA card's own fit,
+  a phone turned) frames it again until the user has moved the camera: a
+  drag or pinch that changed it, or a wheel zoom, not a mere tap. A remount
+  with a kept view counts as moved; Lähtesta vaade frames anew.
 - **Kihid:** the card's layers button opens a sheet. Its first row, Stiil,
   picks the style; in the real style the Kellaaeg (quarter hours) and
   Kuupäev (days of this year) sliders scrub the sun, and Praegu returns to

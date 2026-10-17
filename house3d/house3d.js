@@ -154,7 +154,7 @@ export function modelFrame(model) {
   const under = id => x => fns[id](x) - ROOF_GAP;
   const topFn = top => (typeof top === 'string' ? under(top) : flat(top));
 
-  // framing follows the lot, the buildings set the orbit target
+  // the lot sets the scale, the fog and the shadow box; homeBox() frames the home view
   const bbox = pts => pts.reduce((b, [x, z]) => [Math.min(b[0], x), Math.min(b[1], z), Math.max(b[2], x), Math.max(b[3], z)], [Infinity, Infinity, -Infinity, -Infinity]);
   const lotBox = bbox(site.lot && site.lot.length ? site.lot : (model.walls || []).flatMap(w => [w.a, w.b]));
   const wallBox = bbox((model.walls || []).flatMap(w => [w.a, w.b]));
@@ -204,6 +204,74 @@ export function guardLayer(L, off) {
     for (const [k, d] of Object.entries(Object.getOwnPropertyDescriptors(L.api))) if (typeof d.value === 'function') wrap(L.api, k, undefined);
   }
   return L;
+}
+
+/**
+ * homeBox(model) -> [x0, z0, x1, z1, top]: the plan box of the house rooms (every room but a
+ * paved one, the carport, as the building layer's inRoom() decides; the walls' box without
+ * rooms) with the roofs' overhang, and the height of the highest roof or the ceiling.
+ */
+export function homeBox(model) {
+  const rects = (model.rooms || []).filter(r => r.floor !== 'paving').flatMap(r => r.rects);
+  const pts = (rects.length ? rects.flatMap(([x0, z0, x1, z1]) => [[x0, z0], [x1, z1]]) : (model.walls || []).flatMap(w => [w.a, w.b]))
+    .concat(Object.values(model.roofs || {}).flatMap(r => r.outline || []));
+  const b = pts.reduce((a, [x, z]) => [Math.min(a[0], x), Math.min(a[1], z), Math.max(a[2], x), Math.max(a[3], z)], [Infinity, Infinity, -Infinity, -Infinity]);
+  const top = Math.max(model.ceiling || 0, ...Object.values(model.roofs || {}).map(r => r.high_y + (r.thick || 0)));
+  return [...b, top || 3];
+}
+
+/**
+ * homeDir(aspect) -> the unit vector from the orbit target to the home view's camera. The model's
+ * z runs away from the street, so the home view looks in from -z, the street side, 25 degrees
+ * round to the west, low like a passer-by; 40 degrees up on a portrait screen, where a lower view
+ * crops the house's sides.
+ */
+export function homeDir(aspect) {
+  const az = 25 * D2R, el = (aspect < 1 ? 40 : 27) * D2R;
+  return new THREE.Vector3(-Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el));
+}
+
+/**
+ * homeView(box, dir, aspect, fov, margin = 0.12) -> { target, distance }: the orbit target and the
+ * distance along dir (unit, target to camera) at which every corner of box (homeBox's, from the
+ * ground to its top) projects inside the viewport, margin of its width and height clear of each
+ * edge. The projected box is centred, and the target slid along the view line to 0.3 of the top.
+ */
+export function homeView(box, dir, aspect, fov, margin = 0.12) {
+  const [x0, z0, x1, z1, top] = box;
+  const corners = [];
+  for (const x of [x0, x1]) for (const y of [0, top]) for (const z of [z0, z1]) corners.push(new THREE.Vector3(x, y, z));
+  const cam = new THREE.PerspectiveCamera(fov, aspect, 0.01, 1e5), v = new THREE.Vector3();
+  const lift = top * 0.3, target = new THREE.Vector3((x0 + x1) / 2, lift, (z0 + z1) / 2);
+  const extent = d => {
+    cam.position.copy(target).addScaledVector(dir, d);
+    cam.lookAt(target);
+    cam.updateMatrixWorld();
+    const b = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const c of corners) {
+      v.copy(c).project(cam);
+      if (v.z >= 1 || v.z <= -1) return null;
+      b[0] = Math.min(b[0], v.x); b[1] = Math.min(b[1], v.y); b[2] = Math.max(b[2], v.x); b[3] = Math.max(b[3], v.y);
+    }
+    return b;
+  };
+  const lim = 1 - 2 * margin, fits = b => b && b[0] >= -lim && b[2] <= lim && b[1] >= -lim && b[3] <= lim;
+  const size = Math.hypot(x1 - x0, z1 - z0, top);
+  let d = size;
+  for (let pass = 0; pass < 4; pass++) {
+    let lo = size * 0.05, hi = size * 50;
+    for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (fits(extent(mid))) hi = mid; else lo = mid; }
+    d = hi;
+    const b = extent(d), cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+    if (Math.abs(cx) < 1e-3 && Math.abs(cy) < 1e-3) break;
+    // move the target by the projected box's offset in the camera's plane, then back along the
+    // view line (which changes nothing on screen) to the lift height
+    const halfH = d * Math.tan((fov * D2R) / 2), halfW = halfH * aspect;
+    target.addScaledVector(v.setFromMatrixColumn(cam.matrixWorld, 0), cx * halfW);
+    target.addScaledVector(v.setFromMatrixColumn(cam.matrixWorld, 1), cy * halfH);
+    target.addScaledVector(dir, (lift - target.y) / dir.y);
+  }
+  return { target, distance: d };
 }
 
 /**
@@ -380,17 +448,9 @@ export function mount(element, model, options = {}) {
   const rooms = model.rooms || [];
   const roomById = Object.fromEntries(rooms.map(r => [r.id, r]));
   const { roof, frame: modelBox } = modelFrame(model);
-  const { wallBox, ext, E } = modelBox;
-  // the model's z runs away from the street, so the home view looks in from -z, the street side,
-  // 25 degrees round to the west, low like a passer-by (40 degrees up on a portrait screen, where a
-  // lower view crops the house's sides); the target leans towards the street to centre the house
-  const viewDir = (azDeg, elDeg) => {
-    const az = azDeg * D2R, el = elDeg * D2R;
-    return new THREE.Vector3(-Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el));
-  };
-  const HOME_DIR = viewDir(25, 27);
-  const PORTRAIT_DIR = viewDir(25, 40);
-  const HOME_TARGET = new THREE.Vector3((wallBox[0] + wallBox[2]) / 2, 0.3, (wallBox[1] + wallBox[3]) / 2 - 0.07 * ext);
+  const { ext, E } = modelBox;
+  // the home view frames the house rooms, not the lot or the carport
+  const HOUSE_BOX = homeBox(model);
 
   const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 300 * E);
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -730,15 +790,26 @@ export function mount(element, model, options = {}) {
   renderer.domElement.addEventListener('pointerdown', onDown);
   renderer.domElement.addEventListener('pointerup', onUp);
   renderer.domElement.addEventListener('pointercancel', onRelease);
-  controls.addEventListener('change', () => { fitFog(); invalidate(); });
+  // a camera change under a finger or a wheel zoom is the user's own view: from then on a resize
+  // keeps it; 'start' alone fires on every tap and wheel event, so it does not count
+  let userMoved = false;
+  const onWheel = () => { userMoved = true; };
+  renderer.domElement.addEventListener('wheel', onWheel, { passive: true });
+  controls.addEventListener('change', () => { if (pointers.size) userMoved = true; fitFog(); invalidate(); });
   controls.addEventListener('start', () => invalidate());
 
   /* ---------- framing and size ---------- */
   let width = 1, height = 1, framed = false;
-  function homeDistance() {
-    const a = camera.aspect;
-    return (a >= 1 ? Math.max(46, 58 / a) : 42 / Math.pow(a, 1.05)) * E;
+  // the home view for the current aspect, computed once per aspect
+  let home = null;
+  function homeFor() {
+    if (!home || home.aspect !== camera.aspect) {
+      const dir = homeDir(camera.aspect), h = homeView(HOUSE_BOX, dir, camera.aspect, camera.fov);
+      home = { aspect: camera.aspect, dir, target: h.target, distance: Math.min(controls.maxDistance, Math.max(controls.minDistance, h.distance)) };
+    }
+    return home;
   }
+  const homeDistance = () => homeFor().distance;
   // the fog starts just past the orbit target, never nearer than from the home view: fixed to the
   // home distance, a zoom-out sank the house itself into it
   function fitFog() {
@@ -746,9 +817,13 @@ export function mount(element, model, options = {}) {
     scene.fog.near = d * 0.95;
     scene.fog.far = d * 2.2;
   }
+  // the home view anew for the current size; resizes reframe again until the user moves the camera
   function reset() {
-    controls.target.copy(HOME_TARGET);
-    camera.position.copy(HOME_TARGET).addScaledVector(camera.aspect < 1 ? PORTRAIT_DIR : HOME_DIR, homeDistance());
+    const h = homeFor();
+    spin = null;
+    userMoved = false;
+    controls.target.copy(h.target);
+    camera.position.copy(h.target).addScaledVector(h.dir, h.distance);
     controls.update();
     fitFog();
     invalidate();
@@ -758,6 +833,7 @@ export function mount(element, model, options = {}) {
   const startView = options.view && isVec(options.view.position, 3) && isVec(options.view.target, 3) ? options.view : null;
   function frameFirst() {
     if (!startView) return reset();
+    userMoved = true;
     controls.target.fromArray(startView.target);
     camera.position.fromArray(startView.position);
     controls.update();
@@ -765,8 +841,9 @@ export function mount(element, model, options = {}) {
     invalidate();
   }
   function resize() {
-    const w = Math.max(1, root.clientWidth), h = Math.max(1, root.clientHeight);
-    if (w === width && h === height) return;
+    // a hidden card measures 0 or 1: keep the last real size
+    const w = root.clientWidth, h = root.clientHeight;
+    if (w <= 1 || h <= 1 || (w === width && h === height)) return;
     width = w; height = h;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
@@ -780,8 +857,7 @@ export function mount(element, model, options = {}) {
         if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
       }
     }
-    // frame once, at the first real size: a later hide and show keeps the user's orbit
-    if (!framed && w > 1 && h > 1) { framed = true; frameFirst(); } else fitFog();
+    if (!framed) { framed = true; frameFirst(); } else if (!userMoved) reset(); else fitFog();
     invalidate();
   }
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => resize()) : null;
@@ -897,6 +973,7 @@ export function mount(element, model, options = {}) {
     renderer.domElement.removeEventListener('pointerdown', onDown);
     renderer.domElement.removeEventListener('pointerup', onUp);
     renderer.domElement.removeEventListener('pointercancel', onRelease);
+    renderer.domElement.removeEventListener('wheel', onWheel);
     controls.dispose();
     layers.forEach(({ L }) => { if (L.dispose) L.dispose(); });
     scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && !Array.isArray(o.material)) o.material.dispose(); });

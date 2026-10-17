@@ -24,7 +24,7 @@ globalThis.document = {
 const THREE = await import(new URL('vendor/three-0.186.1/build/three.module.js', E));
 const { createKit } = await import(new URL('scene/kit.js', E));
 const BUILDERS = await Promise.all(LAYERS.map(id => import(new URL(`scene/layers/${id}.js`, E))));
-const { modelFrame, buildLayer, guardLayer, syncCamera, toScreen, hitRect, releaseVelocity, coast } = await import(new URL('house3d.js', E));
+const { modelFrame, buildLayer, guardLayer, syncCamera, toScreen, hitRect, releaseVelocity, coast, homeBox, homeDir, homeView } = await import(new URL('house3d.js', E));
 const { OrbitControls } = await import(new URL('vendor/three-0.186.1/examples/jsm/controls/OrbitControls.js', E));
 const { sunPosition, gridBearing, sunDirection, sunGlow } = await import(new URL('scene/sun.js', E));
 const { cornerBoards } = await import(new URL('scene/layers/building.js', E));
@@ -722,4 +722,29 @@ test('coast: decays with a 0.35 s time constant, independent of the frame rate',
   let cur = v, total = 0;
   for (let i = 0; i < 600; i++) { const c = coast(cur, 1 / 60); total += c.d.az; cur = c.v; }
   assert.ok(Math.abs(total - 3 * 0.35) < 1e-6);
+});
+
+test('homeView: the house rooms fit with a margin at every aspect, the carport left out', () => {
+  const box = homeBox(model);
+  const house = model.rooms.filter(r => r.floor !== 'paving');
+  assert.deepEqual(box.slice(0, 4), [1.7, 1.7, 12.3, 10.3], 'the rooms and the roofs\' overhang, not the carport');
+  assert.ok(box[4] >= 4.6, 'up to the highest roof');
+  [0.46, 0.75, 1.33, 2.0].forEach(aspect => {
+    const dir = homeDir(aspect), { target, distance } = homeView(box, dir, aspect, 38);
+    const cam = new THREE.PerspectiveCamera(38, aspect, 0.1, 500);
+    cam.position.copy(target).addScaledVector(dir, distance);
+    cam.lookAt(target);
+    cam.updateMatrixWorld();
+    const W = 1000 * aspect, H = 1000;
+    let minX = Infinity, maxX = -Infinity;
+    house.forEach(r => r.rects.forEach(([x0, z0, x1, z1]) => [[x0, z0], [x1, z0], [x0, z1], [x1, z1]].forEach(([x, z]) => [0, box[4]].forEach(y => {
+      const p = toScreen(cam, [x, y, z], W, H);
+      assert.ok(p, `aspect ${aspect}: in front`);
+      assert.ok(p.x >= 0.04 * W && p.x <= 0.96 * W && p.y >= 0.04 * H && p.y <= 0.96 * H, `aspect ${aspect}: ${x}, ${y}, ${z} at ${p.x.toFixed(0)}, ${p.y.toFixed(0)}`);
+      minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+    }))));
+    // centred across, and not lost in the middle of the screen
+    assert.ok(Math.abs((minX + maxX) / 2 - W / 2) < 0.05 * W, `aspect ${aspect}: centred`);
+    assert.ok(maxX - minX > 0.4 * W || aspect >= 1.9, `aspect ${aspect}: fills the view`);
+  });
 });
