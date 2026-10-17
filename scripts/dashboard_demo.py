@@ -74,20 +74,22 @@ entry(dc.ALARMS[1][0], "alarm_control_panel.demo_garage", "armed_away", "Garaaž
 binary(dc.DOORS[0][0], "binary_sensor.test_front_door", "off", "Välisuks", "door")
 binary(dc.DOORS[1][0], "binary_sensor.test_terrace_door", "off", "Terrassi uks", "door")
 binary(dc.DOORS[2][0], "binary_sensor.demo_back_door", "off", "Tagauks", "door")
+# five of them are the test house's own, so the 3D view and the motion list agree; two are on,
+# so the 3D view shows motion now
 MOTION = [
-    ("binary_sensor.demo_kitchen_motion", "Köök", 25),
-    ("binary_sensor.demo_living_motion", "Elutuba", 4),
-    ("binary_sensor.test_hall_motion", "Esik", 12),
-    ("binary_sensor.test_carport_motion", "Varjualune", 95),
-    ("binary_sensor.demo_utility_motion", "Tehnoruum", 300),
-    ("binary_sensor.demo_bedroom_motion", "Magamistuba", 540),
-    ("binary_sensor.demo_room_a_motion", "Tuba 1", 180),
-    ("binary_sensor.demo_room_b_motion", "Tuba 2", 230),
-    ("binary_sensor.demo_office_motion", "Kabinet", 60),
+    ("binary_sensor.test_kitchen_motion", "Köök", 25, "off"),
+    ("binary_sensor.test_living_motion", "Elutuba", 1, "on"),
+    ("binary_sensor.test_hall_motion", "Esik", 0, "on"),
+    ("binary_sensor.test_carport_motion", "Varjualune", 95, "off"),
+    ("binary_sensor.test_bath_motion", "Vannituba", 300, "off"),
+    ("binary_sensor.test_bedroom_motion", "Magamistuba", 540, "off"),
+    ("binary_sensor.demo_room_a_motion", "Tuba 1", 180, "off"),
+    ("binary_sensor.demo_room_b_motion", "Tuba 2", 230, "off"),
+    ("binary_sensor.demo_office_motion", "Kabinet", 60, "off"),
 ]
 assert len(MOTION) == len(dc.SHARED + dc.PRIVATE)
-for real, (demo, name, ago) in zip(dc.SHARED + dc.PRIVATE, MOTION, strict=True):
-    entry(real, demo, "off", name, device_class="motion")
+for real, (demo, name, ago, state) in zip(dc.SHARED + dc.PRIVATE, MOTION, strict=True):
+    entry(real, demo, state, name, device_class="motion")
     CATALOGUE[real]["ago"] = ago
 binary(dc.SMOKE, "binary_sensor.demo_smoke_group", "off", "Suitsuandur", "smoke")
 binary("binary_sensor.valissireen", "binary_sensor.demo_siren", "off", "Sireen", "sound")
