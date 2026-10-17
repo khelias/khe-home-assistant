@@ -171,7 +171,9 @@ on the select (`"entity": <select>`), so the picker is one tap away as before.
 ## The 3D house view (`house3d`)
 
 The code lives in `house3d/` (engine `house3d.js` and its `scene/` modules,
-card `house3d-card.js`, standalone `viewer.html`, vendored three.js). Deploy
+card `house3d-card.js`, standalone `viewer.html`, vendored three.js); why it
+is its own engine and not floor3d-card is
+[ADR-001](decisions/001-own-3d-engine.md). Deploy
 replaces `www/house3d/` in HA's config volume with it, so HA serves it as
 `/local/house3d/`, and a change arrives without a restart.
 

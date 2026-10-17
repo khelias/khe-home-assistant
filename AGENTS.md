@@ -9,6 +9,8 @@ This file holds rules and pointers; the reference lives in:
 - [README.md](README.md) - what the repo is, for people
 - [docs/operational-notes.md](docs/operational-notes.md) - per-integration
   quirks, measured behaviour and the 3D view
+- [docs/decisions/](docs/decisions/) - this repo's decisions, estate-style
+  ADRs (the estate's own are in khe-architecture)
 - [ROADMAP.md](ROADMAP.md) - house automation, near-term and the long form
 
 House documentation (HA rollout, dashboard layout, HVAC protocols, energy)
@@ -28,7 +30,8 @@ demo/              the public demo: the real dashboard's views on made-up
                    data, 3D first, on a simulated hass (sim.js); the sections
                    view and its cards in cards.js, charts.js, icons.js, the
                    page in demo.js and index.html; not deployed to HA
-docs/              operational notes, the README screenshot
+docs/              operational notes and the README screenshot
+  decisions/       ADRs: NNN-slug.md, numbered from 001
 house3d/           3D house view: engine (core house3d.js, scene/ layer
                    modules, kit and sun), HA card, standalone viewer,
                    placement page, vendored three.js
