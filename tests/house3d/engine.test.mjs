@@ -24,7 +24,7 @@ globalThis.document = {
 const THREE = await import(new URL('vendor/three-0.186.1/build/three.module.js', E));
 const { createKit } = await import(new URL('scene/kit.js', E));
 const BUILDERS = await Promise.all(LAYERS.map(id => import(new URL(`scene/layers/${id}.js`, E))));
-const { modelFrame, buildLayer, guardLayer, syncCamera, toScreen, hitRect, releaseVelocity, coast, homeBox, homeDir, homeView } = await import(new URL('house3d.js', E));
+const { modelFrame, buildLayer, guardLayer, syncCamera, toScreen, hitRect, releaseVelocity, coast, homeBox, homeDir, homeView, collide, inChip } = await import(new URL('house3d.js', E));
 const card = await import(new URL('house3d-card.js', E));
 const { OrbitControls } = await import(new URL('vendor/three-0.186.1/examples/jsm/controls/OrbitControls.js', E));
 const { sunPosition, gridBearing, sunDirection, sunGlow } = await import(new URL('scene/sun.js', E));
@@ -770,4 +770,84 @@ test('card: importRetry tries again on a new URL after a failure', async () => {
   try {
     await assert.rejects(card.importRetry(async () => { throw new Error('down'); }, n => `u${n}`, { wait: async () => {} }), /down/);
   } finally { console.error = quiet; }
+});
+
+test('collide: accepted rectangles never overlap, a crowded marker becomes a dot, then hides', () => {
+  // a 6 x 6 grid of 32 px markers 30 px apart: too close at full size, room for a dot
+  const items = [];
+  for (let i = 0; i < 36; i++) items.push({ id: `m${i}`, kind: i % 5 ? 'marker' : 'chip', x: 100 + (i % 6) * 30, y: 100 + Math.floor(i / 6) * 30, dist: 10 + i, was: false, sizes: i % 5 ? [[32, 32], [10, 10]] : [[80, 28], [30, 28]] });
+  const levels = collide(items);
+  const placed = items.filter(it => levels.get(it.id) >= 0).map(it => { const [w, h] = it.sizes[levels.get(it.id)]; return { x: it.x, y: it.y, w, h }; });
+  for (let a = 0; a < placed.length; a++) for (let b = a + 1; b < placed.length; b++) {
+    const p = placed[a], q = placed[b];
+    assert.ok(Math.abs(p.x - q.x) * 2 >= p.w + q.w + 8 || Math.abs(p.y - q.y) * 2 >= p.h + q.h + 8, `${a} and ${b} overlap`);
+  }
+  assert.ok([...levels.values()].includes(1), 'some drop to their small size');
+  assert.ok([...levels.values()].includes(-1), 'some hide');
+  assert.equal(levels.get('m1'), 0, 'the nearest marker keeps its full size');
+});
+
+test('collide: an alert never hides, markers go before chips', () => {
+  const at = (id, kind, dist) => ({ id, kind, x: 50, y: 50, dist, was: false, sizes: [[32, 32], [10, 10]] });
+  const levels = collide([at('chip', 'chip', 1), at('m', 'marker', 5), at('a1', 'alert', 9), at('a2', 'alert', 8)]);
+  assert.equal(levels.get('a1'), 0);
+  assert.equal(levels.get('a2'), 0, 'two alerts on one spot both show');
+  assert.equal(levels.get('m'), -1);
+  assert.equal(levels.get('chip'), -1, 'a chip yields to a marker even when nearer');
+});
+
+test('collide: on a tie the one shown last frame keeps its place', () => {
+  const pair = (wasA, wasB) => collide([
+    { id: 'a', kind: 'marker', x: 50, y: 50, dist: 10, was: wasA, sizes: [[32, 32]] },
+    { id: 'b', kind: 'marker', x: 60, y: 50, dist: 10, was: wasB, sizes: [[32, 32]] }
+  ]);
+  assert.deepEqual([pair(false, true).get('a'), pair(false, true).get('b')], [-1, 0]);
+  assert.deepEqual([pair(true, false).get('a'), pair(true, false).get('b')], [0, -1]);
+  // a clearly nearer newcomer still wins
+  const near = collide([{ id: 'a', kind: 'marker', x: 50, y: 50, dist: 5, was: false, sizes: [[32, 32]] }, { id: 'b', kind: 'marker', x: 60, y: 50, dist: 10, was: true, sizes: [[32, 32]] }]);
+  assert.equal(near.get('a'), 0);
+});
+
+test('inChip: quiet markers of a chipped room are counted, the rest show alone', () => {
+  const chips = new Set(['r1', 'r2']);
+  assert.equal(inChip({ room: 'r1', state: 'idle' }, chips, null), true);
+  assert.equal(inChip({ room: 'r1', state: 'off' }, chips, null), true);
+  assert.equal(inChip({ room: 'r1', state: 'on' }, chips, null), false, 'on shows alone');
+  assert.equal(inChip({ room: 'r1', state: 'alert' }, chips, null), false, 'alert shows alone');
+  assert.equal(inChip({ room: 'r1', state: 'idle' }, chips, 'r1'), false, 'the focused room shows all');
+  assert.equal(inChip({ room: 'carport', state: 'idle' }, chips, null), false, 'a room without a chip');
+  assert.equal(inChip({ state: 'idle' }, chips, null), false, 'outdoors');
+  assert.equal(inChip({ room: 'r1', state: 'idle' }, new Set(), null), false, 'no chips (the roof on)');
+});
+
+test('card: roomChips from the markers, temperature first, counts past one', () => {
+  const ms = [
+    { id: 'sensor.a_temp', icon: 'sensor', room: 'r1', state: 'idle', value: '21,2°' },
+    { id: 'climate.a_floor', icon: 'climate', room: 'r1', state: 'on', value: '23,0°' },
+    { id: 'light.a1', icon: 'light', room: 'r1', state: 'on' },
+    { id: 'light.a2', icon: 'light', room: 'r1', state: 'on' },
+    { id: 'light.a3', icon: 'light', room: 'r1', state: 'idle' },
+    { id: 'binary_sensor.a_motion', icon: 'motion', room: 'r1', state: 'on' },
+    { id: 'binary_sensor.b_door', icon: 'door', room: 'r2', state: 'alert' },
+    { id: 'climate.c_floor', icon: 'climate', room: 'r3', state: 'on', value: '22,5°' },
+    { id: 'water_heater.c_boiler', icon: 'climate', room: 'r3', state: 'idle', value: '48,0°' },
+    { id: 'binary_sensor.x_motion', icon: 'motion', room: 'carport', state: 'on' }
+  ];
+  const chips = card.roomChips(ms, model.rooms);
+  assert.deepEqual(chips.map(c => c.room), ['r1', 'r2', 'r3', 'r4'], 'house rooms only, not the carport');
+  const [r1, r2, r3, r4] = chips;
+  assert.deepEqual(r1.parts.map(q => [q.icon, q.text]), [['climate', '21,2°'], ['motion', undefined], ['light', '2']]);
+  assert.equal(r1.state, 'on');
+  assert.equal(r1.parts[2].label, '2 valgustit põleb');
+  assert.deepEqual(r2.parts.map(q => q.icon), ['door']);
+  assert.equal(r2.state, 'alert');
+  assert.deepEqual(r3.parts.map(q => q.text), ['22,5°'], 'a climate unit\'s, not the boiler\'s');
+  assert.equal(r3.state, 'idle', 'heating alone is no activity');
+  assert.deepEqual(r4, { room: 'r4', parts: [], state: 'idle' });
+});
+
+test('card: roomChips on the test house\'s own devices', () => {
+  const ms = model.devices.map(d => card.toMarker(d, d.type === 'motion' ? { state: 'on' } : undefined));
+  const r1 = card.roomChips(ms, model.rooms).find(c => c.room === 'r1');
+  assert.equal(r1.parts.find(q => q.icon === 'motion').text, '2', 'the kitchen and the living room sensors');
 });

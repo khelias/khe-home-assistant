@@ -74,6 +74,7 @@ const BUILDERS = LOADED.map((r, i) => {
 const D2R = Math.PI / 180;
 const ROOF_GAP = 0.06; // walls stop just under the roof so the two outlines do not z-fight
 const BLOOM_MIN_WIDTH = 720;
+const FOCUS_SPAN = 7; // metres: the least a focused room's framing spans
 // the real style's sky: day, blended to dusk below DUSK_ALT degrees of sun, night below 0
 const SKY = { day: '#a9c4dc', dusk: '#e8b98a', night: '#0b1430' };
 const DUSK_ALT = 8;
@@ -135,6 +136,24 @@ const STYLE = `
 .h3d-label { position: absolute; left: 0; top: 0; font: 500 10px/1 var(--h3d-mono); letter-spacing: 0.16em;
   text-transform: uppercase; color: var(--h3d-muted); white-space: nowrap; pointer-events: none; will-change: transform; }
 .h3d.h3d-narrow .h3d-label { display: none !important; }
+.h3d-marker.dot { width: 10px; min-width: 10px; height: 10px; padding: 0; border-radius: 5px; font-size: 0; gap: 0; }
+.h3d-marker.dot > * { display: none; }
+.h3d-marker.dot.pulse::after { inset: -4px; border-radius: 9px; }
+.h3d-chip { position: absolute; left: 0; top: 0; pointer-events: none; display: flex; align-items: center; gap: 7px;
+  height: 28px; padding: 0 9px; box-sizing: border-box; border-radius: 14px; white-space: nowrap; cursor: pointer;
+  border: 1px solid rgba(111, 227, 255, 0.28); background: rgba(8, 16, 36, 0.8); color: var(--h3d-line);
+  font: 500 11px/1 var(--h3d-mono); font-variant-numeric: tabular-nums; will-change: transform; transition: border-color .2s; }
+.h3d-chip .nm { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--h3d-muted); }
+.h3d-chip .pt { display: flex; align-items: center; gap: 3px; }
+.h3d-chip svg { width: 14px; height: 14px; flex: none; }
+.h3d-chip.on { border-color: var(--h3d-amber); }
+.h3d-chip.on .pt.on { color: var(--h3d-amber); }
+.h3d-chip.alert { border-color: var(--h3d-alert); }
+.h3d-chip.alert .pt.alert { color: var(--h3d-alert); }
+.h3d-chip.compact .nm, .h3d-chip.compact .pt ~ .pt { display: none; }
+.h3d-chip.hover { border-color: var(--h3d-ink); }
+.h3d-chip:focus-visible { outline: 2px solid var(--h3d-amber); outline-offset: 2px; }
+.h3d.h3d-narrow .h3d-chip .nm { display: none; }
 .h3d.h3d-real .h3d-label { color: #1d2636; }
 .h3d-fallback { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
   color: var(--h3d-muted); text-align: center; font: 14px/1.45 system-ui, sans-serif; }
@@ -346,8 +365,43 @@ export function coast(v, dt, tau = 0.35) {
 }
 
 /**
- * mount(element, model, options) -> { setMarkers, setMode, setSelection, setCar, setLayer, setSun, setTime,
- *                                     reset, resize, dispose, mode, carState, carScreen, layers, time, view }
+ * collide(items, pad = 4) -> Map id -> level: the size index each item is drawn at, -1 hidden.
+ * items: [{ id, kind: 'alert' | 'marker' | 'chip', x, y, dist, was, sizes: [[w, h], ...] }],
+ * centre in CSS pixels, dist from the camera, was whether it showed last frame, sizes from the
+ * full one down. Greedy: alerts, then markers, then chips, each kind nearest first, and what
+ * showed last frame counts as 15% nearer, so a tie keeps last frame's winner. An item takes its
+ * first size whose rectangle, grown by pad, overlaps none placed before it; an alert always
+ * takes its full size, so it never hides.
+ */
+export function collide(items, pad = 4) {
+  const rank = { alert: 0, marker: 1, chip: 2 };
+  const score = it => it.dist * (it.was ? 0.85 : 1);
+  const order = items.slice().sort((a, b) => rank[a.kind] - rank[b.kind] || score(a) - score(b));
+  const placed = [], out = new Map();
+  const free = (x, y, w, h) => placed.every(r => Math.abs(x - r.x) * 2 >= w + r.w + 2 * pad || Math.abs(y - r.y) * 2 >= h + r.h + 2 * pad);
+  for (const it of order) {
+    let level = -1;
+    for (let i = 0; i < it.sizes.length; i++) {
+      if (it.kind === 'alert' || free(it.x, it.y, it.sizes[i][0], it.sizes[i][1])) { level = i; break; }
+    }
+    if (level >= 0) placed.push({ x: it.x, y: it.y, w: it.sizes[level][0], h: it.sizes[level][1] });
+    out.set(it.id, level);
+  }
+  return out;
+}
+
+/**
+ * inChip(m, chipRooms, focus) -> true when marker m is counted in its room's chip instead of
+ * drawn alone: its room has a chip and is not the focused one, and it is neither 'alert' nor 'on'.
+ */
+export function inChip(m, chipRooms, focus) {
+  return !!m.room && chipRooms.has(m.room) && m.room !== focus && m.state !== 'alert' && m.state !== 'on';
+}
+
+/**
+ * mount(element, model, options) -> { setMarkers, setRoomChips, focusRoom, setMode, setSelection, setCar,
+ *                                     setLayer, setSun, setTime, reset, resize, dispose, mode, carState,
+ *                                     carScreen, layers, time, view }
  *
  * model: geometry + rooms layers (private and showcase are ignored). A wall with finish 'panel' is
  *   drawn in the real style as anthracite panel (the carport's walls and posts); a room's floor
@@ -403,7 +457,18 @@ export function coast(v, dt, tau = 0.35) {
  * markers: { id, pos: [x, y, z], icon, state: 'idle'|'on'|'alert'|'off', value?, label?,
  *            stateText?, room?, look?: [dx, dz], role?, level?: 0..1, pulse?, warm? }
  *   label and stateText make the marker's accessible name. Markers take no pointer, so a drag
- *   that starts on one orbits; a tap on the canvas tests the shown markers' rectangles first.
+ *   that starts on one orbits; a tap on the canvas tests the shown markers' and chips' rectangles
+ *   first. Every frame a collision pass (collide()) places alerts, then markers, then chips: a
+ *   crowded marker shrinks to a dot, then hides, a crowded chip to its first part, then hides; an
+ *   alert never hides. Showing and hiding fade over 0.2 s.
+ * setRoomChips([{ room, parts: [{ icon, text?, label?, state? }], state: 'idle'|'on'|'alert' }]):
+ *   one chip per house room (not a paved one), at the room's label in place of it, with the roof
+ *   off only. A chipped room's markers that are neither 'on' nor 'alert' are counted in the chip
+ *   instead of drawn (inChip()). Below 720 px a chip drops the room name, and one without parts
+ *   hides. A tap on a chip calls onRoom(room).
+ * focusRoom(id | null): frames that room (0.6 s; at once under reduced motion), shows all its
+ *   markers and selects its floor; null returns to the overview and leaves the camera. The card
+ *   uses this; setSelection(id) marks a room's floor or a marker by id and is the viewer's.
  *   A marker whose room is a house room shows only with the roof off, unless its state is
  *   'alert'; state 'on' warms that room's floor unless warm is false. role 'pergola-light' drives the pergola's LED glow.
  */
@@ -431,7 +496,7 @@ export function mount(element, model, options = {}) {
     msg.textContent = 'See seade ei toeta WebGL-i, mistõttu 3D-vaadet ei saa näidata.';
     stage.appendChild(msg);
     const noop = () => {};
-    return { failed: true, setMarkers: noop, setMode: noop, setSelection: noop, setCar: noop, setLayer: noop, reset: noop, resize: noop,
+    return { failed: true, setMarkers: noop, setRoomChips: noop, focusRoom: noop, setMode: noop, setSelection: noop, setCar: noop, setLayer: noop, reset: noop, resize: noop,
       setSun: noop, setTime: noop, dispose: () => root.remove(), mode: 'roof', carState: 'away', carScreen: null, layers: [], time: null, view: null };
   }
   const PR = Math.min(window.devicePixelRatio || 1, 2);
@@ -641,15 +706,19 @@ export function mount(element, model, options = {}) {
   }
 
   /* ---------- labels and markers ---------- */
+  const roomName = r => (options.labels && options.labels(r.id)) || r.name;
   const labels = rooms.map(r => {
     const el = document.createElement('div');
     el.className = 'h3d-label';
-    el.textContent = (options.labels && options.labels(r.id)) || r.name;
+    el.textContent = roomName(r);
     overlay.appendChild(el);
     const [x0, z0, x1, z1] = r.rects[0];
     const [lx, lz] = r.label || [(x0 + x1) / 2, (z0 + z1) / 2];
-    return { el, pos: new THREE.Vector3(lx, 0.05, lz), disp: '', op: -1, tf: '' };
+    return { room: r.id, el, pos: new THREE.Vector3(lx, 0.05, lz), disp: '', op: -1, tf: '' };
   });
+  const labelPos = Object.fromEntries(labels.map(l => [l.room, l.pos]));
+  // the house rooms: every room but a paved one (the carport), as homeBox() frames them
+  const houseRooms = new Set(rooms.filter(r => r.floor !== 'paving').map(r => r.id));
 
   const markers = new Map(); // id -> { data, el }
   const isIndoor = m => !!(m.room && roomById[m.room]);
@@ -675,9 +744,11 @@ export function mount(element, model, options = {}) {
   }
   // the markers on screen now, as hitRect() takes them; a marker fading in or out under the roof
   // takes taps only once it is mostly there
+  const DOT = [10, 10];
   const shownRects = () => {
     const out = [];
-    for (const [id, rec] of markers) if (rec.shown && rec.size && rec.op >= 0.5) out.push({ id, x: rec.sx, y: rec.sy, w: rec.size[0], h: rec.size[1] });
+    for (const [id, rec] of markers) if (rec.shown && rec.size && rec.op >= 0.5) { const [w, h] = rec.level === 1 ? DOT : rec.size; out.push({ id: `m:${id}`, x: rec.sx, y: rec.sy, w, h }); }
+    for (const [room, rec] of chips) if (rec.shown && rec.size && rec.op >= 0.5) { const [w, h] = rec.level === 1 ? rec.compact : rec.size; out.push({ id: `c:${room}`, x: rec.sx, y: rec.sy, w, h }); }
     return out;
   };
 
@@ -692,7 +763,7 @@ export function mount(element, model, options = {}) {
         // markers take no pointer (a drag over one orbits), so this is the keyboard's Enter and Space
         el.addEventListener('click', ev => { ev.stopPropagation(); if (options.onMarker) options.onMarker(m.id); });
         overlay.appendChild(el);
-        rec = { el, html: '', cls: '', aria: '', size: null, shown: false, disp: '', op: -1, tf: '', sx: 0, sy: 0, hover: false };
+        rec = { el, html: '', cls: '', aria: '', size: null, shown: false, disp: '', op: -1, tf: '', sx: 0, sy: 0, hover: false, alpha: 0, level: -1 };
         markers.set(m.id, rec);
       }
       rec.data = m;
@@ -700,6 +771,36 @@ export function mount(element, model, options = {}) {
     });
     for (const [id, rec] of markers) if (!seen.has(id)) { rec.el.remove(); markers.delete(id); }
     layers.forEach(({ L }) => { if (L.markers) L.markers(list); });
+    invalidate();
+  }
+
+  // room chips: one per house room, at its label's place, in place of the label while the roof is
+  // off; a chip's parts are generic { icon, text? }, its state colours the border
+  const chips = new Map(); // room -> { data, el, ... }
+  const esc = t => String(t).replace(/[&<>"]/g, ch => `&#${ch.charCodeAt(0)};`);
+  function setRoomChips(list) {
+    const seen = new Set();
+    (list || []).forEach(c => {
+      if (!houseRooms.has(c.room)) return;
+      seen.add(c.room);
+      let rec = chips.get(c.room);
+      if (!rec) {
+        const el = document.createElement('button');
+        el.type = 'button';
+        el.addEventListener('click', ev => { ev.stopPropagation(); if (options.onRoom) options.onRoom(c.room); });
+        overlay.appendChild(el);
+        rec = { el, html: '', cls: '', size: null, compact: null, shown: false, disp: '', op: -1, tf: '', sx: 0, sy: 0, hover: false, alpha: 0, level: -1 };
+        chips.set(c.room, rec);
+      }
+      rec.data = c;
+      const parts = c.parts || [], name = roomName(roomById[c.room]);
+      const cls = `h3d-chip${c.state === 'on' || c.state === 'alert' ? ` ${c.state}` : ''}`;
+      if (rec.cls !== cls) { rec.el.className = cls + (rec.hover ? ' hover' : ''); rec.cls = cls; }
+      const html = `<span class="nm">${esc(name)}</span>` + parts.map(q => `<span class="pt${q.state ? ` ${q.state}` : ''}">${icon(q.icon)}${q.text ? `<span>${esc(q.text)}</span>` : ''}</span>`).join('');
+      if (rec.html !== html) { rec.el.innerHTML = html; rec.html = html; rec.size = null; }
+      rec.el.setAttribute('aria-label', [name, ...parts.map(q => q.label || q.text).filter(Boolean)].join(', '));
+    });
+    for (const [room, rec] of chips) if (!seen.has(room)) { rec.el.remove(); chips.delete(room); }
     invalidate();
   }
 
@@ -714,6 +815,30 @@ export function mount(element, model, options = {}) {
   function setSelection(id) {
     sel = id || null;
     markers.forEach(renderMarker);
+    invalidate();
+  }
+  // focusRoom(id): the camera moves in on the room (0.6 s, at once under reduced motion), its
+  // markers all show and its floor is selected; null returns to the overview with the camera kept
+  let focus = null, tween = null;
+  function focusRoom(id) {
+    const r = id && roomById[id];
+    focus = r ? id : null;
+    sel = focus;
+    markers.forEach(renderMarker);
+    if (r) {
+      // a small room is framed with what is round it, at least FOCUS_SPAN across, looked into from
+      // at least 50 degrees up, from the side the camera is on now
+      const b = r.rects.reduce((a, [x0, z0, x1, z1]) => [Math.min(a[0], x0), Math.min(a[1], z0), Math.max(a[2], x1), Math.max(a[3], z1)], [Infinity, Infinity, -Infinity, -Infinity]);
+      [0, 1].forEach(i => { const c = (b[i] + b[i + 2]) / 2, half = Math.max(FOCUS_SPAN, b[i + 2] - b[i]) / 2; b[i] = c - half; b[i + 2] = c + half; });
+      orbitV.copy(camera.position).sub(controls.target);
+      const flat = Math.hypot(orbitV.x, orbitV.z) || 1, el = Math.max(50 * D2R, Math.atan2(orbitV.y, flat));
+      const dir = new THREE.Vector3((orbitV.x / flat) * Math.cos(el), Math.sin(el), (orbitV.z / flat) * Math.cos(el));
+      const h = homeView([...b, model.ceiling || 2.6], dir, camera.aspect, camera.fov, 0.15);
+      const to = { target: h.target, dist: Math.min(controls.maxDistance, Math.max(controls.minDistance, h.distance)) };
+      tween = { t: reduceMotion ? 1 : 0, dir, from: { target: controls.target.clone(), dist: camera.position.distanceTo(controls.target) }, to };
+      spin = null;
+      userMoved = true;
+    }
     invalidate();
   }
 
@@ -735,16 +860,18 @@ export function mount(element, model, options = {}) {
     }
     return null;
   }
-  // the marker under a pointer, in the overlay's CSS pixels; a touch gets a little slack
+  // the marker or chip under a pointer, in the overlay's CSS pixels, as 'm:<id>' or 'c:<room>';
+  // a touch gets a little slack
   function markerAt(ev) {
     const rect = root.getBoundingClientRect();
     return hitRect(shownRects(), ev.clientX - rect.left, ev.clientY - rect.top, ev.pointerType === 'mouse' ? 0 : 6);
   }
+  const recOf = k => (k ? (k[0] === 'm' ? markers : chips).get(k.slice(2)) : null);
   let hoverMarker = null;
   function setHoverMarker(id) {
     if (id === hoverMarker) return;
-    // the hover border keeps the size, so the marker stays measured and tappable
-    [hoverMarker, id].forEach(k => { const rec = k && markers.get(k); if (rec) { rec.hover = k === id; rec.el.classList.toggle('hover', rec.hover); } });
+    // the hover border keeps the size, so the item stays measured and tappable
+    [hoverMarker, id].forEach(k => { const rec = recOf(k); if (rec) { rec.hover = k === id; rec.el.classList.toggle('hover', rec.hover); } });
     hoverMarker = id;
   }
   const onMove = ev => {
@@ -768,6 +895,7 @@ export function mount(element, model, options = {}) {
     pointers.add(ev.pointerId);
     if (pointers.size > 1) multi = true;
     spin = null;
+    tween = null;
     samples = [sampleNow(performance.now())];
     controls.enableDamping = false;
   };
@@ -790,7 +918,8 @@ export function mount(element, model, options = {}) {
     if (!tap) return;
     downAt = null;
     const mk = markerAt(ev);
-    if (mk) { if (options.onMarker) options.onMarker(mk); return; }
+    if (mk && mk[0] === 'm') { if (options.onMarker) options.onMarker(mk.slice(2)); return; }
+    if (mk) { if (options.onRoom) options.onRoom(mk.slice(2)); return; }
     aim(ev);
     const h = hitTest();
     if (h && h.car) { if (options.onCar) options.onCar(); return; }
@@ -805,7 +934,7 @@ export function mount(element, model, options = {}) {
   // a camera change under a finger or a wheel zoom is the user's own view: from then on a resize
   // keeps it; 'start' alone fires on every tap and wheel event, so it does not count
   let userMoved = false;
-  const onWheel = () => { userMoved = true; spin = null; };
+  const onWheel = () => { userMoved = true; spin = null; tween = null; };
   renderer.domElement.addEventListener('wheel', onWheel, { passive: true });
   controls.addEventListener('change', () => { if (pointers.size) userMoved = true; fitFog(); invalidate(); });
   controls.addEventListener('start', () => invalidate());
@@ -861,6 +990,7 @@ export function mount(element, model, options = {}) {
     camera.updateProjectionMatrix();
     renderer.setSize(w, h, false);
     if (composer) composer.setSize(w, h);
+    if (root.classList.contains('h3d-narrow') !== w < BLOOM_MIN_WIDTH) chips.forEach(c => { c.size = null; });
     root.classList.toggle('h3d-narrow', w < BLOOM_MIN_WIDTH);
     if (sun) {
       const size = w < BLOOM_MIN_WIDTH ? 1024 : 2048;
@@ -896,6 +1026,68 @@ export function mount(element, model, options = {}) {
   }
   // raf keeps this callback's id while it runs, so an invalidate() from inside it (controls.update
   // fires 'change') cannot schedule a second chain; it is cleared only where the loop stops
+  // The overlay: which markers and chips are candidates, the collision pass over them, then each
+  // one's opacity eased towards shown or hidden (times the roof's fade). True while a fade runs.
+  // An item is measured once per content change, shown for that read at its current opacity.
+  const measure = rec => {
+    if (rec.disp !== '') { rec.el.style.display = ''; rec.disp = ''; }
+    rec.size = [rec.el.offsetWidth, rec.el.offsetHeight];
+    // a chip's compact form is its first part alone, in the same padding and border
+    if (rec.compact !== undefined) {
+      const pt = rec.el.querySelector('.pt');
+      rec.compact = pt ? [pt.offsetWidth + rec.size[0] - rec.el.clientWidth + 18, rec.size[1]] : null;
+    }
+  };
+  function overlayFrame(dt) {
+    const roofOpen = Math.max(0, 1 - fade.cur * 1.6);
+    // chips stand in for their rooms' quiet markers only while the roof is off
+    const chipsOn = markerLayer.on && mode === 'open' && roofOpen > 0.02;
+    const chipRooms = chipsOn ? new Set(chips.keys()) : new Set();
+    const narrow = width < BLOOM_MIN_WIDTH, items = [], shown = [];
+    for (const [id, rec] of markers) {
+      // an alert indoors shows through the roof, so a closed view never hides it
+      const m = rec.data, covered = isIndoor(m) && m.state !== 'alert';
+      const p = (markerLayer.on || m.state === 'alert') && !(covered && roofOpen <= 0.02) && !inChip(m, chipRooms, focus) ? toScreen(camera, m.pos, width, height, v) : null;
+      rec.fac = covered ? roofOpen : 1;
+      rec.p = p;
+      if (!p) continue;
+      if (!rec.size) measure(rec);
+      items.push({ id: `m:${id}`, kind: m.state === 'alert' ? 'alert' : 'marker', x: p.x, y: p.y, dist: camera.position.distanceTo(v.set(m.pos[0], m.pos[1], m.pos[2])), was: rec.level >= 0, sizes: [rec.size, DOT] });
+    }
+    for (const [room, rec] of chips) {
+      const parts = rec.data.parts || [];
+      const p = chipsOn && room !== focus && !(narrow && !parts.length) ? toScreen(camera, labelPos[room], width, height, v) : null;
+      rec.fac = roofOpen;
+      rec.p = p;
+      if (!p) continue;
+      if (!rec.size) measure(rec);
+      items.push({ id: `c:${room}`, kind: 'chip', x: p.x, y: p.y, dist: camera.position.distanceTo(labelPos[room]), was: rec.level >= 0, sizes: rec.compact ? [rec.size, rec.compact] : [rec.size] });
+    }
+    const levels = collide(items);
+    let fading = false;
+    const step = reduceMotion ? 1 : dt / 0.2;
+    const apply = (key, rec, small) => {
+      const level = rec.p ? levels.get(key) : -1;
+      const goal = level >= 0 ? 1 : 0;
+      rec.alpha = goal > rec.alpha ? Math.min(goal, rec.alpha + step) : Math.max(goal, rec.alpha - step);
+      if (rec.alpha !== goal) fading = true;
+      // a hidden item keeps its last place and size while it fades out
+      if (level >= 0) { rec.level = level; rec.sx = rec.p.x; rec.sy = rec.p.y; rec.el.classList.toggle(small, level === 1); }
+      else if (!rec.p || rec.alpha === 0) rec.level = -1;
+      const op = Math.round(rec.alpha * rec.fac * 100) / 100;
+      rec.shown = level >= 0;
+      if (op <= 0) { place(rec, rec.el, 'none'); return; }
+      place(rec, rec.el, '', op, at({ x: rec.sx, y: rec.sy }));
+      shown.push(key);
+    };
+    for (const [id, rec] of markers) apply(`m:${id}`, rec, 'dot');
+    for (const [room, rec] of chips) apply(`c:${room}`, rec, 'compact');
+    labels.forEach(l => {
+      const p = roofOpen < 0.02 || chipRooms.has(l.room) ? null : toScreen(camera, l.pos, width, height, v);
+      place(l, l.el, p ? '' : 'none', Math.round(roofOpen * 80) / 100, p ? at(p) : '');
+    });
+    return fading;
+  }
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
@@ -911,6 +1103,14 @@ export function mount(element, model, options = {}) {
       orbitS.phi += c.d.polar;
       orbitS.makeSafe();
       camera.position.copy(controls.target).add(orbitV.setFromSpherical(orbitS));
+      moving = true;
+    }
+    if (tween) {
+      tween.t = Math.min(1, tween.t + dt / 0.6);
+      const e = tween.t < 0.5 ? 2 * tween.t * tween.t : 1 - Math.pow(-2 * tween.t + 2, 2) / 2;
+      controls.target.lerpVectors(tween.from.target, tween.to.target, e);
+      camera.position.copy(controls.target).addScaledVector(tween.dir, tween.from.dist + (tween.to.dist - tween.from.dist) * e);
+      if (tween.t >= 1) tween = null;
       moving = true;
     }
     if (syncCamera(controls, camera)) moving = true;
@@ -947,22 +1147,7 @@ export function mount(element, model, options = {}) {
       glow.scale.setScalar(0.2 * camera.far * 0.9);
     }
 
-    const roofOpen = Math.max(0, 1 - fade.cur * 1.6);
-    for (const rec of markers.values()) {
-      // an alert indoors shows through the roof, so a closed view never hides it
-      const m = rec.data, el = rec.el, covered = isIndoor(m) && m.state !== 'alert';
-      const p = (markerLayer.on || m.state === 'alert') && !(covered && roofOpen <= 0.02) ? toScreen(camera, m.pos, width, height, v) : null;
-      rec.shown = !!p;
-      if (!p) { place(rec, el, 'none'); continue; }
-      place(rec, el, '', Math.round((covered ? roofOpen : 1) * 100) / 100, at(p));
-      rec.sx = p.x;
-      rec.sy = p.y;
-      if (!rec.size) rec.size = [el.offsetWidth, el.offsetHeight];
-    }
-    labels.forEach(l => {
-      const p = roofOpen < 0.02 ? null : toScreen(camera, l.pos, width, height, v);
-      place(l, l.el, p ? '' : 'none', Math.round(roofOpen * 80) / 100, p ? at(p) : '');
-    });
+    if (overlayFrame(dt)) dirty = true;
     if (bloomOn()) getComposer().render();
     else renderer.render(scene, camera);
   }
@@ -1000,7 +1185,7 @@ export function mount(element, model, options = {}) {
 
   // carState and carScreen stay getters, so a copy of this object would freeze them
   return {
-    setMarkers, setMode, setSelection, setLayer, reset, resize, dispose, setSun, setTime,
+    setMarkers, setRoomChips, focusRoom, setMode, setSelection, setLayer, reset, resize, dispose, setSun, setTime,
     setCar: s => { if (byId.car) byId.car.api.setCar(s); },
     get mode() { return mode; },
     get time() { return sunTime ? new Date(sunTime) : new Date(); },

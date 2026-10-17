@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 22;
+const HOUSE3D_VERSION = 23;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -140,6 +140,30 @@ export function toMarker(d, st) {
   }
   // cover (the pergola reports no position), select and camera stay idle
   return m;
+}
+
+// roomChips(markers, rooms) -> the engine's setRoomChips list from toMarker's results: for
+// every house room (not a paved one, the carport) its temperature (a sensor's, else a climate
+// unit's), then what is going on there now, each with its icon and a count past one: motion,
+// lights on, open doors, the alarm armed or triggered. A room with none of these shows its name
+// alone. The chip is 'alert' with a door open or the alarm triggered, 'on' with motion or a light.
+export function roomChips(markers, rooms) {
+  const domain = m => m.id.split('.')[0];
+  const count = (list, part, one, many) => {
+    if (list.length) part.push({ ...one, text: list.length > 1 ? String(list.length) : undefined, label: list.length > 1 ? many(list.length) : one.label });
+  };
+  return rooms.filter(r => r.floor !== 'paving').map(r => {
+    const ms = markers.filter(m => m.room === r.id), parts = [];
+    const temp = ms.find(m => domain(m) === 'sensor' && m.value) || ms.find(m => domain(m) === 'climate' && m.value);
+    if (temp) parts.push({ icon: 'climate', text: temp.value, label: `temperatuur ${temp.value}` });
+    count(ms.filter(m => m.icon === 'motion' && m.state === 'on'), parts, { icon: 'motion', state: 'on', label: 'liikumine' }, n => `liikumine, ${n} andurit`);
+    count(ms.filter(m => domain(m) === 'light' && m.state === 'on'), parts, { icon: 'light', state: 'on', label: 'valgus põleb' }, n => `${n} valgustit põleb`);
+    count(ms.filter(m => m.icon === 'door' && m.state === 'alert'), parts, { icon: 'door', state: 'alert', label: 'uks on lahti' }, n => `${n} ust on lahti`);
+    const alarm = ms.filter(m => domain(m) === 'alarm_control_panel' && (m.state === 'on' || m.state === 'alert'));
+    if (alarm.length) parts.push(alarm.some(m => m.state === 'alert') ? { icon: 'alarm', state: 'alert', label: 'häire' } : { icon: 'alarm', label: 'valve on peal' });
+    const state = parts.some(q => q.state === 'alert') ? 'alert' : parts.some(q => q.state === 'on') ? 'on' : 'idle';
+    return { room: r.id, parts, state };
+  });
 }
 
 const STYLE = `
@@ -425,10 +449,12 @@ class House3dCard extends Base {
   _push() {
     this._pushed = true;
     // the state goes into the marker's accessible name; toMarker has no hass to format it
-    this._view.setMarkers(this._devices.map(d => {
+    const markers = this._devices.map(d => {
       const st = this._states.get(d.entity);
       return { ...toMarker(d, st), stateText: this._stateText(st) };
-    }));
+    });
+    this._view.setMarkers(markers);
+    this._view.setRoomChips(roomChips(markers, this._config.model.rooms || []));
     this._pushCar();
     if (this._sheet === 'room') this._refreshRoom();
     else if (this._sheet === 'layers') { this._renderLayers(); this._syncTime(); }
@@ -494,7 +520,8 @@ class House3dCard extends Base {
     const room = id && this._config.model.rooms.find(r => r.id === id);
     if (!room && this._sheet === 'layers') return;
     this._room = room ? id : null;
-    if (this._view) this._view.setSelection(this._room);
+    // the camera moves in on an opened room and stays where it is when the sheet closes
+    if (this._view) this._view.focusRoom(this._room);
     if (!room) return this._closeSheet();
     this.shadowRoot.querySelector('[data-act="layers"]').setAttribute('aria-expanded', 'false');
     const mod = this._mod;
@@ -513,7 +540,7 @@ class House3dCard extends Base {
   _openLayers() {
     const sheet = this.shadowRoot.querySelector('.sheet');
     this._room = null;
-    if (this._view) this._view.setSelection(null);
+    if (this._view) this._view.focusRoom(null);
     sheet.innerHTML = `<div class="head"><div><h2>Kihid</h2></div>
       <button type="button" class="close" data-act="close" aria-label="Sulge">${this._mod.icon('close')}</button></div>
       <div class="row"><span>Stiil</span><div class="seg" role="group" aria-label="Stiil">

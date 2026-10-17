@@ -227,10 +227,28 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   with the sun off. The standalone viewer gets the bearing in whole degrees
   only (`orientation` in `model.json`) and puts the sun over the middle of
   Estonia, never over the house.
+- **Room chips:** with the roof off each house room (every room but the
+  carport) shows one chip at its label: the room's temperature (a sensor's,
+  else a climate unit's), then icons for motion now, lights on, open doors
+  and the alarm, with a count past one; a quiet room shows its name alone,
+  and below 720 px the name is dropped and a quiet room shows nothing. Its
+  devices that are neither on nor in alert are counted in the chip; the
+  others (and everything outdoors or in the carport) show as markers. A
+  collision pass every frame keeps them apart: alerts first, then markers,
+  then chips, nearest first; a crowded marker shrinks to a dot, then hides,
+  a crowded chip to its first part, then hides, and an alert never hides.
+  With the roof on, indoor markers hide unless in alert and there are no
+  chips, as before.
+- **Focus:** a tap on a chip or a room floor opens the room's sheet and moves
+  the camera in on the room (at least 7 m across, from 50 degrees up), where
+  all its devices show; closing the sheet, Escape or a tap on empty ground
+  returns to the overview with the camera left where it is (Lähtesta vaade
+  frames home). The standalone viewer keeps the plain selection
+  (`setSelection`) for its rooms and feature markers.
 - **Markers and taps:** markers are drawn over the canvas but take no
   pointer, so a drag that starts on one orbits and never scrolls the page; a
-  tap (no drag past 6 px) tests the shown markers' rectangles first, nearest
-  centre wins, then the rooms and the car. They stay buttons, so Tab and
+  tap (no drag past 6 px) tests the shown markers' and chips' rectangles
+  first, nearest centre wins, then the rooms and the car. They stay buttons, so Tab and
   Enter reach them, and their accessible name carries the state. The overlay
   is projected after the camera's matrices are refreshed each frame, so it
   does not trail the view. While a finger is down the view follows it 1:1;
