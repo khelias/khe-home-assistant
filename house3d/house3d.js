@@ -537,7 +537,7 @@ export function inChip(m, chip, focus) {
  *   parks a running drive and closes the gate at once, and 'arrive' then parks). A layer that is
  *   off takes no taps.
  * markers: { id, pos: [x, y, z], icon, state: 'idle'|'on'|'alert'|'off', value?, label?,
- *            stateText?, room?, look?: [dx, dz], role?, level?: 0..1, pulse?, warm? }
+ *            stateText?, room?, look?: [dx, dz], role?, level?: 0..1, glow?: 0..1, pulse?, warm? }
  *   label and stateText make the marker's accessible name. Markers take no pointer, so a drag
  *   that starts on one orbits; a tap on the canvas tests the shown markers' and chips' rectangles
  *   first. Every frame a collision pass (collide()) places alerts (a chip in alert compact), then
@@ -553,7 +553,9 @@ export function inChip(m, chip, focus) {
  *   markers and selects its floor; null returns to the overview and leaves the camera. The card
  *   uses this; setSelection(id) marks a room's floor or a marker by id and is the viewer's.
  *   A marker whose room is a house room shows only with the roof off, unless its state is
- *   'alert'; state 'on' warms that room's floor unless warm is false. role 'pergola-light' drives the pergola's LED glow.
+ *   'alert'; state 'on' warms that room's floor unless warm is false. In the real style at night a
+ *   room glows from its brightest 'on' light's level or any of its markers' glow, whatever its
+ *   state. role 'pergola-light' drives the pergola's LED glow.
  */
 export function mount(element, model, options = {}) {
   const root = document.createElement('div');

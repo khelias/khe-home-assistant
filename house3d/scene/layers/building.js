@@ -8,9 +8,10 @@
 // reaches the lower walls. Its exterior walls also carry anthracite opening trims with lined
 // reveals and sill flashings, and corner boards on every outer and inner corner; the roofs have an
 // anthracite edge, the carport roof an anthracite fascia and soffit. A paved room's floor (the
-// carport) carries the paving's stones. At night (ctx.state.night) a room with a light on
-// glows: its floor and its windows, each pane tagged with its room at build, take a warm
-// emissive scaled by the light's level; there are no real-time lights.
+// carport) carries the paving's stones. At night (ctx.state.night) a room with a light on, or
+// with a marker carrying glow (recent motion), glows: its floor and its windows, each pane tagged
+// with its room at build, take a warm emissive scaled by the light's level or the glow; there are
+// no real-time lights.
 const FRAME = 0.06, FRAME_D = 0.1; // real style: an opening's frame width and depth
 const BASE_H = 0.12; // real style: the dark strip along an exterior wall's foot
 // real style, read off photos: an opening's trim and a corner board, both standing PROUD off the
@@ -456,9 +457,12 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     markers(list) {
       const on = list.filter(m => m.state === 'on' && m.warm !== false && roomIds.has(m.room));
       warm = new Set(on.map(m => m.room));
-      // a room's brightest light sets its glow; motion warms a floor by day but lights no window
+      // a room's brightest light or marker glow sets its glow; a marker's glow counts in any state,
+      // since a motion sensor off a few minutes ago is idle
       lit = new Map();
-      on.filter(m => m.icon === 'light').forEach(m => lit.set(m.room, Math.max(lit.get(m.room) || 0, m.level ?? 1)));
+      const up = (room, g) => lit.set(room, Math.max(lit.get(room) || 0, g));
+      on.filter(m => m.icon === 'light').forEach(m => up(m.room, m.level ?? 1));
+      list.forEach(m => { if (m.glow > 0 && roomIds.has(m.room)) up(m.room, m.glow); });
     },
     // the floors take taps only with the roof off
     hit(ray) {

@@ -932,6 +932,19 @@ test('card: roomChips on the test house\'s own devices', () => {
   assert.equal(r1.parts.find(q => q.icon === 'motion').text, '2', 'the kitchen and the living room sensors');
 });
 
+test('card: motionGlow lights a room while motion is on and 15 minutes after', () => {
+  const now = new Date('2026-10-17T21:00:00Z'), ago = min => new Date(now - min * 60000).toISOString();
+  assert.equal(card.motionGlow({ state: 'on', last_changed: ago(60) }, now), 0.8);
+  assert.equal(card.motionGlow({ state: 'off', last_changed: ago(5) }, now), 0.8);
+  assert.equal(card.motionGlow({ state: 'off', last_changed: ago(20) }, now), 0);
+  assert.equal(card.motionGlow({ state: 'unavailable', last_changed: ago(1) }, now), 0);
+  assert.equal(card.motionGlow(undefined, now), 0);
+  const d = { entity: 'binary_sensor.m', type: 'motion', room: 'r1', pos: [0, 0, 0], name: 'm' };
+  assert.equal(card.toMarker(d, { state: 'off', last_changed: ago(5) }, now).glow, 0.8);
+  assert.equal(card.toMarker(d, { state: 'off', last_changed: ago(5) }, now).state, 'idle');
+  assert.equal('glow' in card.toMarker(d, { state: 'off', last_changed: ago(20) }, now), false);
+});
+
 test('real style at night: a lit room\'s floor and windows glow, nothing by day', () => {
   const { ctx, byId } = buildAll({ ...options, style: 'real' });
   const L = byId.building;
@@ -945,12 +958,14 @@ test('real style at night: a lit room\'s floor and windows glow, nothing by day'
   assert.notEqual(of('r1')[0].material, of('r2')[0].material, 'a glass per room');
   const light = { id: 'light.x', pos: [4, 2, 6], icon: 'light', room: 'r1', state: 'on', level: 0.8 };
   const motion = { id: 'binary_sensor.y', pos: [12, 2, 4], icon: 'motion', room: 'r2', state: 'on' };
-  L.markers([light, motion]);
+  const recent = { id: 'binary_sensor.z', pos: [9, 2, 8], icon: 'motion', room: 'r3', state: 'idle', glow: 0.8 };
+  L.markers([light, motion, recent]);
   const settle = () => { for (let i = 0; i < 40; i++) L.update(0.05, 0.5); };
   ctx.state.night = 1;
   settle();
   assert.ok(of('r1')[0].material.emissiveIntensity > 0.5, 'the lit room\'s windows glow');
-  assert.equal(of('r2')[0].material.emissiveIntensity, 0, 'another room\'s stay dark, motion there or not');
+  assert.equal(of('r2')[0].material.emissiveIntensity, 0, 'motion without glow does not light a room');
+  assert.ok(floors.find(f => f.userData.room === 'r3').material.emissiveIntensity > 0, 'a marker with glow does, even idle');
   assert.ok(floors.find(f => f.userData.room === 'r1').material.emissiveIntensity > 0, 'and its floor');
   assert.equal(floors.find(f => f.userData.room === 'r2').material.emissiveIntensity, 0);
   ctx.state.night = 0;

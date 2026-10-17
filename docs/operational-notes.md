@@ -230,9 +230,15 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   degrees. Without a location the real style uses a fixed afternoon sun. The
   sky follows the sun's altitude: day, dusk below 8 degrees, night below 0
   with the sun off. Through dusk a cool moon and sky light come up, so the
-  walls, roofs and fences still read at night, and a room with a light on
-  (a `light` marker; motion warms a floor by day but lights no window) glows: its floor and its windows take a
-  warm emissive scaled by the light's level. Each pane is tagged at build
+  walls, roofs and fences still read at night, and a room glows while a
+  light there is on or its motion sensor is on or went off less than 15
+  minutes ago: its floor and its windows take a warm emissive scaled by the
+  light's level, or 0.8 for motion. The card owns the 15 minutes (it sets
+  `glow` on the motion marker, from the wall clock, never the time slider,
+  and pushes the markers again once a minute while any glows); the engine
+  lights a room from any marker's `glow`. After an HA restart every motion
+  sensor's `last_changed` is the restart, so at night the whole house glows
+  for up to 15 minutes; that is accepted. Each pane is tagged at build
   with the room it looks into, and each room has its own glass; there are
   no real-time lights, and by day nothing changes. The standalone viewer
   gets the bearing in whole degrees only (`orientation` in `model.json`) and

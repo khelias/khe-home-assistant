@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 31;
+const HOUSE3D_VERSION = 32;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -124,8 +124,21 @@ export function arrivalKey(st) {
   return st.last_changed ? String(st.last_changed) : null;
 }
 
-// One device and its entity state -> a generic engine marker.
-export function toMarker(d, st) {
+// A room glows after dark while its motion sensor is on and for GLOW_MINUTES after it went off.
+const GLOW_MINUTES = 15, MOTION_GLOW = 0.8;
+
+// motionGlow(st, now) -> the glow a motion sensor's state gives its room: MOTION_GLOW while on or
+// off since less than GLOW_MINUTES before now (the wall clock, never the time slider), else 0
+export function motionGlow(st, now) {
+  if (!st || (st.state !== 'on' && st.state !== 'off')) return 0;
+  if (st.state === 'on') return MOTION_GLOW;
+  const age = now - new Date(st.last_changed);
+  return age < GLOW_MINUTES * 60000 ? MOTION_GLOW : 0;
+}
+
+// One device and its entity state -> a generic engine marker; a motion marker carries glow while
+// motionGlow() at now gives one.
+export function toMarker(d, st, now = new Date()) {
   const m = { id: d.entity, pos: d.pos, icon: d.type, room: d.room, label: d.name, state: 'idle' };
   if (d.look) m.look = d.look;
   if (d.role) m.role = d.role;
@@ -139,6 +152,8 @@ export function toMarker(d, st) {
     if (s === 'on') { m.state = 'alert'; m.pulse = true; }
   } else if (d.type === 'motion') {
     if (s === 'on') { m.state = 'on'; m.pulse = true; }
+    const glow = motionGlow(st, now);
+    if (glow > 0) m.glow = glow;
   } else if (domain === 'light') {
     if (s === 'on') {
       m.state = 'on';
@@ -329,6 +344,7 @@ class House3dCard extends Base {
   }
 
   _unmount() {
+    this._glowTick(false);
     if (this._view) { this._view.dispose(); this._view = null; }
     if (this._ro) { this._ro.disconnect(); this._ro = null; }
     this._mounting = null;
@@ -487,16 +503,24 @@ class House3dCard extends Base {
 
   _push() {
     this._pushed = true;
+    const now = new Date();
     // the state goes into the marker's accessible name; toMarker has no hass to format it
     const markers = this._devices.map(d => {
       const st = this._states.get(d.entity);
-      return { ...toMarker(d, st), stateText: this._stateText(st) };
+      return { ...toMarker(d, st, now), stateText: this._stateText(st) };
     });
     this._view.setMarkers(markers);
+    // a motion glow goes out with no state change, so the markers are pushed again once a minute
+    this._glowTick(markers.some(m => m.glow));
     this._view.setRoomChips(roomChips(markers, this._config.model.rooms || []));
     this._pushCar();
     if (this._sheet === 'room') this._refreshRoom();
     else if (this._sheet === 'layers') { this._renderLayers(); this._syncTime(); }
+  }
+
+  _glowTick(on) {
+    if (on && !this._glowTimer) this._glowTimer = setInterval(() => { if (this._view) this._push(); }, 60000);
+    else if (!on && this._glowTimer) { clearInterval(this._glowTimer); this._glowTimer = null; }
   }
 
   // acts only when home/away changes, so attribute updates (a new location) never replay the drive-in
