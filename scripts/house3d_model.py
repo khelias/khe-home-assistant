@@ -6,8 +6,9 @@ blocks plus the optional surroundings, each with the info string `json house3d:<
 
   geometry      walls, roofs, furniture, site            shareable
   rooms         rooms with neutral names                 shareable
-  private       family room names, every HA device and   HA only, never published
-                the car (profile and drive-in path)
+  private       family room names, every HA device, the   HA only, never published
+                car (profile and drive-in path) and the
+                future items (PV, charger, battery, ...)
   showcase      title, room texts, feature points        standalone viewer only
   surroundings  neighbouring buildings and the street,   HA only, never published
                 machine-written by house3d-surroundings.py
@@ -16,7 +17,8 @@ Each block is a JSON object; merging layers is a plain union of their keys. The 
 is optional; when present, validation checks its profile and that its path ends with
 the car parked straight inside its room. With site.gates, the gate the car's path
 crosses is the drive gate, and the path has to start far enough out for the car to
-clear it while it opens.
+clear it while it opens. The future items are optional too: things the house does not
+have yet, each placed on the plan, a pv item on a roof with its panels fitting.
 
 Usage:  house3d_model.py --check FILE
         house3d_model.py --layers geometry,rooms,showcase FILE   (or --layers all)
@@ -28,6 +30,7 @@ import json
 import math
 import re
 import sys
+from datetime import date
 from itertools import pairwise
 
 REQUIRED = ("geometry", "rooms", "private", "showcase")
@@ -43,6 +46,11 @@ SLIDE_OFFSET = (
     0.12  # a sliding leaf runs this far to the lot side of the fence line, past its rails
 )
 CAR_CLEARANCE = 0.3  # between the car and a gate leaf's sweep
+FUTURE_KINDS = ("pv", "charger", "battery", "greenhouse", "tub")
+FUTURE_ROT = (0, 90, 180, 270)
+PANEL = (1.72, 1.13)  # a PV panel's long and short side; the engine lays them out the same way
+PANEL_GAP = 0.02
+FUTURE_FACTS, FACT_CHARS = 6, 80
 BLOCK = re.compile(r"^```json house3d:(\w+)[ \t]*\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
 
 
@@ -118,6 +126,45 @@ def _segments_cross(p, q, a, b):
             and min(a[1], b[1]) <= max(p[1], q[1])
         )
     return False
+
+
+def _inside(p, ring):
+    """True when point p is inside the closed ring (even-odd rule)."""
+    x, z = p
+    inside = False
+    for (x0, z0), (x1, z1) in zip(ring, ring[1:] + ring[:1]):
+        if (z0 > z) != (z1 > z) and x < x0 + (z - z0) * (x1 - x0) / (z1 - z0):
+            inside = not inside
+    return inside
+
+
+def _quad_in_ring(corners, ring):
+    """True when the quad lies wholly inside the ring, which may be non-convex: every corner
+    inside and no quad edge meeting a ring edge (touching counts)."""
+    if not all(_inside(c, ring) for c in corners):
+        return False
+    quad = list(zip(corners, corners[1:] + corners[:1]))
+    edges = list(zip(ring, ring[1:] + ring[:1]))
+    return not any(_segments_cross(p, q, a, b) for p, q in quad for a, b in edges)
+
+
+def panel_fit(w, d):
+    """How many PV panels fit in a w x d m rectangle, the better of the long side along w
+    (landscape) and along d (portrait), PANEL_GAP between them."""
+    n = lambda size, side: math.floor((size + PANEL_GAP) / (side + PANEL_GAP) + 1e-9)
+    return max(n(w, PANEL[0]) * n(d, PANEL[1]), n(w, PANEL[1]) * n(d, PANEL[0]))
+
+
+def future_corners(item):
+    """The plan corners of a sized future item: its size centred on pos, turned by rot."""
+    w, d = item["size"] if item.get("rot", 0) in (0, 180) else item["size"][::-1]
+    x, z = item["pos"]
+    return [
+        [x - w / 2, z - d / 2],
+        [x + w / 2, z - d / 2],
+        [x + w / 2, z + d / 2],
+        [x - w / 2, z + d / 2],
+    ]
 
 
 def _crossing(ring):
@@ -362,6 +409,8 @@ def validate(layers):
         for k in ("height", "crown"):
             if not (_num(t.get(k)) and t[k] > 0):
                 bad(f"{where}: {k} is not a positive number")
+    if "future" in model:
+        _validate_future(model, roofs, bad)
 
     rooms = model.get("rooms", [])
     room_ids = [r.get("id") for r in rooms]
@@ -427,6 +476,93 @@ def validate(layers):
         if not _point(f.get("pos"), 3):
             bad(f"showcase feature {f.get('id')}: pos must be [x, y, z]")
     return problems
+
+
+def _validate_future(model, roofs, bad):
+    """The private future layer: items the house does not have yet, each placed on the plan
+    inside the lot (the walls' box without one, as the engine falls back), a pv item's
+    rectangle on its roof and its panels fitting there."""
+    fut = model["future"]
+    if not isinstance(fut, dict):
+        return bad("future: not a JSON object")
+    as_of = fut.get("as_of")
+    try:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", as_of):
+            raise ValueError
+        date.fromisoformat(as_of)
+    except (TypeError, ValueError):
+        bad(f"future: as_of {as_of!r} is not a date YYYY-MM-DD")
+    items = fut.get("items")
+    if not isinstance(items, list):
+        return bad("future: items is not a list")
+    lot = (model.get("site") or {}).get("lot")
+    if not (isinstance(lot, list) and len(lot) >= 3 and all(_point(p) for p in lot)):
+        ends = [p for w in model.get("walls", []) for p in (w.get("a"), w.get("b")) if _point(p)]
+        if not ends:
+            lot = None
+        else:
+            x0, x1 = min(p[0] for p in ends), max(p[0] for p in ends)
+            z0, z1 = min(p[1] for p in ends), max(p[1] for p in ends)
+            lot = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]]
+    ids = set()
+    for i, it in enumerate(items):
+        if not isinstance(it, dict):
+            bad(f"future.items[{i}]: not a JSON object")
+            continue
+        where = f"future.items[{i}]"
+        if isinstance(it.get("id"), str) and it["id"]:
+            where = f"future item {it['id']}"
+            if it["id"] in ids:
+                bad(f"future.items: id {it['id']!r} is not unique")
+            ids.add(it["id"])
+        else:
+            bad(f"{where}: id is not a non-empty string")
+        kind = it.get("kind")
+        if kind not in FUTURE_KINDS:
+            bad(f"{where}: kind {kind!r} is not one of {', '.join(FUTURE_KINDS)}")
+        if not (isinstance(it.get("name"), str) and it["name"]):
+            bad(f"{where}: name missing")
+        placed = _point(it.get("pos"))
+        if not placed:
+            bad(f"{where}: pos must be [x, z]")
+        elif lot and not _inside(it["pos"], lot):
+            bad(f"{where}: pos is outside the lot")
+        if it.get("rot", 0) not in FUTURE_ROT:
+            bad(f"{where}: rot {it.get('rot')!r} is not one of 0, 90, 180, 270")
+        sized = "size" in it and _point(it["size"]) and min(it["size"]) > 0
+        if ("size" in it or kind == "pv") and not sized:
+            bad(f"{where}: size must be [w, d], both positive")
+        facts = it.get("facts", [])
+        if not (isinstance(facts, list) and len(facts) <= FUTURE_FACTS):
+            bad(f"{where}: facts must be a list of at most {FUTURE_FACTS} lines")
+        elif not all(isinstance(f, str) and 0 < len(f) <= FACT_CHARS for f in facts):
+            bad(f"{where}: every fact must be a line of 1 to {FACT_CHARS} characters")
+        if kind != "pv":
+            continue
+        if not (_num(it.get("kwp")) and it["kwp"] > 0):
+            bad(f"{where}: kwp is not a positive number")
+        panels = it.get("panels")
+        if not (isinstance(panels, int) and not isinstance(panels, bool) and panels > 0):
+            bad(f"{where}: panels is not a positive whole number")
+            panels = None
+        roof = roofs.get(it.get("roof")) if isinstance(it.get("roof"), str) else None
+        if not roof:
+            bad(f"{where}: roof {it.get('roof')!r} is not a roof")
+        if not (placed and sized and it.get("rot", 0) in FUTURE_ROT):
+            continue
+        outline = roof.get("outline") if roof else None
+        if (
+            isinstance(outline, list)
+            and len(outline) >= 3
+            and all(_point(p) for p in outline)
+            and not _quad_in_ring(future_corners(it), outline)
+        ):
+            bad(f"{where}: its rectangle is not inside roof {it['roof']}'s outline")
+        if panels and panel_fit(*it["size"]) < panels:
+            bad(
+                f"{where}: {panels} panels do not fit in {it['size'][0]} x {it['size'][1]} m "
+                f"(at most {panel_fit(*it['size'])})"
+            )
 
 
 def _validate_gates(gates, bad):

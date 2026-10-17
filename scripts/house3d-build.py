@@ -30,9 +30,9 @@ out as text: its [x, y, z] position, its ground [x, z] pair and a camera's look 
 path points and side outline points count too, as [x, z] and [x, y] pairs, but only
 pairs with a coordinate of two or more decimals: round pairs such as 0.5, 0.5 occur in
 the vendored three.js. So do the surroundings layer's building and road vertices, by the
-same two-decimal rule, and the georeference's origin_E and origin_N, as written in the
-model and in whole metres; their labels name the layer and an index, never the
-values. Run it over
+same two-decimal rule, the future items' [x, z] positions with at least one decimal, and
+the georeference's origin_E and origin_N, as written in the model and in whole metres; their
+labels name the layer and an index, never the values. Run it over
 house3d/ before every commit that touches it. With --count it prints only the number of hits
 per kind (private strings, devices keys, coordinates), never the matched text, so its output
 can go into a log. Each ALLOW lets one file carry one thing the scan would flag:
@@ -109,6 +109,11 @@ def patterns(model):
     for label, p in pairs:
         if any(_decimals(v) >= 2 for v in p):
             out.append((label, _seq(p)))
+    # the future items' places, written with decimals so a whole-metre pair cannot hit three.js
+    for i, it in enumerate((model.get("future") or {}).get("items", [])):
+        p = it.get("pos") if isinstance(it, dict) else None
+        if house3d_model._point(p) and any(_decimals(v) >= 1 for v in p):
+            out.append((f"future item {i} position", _seq(p)))
     geo = model.get("georef") or {}
     for k in ("origin_E", "origin_N"):
         v = geo.get(k)

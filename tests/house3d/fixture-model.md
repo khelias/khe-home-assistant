@@ -3,15 +3,17 @@
 A made-up house in the shape of the real model (khe-meta `house/house-model.md`), for
 `tests/house3d/` and the public demo at khe.ee/house3d/ (`house3d-build.py --demo`). Nothing
 here describes a real place: the names are invented, the device entity ids start with `test_`,
-and the georeference points nowhere. Every device, car and surroundings coordinate has three
-decimals ending in an odd digit, so the fixture's own privacy scan cannot match numbers in the
-vendored three.js.
+and the georeference points nowhere. Every device, car, future item and surroundings coordinate
+has three decimals ending in an odd digit, so the fixture's own privacy scan cannot match numbers
+in the vendored three.js.
 
 A one-storey house of 10 x 8 m: a kitchen-living room on the west side with a glass door to the
 front garden and a floor window to the back deck, the hall, bathroom and bedroom on the east
 side, and a carport against its east wall, closed by two panel walls, that the car reaches through
 the sliding drive gate. The second garage roof is the canopy over the front door. The play area
-is in the back garden. The engine tests count the outer walls, the street wall's openings and the
+is in the back garden. The future items are 12 PV panels on the back roof, a charger in the
+carport, a battery in the hall and a greenhouse and a hot tub in the back garden; only the first
+three have facts. The engine tests count the outer walls, the street wall's openings and the
 site's planters, steps and paving, so change those together with the tests.
 
 This file has a `devices` key, so the privacy scan flags it: scan the engine with the real
@@ -163,6 +165,16 @@ model, never this file.
     "rear": [[[-2.197, 0.911, -0.717], [-2.197, 0.911, -0.371]], [[-2.197, 0.911, 0.371], [-2.197, 0.911, 0.717]]]
    }
   }
+ },
+ "future": {
+  "as_of": "2026-01-15",
+  "items": [
+   {"id": "pv", "kind": "pv", "name": "Päikesepaneelid", "roof": "roofN", "pos": [7.013, 8.151], "size": [7.2, 3.6], "rot": 0, "kwp": 5.28, "panels": 12, "facts": ["5,28 kWp, 12 paneeli tagumisel katusel", "Aastas umbes 4 300 kWh", "Hind paigaldatuna umbes 5 000 €", "Tasuvusaeg umbes 11 aastat"]},
+   {"id": "charger", "kind": "charger", "name": "Autolaadija", "pos": [16.937, 4.113], "rot": 270, "facts": ["11 kW, kolmefaasiline", "Vajab koormuse juhtimist"]},
+   {"id": "battery", "kind": "battery", "name": "Koduaku", "pos": [9.213, 4.757], "rot": 0, "facts": ["10 kWh", "Hind umbes 5 000 €"]},
+   {"id": "greenhouse", "kind": "greenhouse", "name": "Kasvuhoone", "pos": [14.513, 12.113], "size": [3, 4], "rot": 90, "facts": []},
+   {"id": "tub", "kind": "tub", "name": "Kümblustünn", "pos": [9.113, 12.317], "size": [2, 2], "facts": []}
+  ]
  }
 }
 ```

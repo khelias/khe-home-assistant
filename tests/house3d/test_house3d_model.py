@@ -166,6 +166,85 @@ def _step_rect(L):
     _site(L)["steps"][0]["rect"] = [11, 1.3, 10, 1.8]
 
 
+def _future(L, i=None):
+    items = L["private"]["future"]["items"]
+    return items if i is None else next(it for it in items if it["id"] == i)
+
+
+def _future_kind(L):
+    _future(L, "tub")["kind"] = "sauna"
+
+
+def _future_dup(L):
+    _future(L, "tub")["id"] = "pv"
+
+
+def _future_pos(L):
+    _future(L, "tub")["pos"] = [9.113]
+
+
+def _future_off_lot(L):
+    _future(L, "greenhouse")["pos"] = [25.113, 12.113]
+
+
+def _future_off_walls(L):
+    del L["geometry"]["site"]["lot"]
+    _future(L, "greenhouse")["pos"] = [14.513, 12.113]
+
+
+def _future_rot(L):
+    _future(L, "charger")["rot"] = 45
+
+
+def _future_size(L):
+    _future(L, "greenhouse")["size"] = [3, 0]
+
+
+def _future_pv_size(L):
+    del _future(L, "pv")["size"]
+
+
+def _future_roof(L):
+    _future(L, "pv")["roof"] = "roofX"
+
+
+def _future_off_roof(L):
+    _future(L, "pv")["pos"] = [7.013, 7.151]
+
+
+def _future_off_notch(L):
+    # a notch cut into the roof's south edge under the panels: every corner stays inside, an edge crosses
+    L["geometry"]["roofs"]["roofN"]["outline"] = [[1.7, 6], [6, 6], [6, 7], [8, 7], [8, 6], [12.3, 6], [12.3, 10.3], [1.7, 10.3]]
+
+
+def _future_kwp(L):
+    _future(L, "pv")["kwp"] = 0
+
+
+def _future_panels(L):
+    _future(L, "pv")["panels"] = 12.5
+
+
+def _future_too_many(L):
+    _future(L, "pv")["panels"] = 13
+
+
+def _future_facts(L):
+    _future(L, "pv")["facts"] = ["rida"] * 7
+
+
+def _future_fact_long(L):
+    _future(L, "pv")["facts"][0] = "x" * 81
+
+
+def _future_as_of(L):
+    L["private"]["future"]["as_of"] = "15.01.2026"
+
+
+def _future_name(L):
+    _future(L, "tub")["name"] = ""
+
+
 MUTATIONS = [
     ("window without sill", _no_sill, "a window needs a sill"),
     ("unknown opening kind", _bad_kind, "is not window, door or glassdoor"),
@@ -190,6 +269,24 @@ MUTATIONS = [
     ("step without height", _step_height, "site.steps[0]: height is not a positive number"),
     ("planter not an object", _planter_list, "site.planters[0]: not a JSON object"),
     ("step rect reversed", _step_rect, "site.steps[0]: rect"),
+    ("unknown future kind", _future_kind, "future item tub: kind 'sauna' is not one of"),
+    ("future id twice", _future_dup, "future.items: id 'pv' is not unique"),
+    ("future pos of one number", _future_pos, "future item tub: pos must be [x, z]"),
+    ("future item off the lot", _future_off_lot, "future item greenhouse: pos is outside the lot"),
+    ("future item outside the walls' box without a lot", _future_off_walls, "future item greenhouse: pos is outside the lot"),
+    ("future rot of 45", _future_rot, "future item charger: rot 45 is not one of"),
+    ("future size not positive", _future_size, "future item greenhouse: size must be [w, d]"),
+    ("pv without size", _future_pv_size, "future item pv: size must be [w, d]"),
+    ("pv on an unknown roof", _future_roof, "future item pv: roof 'roofX' is not a roof"),
+    ("pv over the roof's edge", _future_off_roof, "future item pv: its rectangle is not inside roof roofN's outline"),
+    ("pv over a notch in the roof", _future_off_notch, "future item pv: its rectangle is not inside roof roofN's outline"),
+    ("pv kwp zero", _future_kwp, "future item pv: kwp is not a positive number"),
+    ("pv panels not whole", _future_panels, "future item pv: panels is not a positive whole number"),
+    ("pv panels do not fit", _future_too_many, "future item pv: 13 panels do not fit in 7.2 x 3.6 m (at most 12)"),
+    ("seven facts", _future_facts, "future item pv: facts must be a list of at most 6 lines"),
+    ("a fact of 81 characters", _future_fact_long, "future item pv: every fact must be a line of 1 to 80 characters"),
+    ("as_of not ISO", _future_as_of, "future: as_of '15.01.2026' is not a date YYYY-MM-DD"),
+    ("future name empty", _future_name, "future item tub: name missing"),
 ]
 
 
@@ -202,6 +299,20 @@ class Mutations(unittest.TestCase):
                 mutate(L)
                 problems = hm.validate(L)
                 self.assertTrue(any(problem in p for p in problems), f"{problem!r} not in {problems}")
+
+
+class FuturePanels(unittest.TestCase):
+    def test_panel_fit_takes_the_better_orientation(self):
+        # landscape 4 x 3, portrait 6 x 2: 12 either way; the fixture's roof holds 18
+        self.assertEqual(hm.panel_fit(7.2, 3.6), 12)
+        self.assertEqual(hm.panel_fit(10.6, 4.3), 18)
+        # 1.8 m deep holds one row either way: two panels landscape, three portrait
+        self.assertEqual(hm.panel_fit(3.5, 1.8), 3)
+        self.assertEqual(hm.panel_fit(1.0, 1.0), 0)
+
+    def test_future_corners_turn_with_rot(self):
+        it = {"pos": [10, 20], "size": [4, 2], "rot": 90}
+        self.assertEqual(hm.future_corners(it), [[9, 18], [11, 18], [11, 22], [9, 22]])
 
 
 class BuildAndScan(unittest.TestCase):
@@ -230,6 +341,23 @@ class BuildAndScan(unittest.TestCase):
             r = run("--scan", FIXTURE, f)
             self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
             self.assertIn(f"private string {entity!r}", r.stdout)
+
+    def test_scan_finds_a_future_item_position(self):
+        x, z = next(it for it in layers()["private"]["future"]["items"] if it["id"] == "tub")["pos"]
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "model.json"
+            f.write_text(f'{{"pos":[{x},{z}]}}', encoding="utf-8")
+            r = run("--scan", FIXTURE, f)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn(f"{f}:1: future item 4 position", r.stdout)
+            self.assertNotIn(str(x), r.stdout)
+
+    def test_scan_skips_whole_metre_future_positions(self):
+        model = hm.merge(layers(), hm.LAYERS)
+        model["future"]["items"][4]["pos"] = [9, 12]
+        labels = [label for label, _ in hb.patterns(model)]
+        self.assertNotIn("future item 4 position", labels)
+        self.assertIn("future item 0 position", labels)
 
     def test_scan_allows_a_devices_key_only_in_the_named_file(self):
         with tempfile.TemporaryDirectory() as tmp:
