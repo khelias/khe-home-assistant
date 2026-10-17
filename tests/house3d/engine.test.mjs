@@ -24,7 +24,7 @@ globalThis.document = {
 const THREE = await import(new URL('vendor/three-0.186.1/build/three.module.js', E));
 const { createKit } = await import(new URL('scene/kit.js', E));
 const BUILDERS = await Promise.all(LAYERS.map(id => import(new URL(`scene/layers/${id}.js`, E))));
-const { modelFrame, buildLayer, guardLayer, syncCamera, toScreen, hitRect, releaseVelocity, coast, homeBox, homeDir, homeView, collide, inChip } = await import(new URL('house3d.js', E));
+const { modelFrame, buildLayer, guardLayer, syncCamera, toScreen, hitRect, releaseVelocity, coast, homeBox, homeDir, homeView, collide, inChip, pvNow, roofNormal, roofTop, tapAction } = await import(new URL('house3d.js', E));
 const card = await import(new URL('house3d-card.js', E));
 const { OrbitControls } = await import(new URL('vendor/three-0.186.1/examples/jsm/controls/OrbitControls.js', E));
 const { sunPosition, gridBearing, sunDirection, sunGlow } = await import(new URL('scene/sun.js', E));
@@ -911,4 +911,66 @@ test('real style at night: a lit room\'s floor and windows glow, nothing by day'
   panes.forEach(p => assert.equal(p.material.emissiveIntensity, 0, 'by day nothing glows'));
   floors.forEach(f => assert.equal(f.material.emissiveIntensity, 0));
   assert.ok(Math.abs(of('r1')[0].material.opacity - 0.35) < 1e-9, 'the day glass as it was');
+});
+
+// a sun at alt degrees in the model's plane, from the horizontal direction [hx, hz]
+const sunAt = (alt, [hx, hz]) => {
+  const h = Math.cos(alt * Math.PI / 180), n = Math.hypot(hx, hz);
+  return { alt, dir: [(hx / n) * h, Math.sin(alt * Math.PI / 180), (hz / n) * h] };
+};
+// an 8-degree roof falling to +x; the south is -z here
+const EIGHT = [Math.sin(8 * Math.PI / 180), Math.cos(8 * Math.PI / 180), 0];
+
+test('pvNow: nothing at night, 0.6-0.8 of kWp at a high southern sun, less low in the west, never past 0.8', () => {
+  assert.equal(pvNow(10, EIGHT, null), 0);
+  assert.equal(pvNow(10, EIGHT, sunAt(-5, [0, -1])), 0);
+  assert.equal(pvNow(10, EIGHT, sunAt(0, [0, -1])), 0);
+  const noon = pvNow(10, EIGHT, sunAt(54, [0, -1]));
+  assert.ok(noon > 6 && noon < 8, `noon ${noon}`);
+  const evening = pvNow(10, EIGHT, sunAt(10, [-1, 0]));
+  assert.ok(evening > 0 && evening < noon / 2, `evening ${evening}`);
+  for (let alt = 1; alt <= 90; alt += 1) for (const d of [[0, -1], [1, 0], [-1, 0], [1, -1]]) assert.ok(pvNow(10, EIGHT, sunAt(alt, d)) <= 8 + 1e-9);
+  assert.equal(pvNow(10, EIGHT, sunAt(90, [0, -1])), 8, 'capped at 0.8 of kWp');
+});
+
+test('roofNormal: unit length, up, leaning to the side the roof falls to', () => {
+  const n = roofNormal(model, 'roofN');
+  assert.ok(Math.abs(Math.hypot(...n) - 1) < 1e-12);
+  assert.ok(n[1] > 0.99 && n[0] > 0 && n[2] === 0, 'roofN falls east, to +x');
+  const west = roofNormal({ roofs: { r: { slope: 0.1, falls: 'west' } } }, 'r');
+  assert.ok(west[0] < 0);
+  assert.ok(Math.abs(west[0] / west[1] + 0.1) < 1e-12);
+});
+
+test('roofTop: the building layer\'s roof slab top on the test house', () => {
+  const { ctx } = makeCtx();
+  const L = buildLayer(BUILDERS[LAYERS.indexOf('building')], 'building', ctx);
+  for (const id of ['roofN', 'roofS']) {
+    const top = roofTop(ctx.roof, model, id), thick = model.roofs[id].thick;
+    const [x0, z0, x1, z1] = model.roofs[id].outline.reduce((b, [x, z]) => [Math.min(b[0], x), Math.min(b[1], z), Math.max(b[2], x), Math.max(b[3], z)], [Infinity, Infinity, -Infinity, -Infinity]);
+    // the slab is the lift's extrusion whose footprint is this roof's outline
+    const slab = L.lift.children.find(o => o.isMesh && o.geometry.type === 'ExtrudeGeometry' && (() => {
+      o.geometry.computeBoundingBox();
+      const b = o.geometry.boundingBox;
+      return Math.abs(b.min.x - x0) < 1e-6 && Math.abs(b.max.x - x1) < 1e-6 && Math.abs(b.min.z - z0) < 1e-6 && Math.abs(b.max.z - z1) < 1e-6;
+    })());
+    assert.ok(slab, `${id} slab`);
+    const pa = slab.geometry.attributes.position;
+    let tops = 0;
+    for (let i = 0; i < pa.count; i++) {
+      const x = pa.getX(i), y = pa.getY(i), t = top(x);
+      assert.ok(y <= t + 1e-6 && y >= t - thick - 1e-6, `${id} vertex ${i} at ${y} against top ${t}`);
+      if (Math.abs(y - t) < 1e-6) tops++;
+    }
+    assert.ok(tops >= 4, `${id} has its top face on roofTop`);
+  }
+});
+
+test('tapAction: an overlay hit first, then car, feature, room, empty space', () => {
+  assert.deepEqual(tapAction('m:light.x', { feature: 'pv' }), { marker: 'light.x' });
+  assert.deepEqual(tapAction('c:r1', { car: true }), { room: 'r1' });
+  assert.deepEqual(tapAction(null, { car: true }), { car: true });
+  assert.deepEqual(tapAction(null, { feature: 'pv', target: {} }), { feature: 'pv' });
+  assert.deepEqual(tapAction(null, { room: 'r2', target: {} }), { room: 'r2' });
+  assert.deepEqual(tapAction(null, null), { none: true });
 });

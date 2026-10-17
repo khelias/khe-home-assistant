@@ -36,9 +36,10 @@
 //   shades?         true when what update() animates casts shadows (the real style's shadow map
 //                   is rendered only on change); a layer that only tints or glows leaves it out
 //   markers(list)?  every setMarkers list
-//   hit(ray)?       the tap and hover test on the raycaster: null, { car: true } or
-//                   { room, target }. Layers are tried in reverse build order, so the car wins
-//                   over the floors, and a layer that is off is skipped
+//   hit(ray)?       the tap and hover test on the raycaster: null, { car: true }, { room, target }
+//                   or { feature: id, target } (a tap goes to options.onFeature). Layers are tried
+//                   in reverse build order, so the car wins over the floors, and a layer that is
+//                   off is skipped
 //   setOn(on)?      the layer was switched, also before the first frame
 //   api?            what the core re-exports (setCar, carState, carScreen) or another layer
 //                   calls through ctx.layer(id)
@@ -46,7 +47,8 @@
 // ctx: THREE, kit, C (kit.C), model, options, style ('simple' | 'real'),
 //   frame { lotBox, wallBox, ext, E, lotCx, lotCz } (modelFrame),
 //   roof { fns, flat, under, topFn, gap }, ceiling, reduceMotion, state (read-only: mode,
-//   roofFade, hovered, selection, night: 0 by day to 1 at night, the real style's only), layer(id), screen(x, y, z) -> { x, y } | null, invalidate().
+//   roofFade, hovered, selection, night: 0 by day to 1 at night, the real style's only, sun: the
+//   sun's { alt, dir, time } in both styles, null without a place), layer(id), screen(x, y, z) -> { x, y } | null, invalidate().
 //   build() and the first setOn() run before the loop exists: they must not call invalidate()
 //   or screen().
 // The core puts each layer's group and lift under a wrapper group, and switching a layer sets
@@ -85,6 +87,9 @@ const MOON = { color: '#a9bcff', intensity: 0.55, dir: [-0.45, 0.75, 0.5] };
 const NIGHT_SKY = { sky: '#7d90c8', ground: '#3a4152', intensity: 0.55 };
 // without a place the real style lights the street side from the left, like an afternoon sun
 const FIXED_SUN = [-0.62, 0.62, -0.48];
+// pvNow(): clear-sky beam by Meinel's formula, the diffuse share of it, the system's losses and
+// the peak kW per kWp at the roofs' low slope (khe-meta house/house-hvac.md's PV assessment)
+const SOLAR_CONSTANT = 1353, DIFFUSE = 0.1, PV_LOSSES = 0.86, PV_PEAK = 0.8;
 
 export const ICONS = {
   light: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/>',
@@ -187,6 +192,53 @@ export function modelFrame(model) {
   const ext = Math.max(lotBox[2] - lotBox[0], lotBox[3] - lotBox[1]);
   const E = ext / 41; // the prototype's framing was tuned on a 41 m lot
   return { roof: { fns, flat, under, topFn, gap: ROOF_GAP }, frame: { lotBox, wallBox, ext, E, lotCx, lotCz } };
+}
+
+/**
+ * roofNormal(model, roofId) -> [x, y, z]: the unit normal of a shed roof's top, leaning towards
+ * the side it falls to.
+ */
+export function roofNormal(model, roofId) {
+  const r = model.roofs[roofId], slope = r.slope ?? Math.tan(r.pitch_deg * D2R), sign = r.falls === 'west' ? -1 : 1;
+  const n = Math.hypot(slope, 1);
+  return [(sign * slope) / n, 1 / n, 0];
+}
+
+/**
+ * roofTop(roof, model, roofId) -> x -> the height of the roof slab's top surface (roof is
+ * modelFrame()'s): the slab runs up from under the roof line by its thickness.
+ */
+export function roofTop(roof, model, roofId) {
+  const fn = roof.fns[roofId], thick = model.roofs[roofId].thick;
+  return x => fn(x) - roof.gap + thick;
+}
+
+/**
+ * pvNow(kwp, normal, sun) -> kW from kwp of panels facing normal (unit [x, y, z]) under a clear
+ * sky, for sun { alt, dir } (degrees, unit vector towards the sun); 0 without a sun or below the
+ * horizon. Beam normal irradiance 1353 * 0.7^(AM^0.678) W/m2 with AM = 1 / sin(alt), diffuse a
+ * tenth of it, 0.86 of the irradiance on the panel per kWp, never above 0.8 kW per kWp.
+ */
+export function pvNow(kwp, normal, sun) {
+  if (!sun || !(sun.alt > 0)) return 0;
+  const beam = SOLAR_CONSTANT * Math.pow(0.7, Math.pow(1 / Math.sin(sun.alt * D2R), 0.678));
+  const [nx, ny, nz] = normal, [sx, sy, sz] = sun.dir;
+  const cos = (nx * sx + ny * sy + nz * sz) / (Math.hypot(nx, ny, nz) * Math.hypot(sx, sy, sz));
+  const onPanel = beam * Math.max(0, cos) + DIFFUSE * beam;
+  return Math.min(PV_PEAK * kwp, (kwp * PV_LOSSES * onPanel) / 1000);
+}
+
+/**
+ * tapAction(markerHit, layerHit) -> what a tap does: { marker: id } or { room: id } for a marker
+ * or chip under it ('m:<id>' or 'c:<room>' from the overlay, which wins), else from the scene hit
+ * { car: true }, { feature: id }, { room: id } or, for empty space, { none: true }.
+ */
+export function tapAction(markerHit, layerHit) {
+  if (markerHit) return markerHit[0] === 'm' ? { marker: markerHit.slice(2) } : { room: markerHit.slice(2) };
+  if (layerHit && layerHit.car) return { car: true };
+  if (layerHit && layerHit.feature) return { feature: layerHit.feature };
+  if (layerHit && layerHit.room) return { room: layerHit.room };
+  return { none: true };
 }
 
 /**
@@ -416,7 +468,7 @@ export function inChip(m, chipRooms, focus) {
 /**
  * mount(element, model, options) -> { setMarkers, setRoomChips, focusRoom, setMode, setSelection, setCar,
  *                                     setLayer, setSun, setTime, reset, resize, dispose, mode, carState,
- *                                     carScreen, layers, time, view }
+ *                                     carScreen, layers, time, view, sun }
  *
  * model: geometry + rooms layers (private and showcase are ignored). A wall with finish 'panel' is
  *   drawn in the real style as anthracite panel (the carport's walls and posts); a room's floor
@@ -437,6 +489,9 @@ export function inChip(m, chipRooms, focus) {
  *   onRoom(id|null)  a room floor was tapped with the roof off; null for empty space
  *   onMode(mode)     the mode changed ('roof' | 'open')
  *   onCar()          the car's body was tapped (either mode, while it shows); no room tap follows
+ *   onFeature(id)    a layer's feature (a future item) was tapped; no room tap follows
+ *   onSun(sun)       the sun changed: setSun, setTime and the minute tick while live, in both
+ *                    styles; sun as the sun getter gives it
  *   bloom            default true; always off below 720 px width and in the real style
  *   mode             the starting mode, 'roof' (default) or 'open'
  *   style            'simple' (default) or 'real'; another style is another mount
@@ -459,11 +514,13 @@ export function inChip(m, chipRooms, focus) {
  *   fades it out; both close the gate at once. carState is 'away' | 'driving' | 'parked'; carScreen
  *   is the car's projected centre { x, y } in CSS pixels relative to the element, or null when it
  *   is away, switched off or behind. Without a car, setCar does nothing, carState is 'away', carScreen null.
- * setSun({ lat, lon, bearing } | null): the place for the real style's sun, in degrees, bearing
- *   the L-EST97 grid azimuth of the model's +x axis (georef.x_axis_bearing_deg); null or any
- *   missing value gives a fixed afternoon sun. setTime(date | null): the sun's time, null for
- *   live (recomputed once a minute). time is the time in use. Both do nothing visible in the
- *   simple style. view is { position, target } for options.view; the fog follows the camera.
+ * setSun({ lat, lon, bearing } | null): the place for the sun, in degrees, bearing the L-EST97
+ *   grid azimuth of the model's +x axis (georef.x_axis_bearing_deg); null or any missing value
+ *   gives the real style a fixed afternoon sun. setTime(date | null): the sun's time, null for
+ *   live (recomputed once a minute while there is a place). time is the time in use. sun is
+ *   { alt, dir: [x, y, z], time } (degrees, the unit vector towards the sun in model axes, the
+ *   Date it was computed for), or null without a place, in both styles; only the real style
+ *   draws it. view is { position, target } for options.view; the fog follows the camera.
  * layers: [{ id, on }] for the switchable layers present and listed now; setLayer(id, on) switches
  *   one and ignores an unknown id. Switchable: 'markers' (the overlay; off hides every marker but
  *   an alert), 'fans' (listed while a marker has a look), 'trees', 'surroundings' and 'car' (off
@@ -512,7 +569,7 @@ export function mount(element, model, options = {}) {
     stage.appendChild(msg);
     const noop = () => {};
     return { failed: true, setMarkers: noop, setRoomChips: noop, focusRoom: noop, setMode: noop, setSelection: noop, setCar: noop, setLayer: noop, reset: noop, resize: noop,
-      setSun: noop, setTime: noop, dispose: () => root.remove(), mode: 'roof', carState: 'away', carScreen: null, layers: [], time: null, view: null };
+      setSun: noop, setTime: noop, dispose: () => root.remove(), mode: 'roof', carState: 'away', carScreen: null, layers: [], time: null, view: null, sun: null };
   }
   const PR = Math.min(window.devicePixelRatio || 1, 2);
   renderer.setPixelRatio(PR);
@@ -544,14 +601,15 @@ export function mount(element, model, options = {}) {
   controls.screenSpacePanning = false;
 
   /* ---------- layers ---------- */
-  let mode = 'roof', sel = null, hovered = null, night = 0;
+  let mode = 'roof', sel = null, hovered = null, night = 0, sunNow = null;
   const fade = { cur: 1, to: 1 };
   const state = {
     get mode() { return mode; },
     get roofFade() { return fade.cur; },
     get hovered() { return hovered; },
     get selection() { return sel; },
-    get night() { return night; }
+    get night() { return night; },
+    get sun() { return sunNow; }
   };
   const screenV = new THREE.Vector3();
   const screen = (x, y, z) => toScreen(camera, [x, y, z], width, height, screenV);
@@ -685,12 +743,16 @@ export function mount(element, model, options = {}) {
     cam.updateProjectionMatrix();
   }
   function updateSun() {
+    if (sunPlace) {
+      const time = sunTime ? new Date(sunTime) : new Date(), p = sunPosition(time, sunPlace.lat, sunPlace.lon);
+      sunNow = { alt: p.altitude, dir: sunDirection(p.altitude, gridBearing(p.azimuth, sunPlace.lon), sunPlace.bearing), time };
+    } else sunNow = null;
+    if (options.onSun) options.onSun(sunNow);
     if (!real) return;
     let alt, dir;
-    if (sunPlace) {
-      const p = sunPosition(sunTime || new Date(), sunPlace.lat, sunPlace.lon);
-      alt = p.altitude;
-      dir = sunDirection(alt, gridBearing(p.azimuth, sunPlace.lon), sunPlace.bearing);
+    if (sunNow) {
+      alt = sunNow.alt;
+      dir = sunNow.dir;
     } else {
       dir = FIXED_SUN;
       alt = Math.asin(dir[1] / Math.hypot(...dir)) / D2R;
@@ -945,12 +1007,11 @@ export function mount(element, model, options = {}) {
     if (!tap) return;
     downAt = null;
     const mk = markerAt(ev);
-    if (mk && mk[0] === 'm') { if (options.onMarker) options.onMarker(mk.slice(2)); return; }
-    if (mk) { if (options.onRoom) options.onRoom(mk.slice(2)); return; }
-    aim(ev);
-    const h = hitTest();
-    if (h && h.car) { if (options.onCar) options.onCar(); return; }
-    if (options.onRoom) options.onRoom(h && h.room ? h.room : null);
+    const a = tapAction(mk, mk ? null : (aim(ev), hitTest()));
+    if (a.marker) { if (options.onMarker) options.onMarker(a.marker); }
+    else if (a.car) { if (options.onCar) options.onCar(); }
+    else if (a.feature) { if (options.onFeature) options.onFeature(a.feature); }
+    else if (options.onRoom) options.onRoom(a.room || null);
   };
   const onLeave = () => setHoverMarker(null);
   renderer.domElement.addEventListener('pointermove', onMove);
@@ -1190,8 +1251,8 @@ export function mount(element, model, options = {}) {
   resize();
   setMode(options.mode === 'open' ? 'open' : 'roof', true);
   updateSun();
-  // live: the sun moves on once a minute
-  if (real) sunTimer = setInterval(() => { if (!sunTime && sunPlace) updateSun(); }, 60000);
+  // live: the sun moves on once a minute, in both styles while there is a place (onSun, ctx.state.sun)
+  sunTimer = setInterval(() => { if (!sunTime && sunPlace) updateSun(); }, 60000);
   invalidate();
 
   function dispose() {
@@ -1224,6 +1285,7 @@ export function mount(element, model, options = {}) {
     setCar: s => { if (byId.car) byId.car.api.setCar(s); },
     get mode() { return mode; },
     get time() { return sunTime ? new Date(sunTime) : new Date(); },
+    get sun() { return sunNow; },
     get view() { return { position: camera.position.toArray(), target: controls.target.toArray() }; },
     get carState() { return byId.car ? byId.car.api.carState : 'away'; },
     get carScreen() { return byId.car ? byId.car.api.carScreen : null; },
