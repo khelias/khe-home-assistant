@@ -118,6 +118,16 @@ image pin and the Renovate hold on HA bumps, `backup.sh` (which covers
 `.storage`, `custom_components/` and the recorder) and the host's security
 model in its `SECURITY.md`.
 
+Automated writers
+([estate ADR-007](https://github.com/khelias/khe-architecture/blob/main/decisions/007-automated-writers.md)): Renovate
+automerges GitHub Actions minor and patch updates, digests and pins
+(`renovate.json`), and every merge to `main` that touches `config/` or
+`house3d/` deploys the config. The way back is to revert the commit on
+`main` and push: the revert is a new config deploy, and HA keeps running
+what it loaded last until a restart or reload, so restart or reload it
+after the revert lands. A new automated writer joins the estate's writer
+register in khe-meta in the same change.
+
 ## Working on Home Assistant
 
 HA is operated through its API: not the UI, not SSH. Reads the agent makes
