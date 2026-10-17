@@ -223,6 +223,16 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   with the sun off. The standalone viewer gets the bearing in whole degrees
   only (`orientation` in `model.json`) and puts the sun over the middle of
   Estonia, never over the house.
+- **Markers and taps:** markers are drawn over the canvas but take no
+  pointer, so a drag that starts on one orbits and never scrolls the page; a
+  tap (no drag past 6 px) tests the shown markers' rectangles first, nearest
+  centre wins, then the rooms and the car. They stay buttons, so Tab and
+  Enter reach them, and their accessible name carries the state. The overlay
+  is projected after the camera's matrices are refreshed each frame, so it
+  does not trail the view. While a finger is down the view follows it 1:1;
+  on release it coasts from the last 80 ms of movement (capped at 4 rad/s,
+  0.35 s decay, none under reduced motion); zoom keeps OrbitControls' own
+  damping.
 - **Kihid:** the card's layers button opens a sheet. Its first row, Stiil,
   picks the style; in the real style the Kellaaeg (quarter hours) and
   Kuupäev (days of this year) sliders scrub the sun, and Praegu returns to

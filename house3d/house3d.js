@@ -109,14 +109,14 @@ const STYLE = `
   background: radial-gradient(ellipse at 50% 55%, #0c1631 0%, #060c1b 70%) #060c1b; }
 .h3d-stage { position: absolute; inset: 0; }
 .h3d-stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-.h3d-overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-.h3d-marker { position: absolute; left: 0; top: 0; pointer-events: auto;
+.h3d-overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; touch-action: none; }
+.h3d-marker { position: absolute; left: 0; top: 0; pointer-events: none;
   display: flex; align-items: center; justify-content: center; gap: 5px;
   height: 32px; min-width: 32px; padding: 0 7px; box-sizing: border-box; border-radius: 16px;
   border: 1px solid rgba(111, 227, 255, 0.35); background: rgba(8, 16, 36, 0.88); color: var(--h3d-line);
   font: 500 12px/1 var(--h3d-mono); font-variant-numeric: tabular-nums; cursor: pointer;
   box-shadow: 0 0 14px rgba(111, 227, 255, 0.18);
-  transition: background-color .2s, color .2s, box-shadow .2s, border-color .2s, opacity .2s; will-change: transform; }
+  transition: background-color .2s, color .2s, box-shadow .2s, border-color .2s; will-change: transform; }
 .h3d-marker svg { width: 16px; height: 16px; flex: none; }
 .h3d-marker.round { width: 32px; padding: 0; }
 .h3d-marker.on { color: #1c1406; background: var(--h3d-amber); border-color: var(--h3d-amber); box-shadow: 0 0 22px rgba(255, 197, 110, 0.55); }
@@ -128,7 +128,7 @@ const STYLE = `
 .h3d-marker.alert.pulse::after { border-color: var(--h3d-alert); }
 .h3d-marker:focus-visible { outline: 2px solid var(--h3d-amber); outline-offset: 2px; }
 @keyframes h3d-ring { from { opacity: .9; transform: scale(.85); } to { opacity: 0; transform: scale(1.35); } }
-@media (hover: hover) and (pointer: fine) { .h3d-marker:hover { border-color: var(--h3d-ink); } }
+.h3d-marker.hover { border-color: var(--h3d-ink); }
 @media (prefers-reduced-motion: reduce) { .h3d-marker.pulse::after { animation: none; opacity: .6; } }
 .h3d-label { position: absolute; left: 0; top: 0; font: 500 10px/1 var(--h3d-mono); letter-spacing: 0.16em;
   text-transform: uppercase; color: var(--h3d-muted); white-space: nowrap; pointer-events: none; will-change: transform; }
@@ -207,6 +207,75 @@ export function guardLayer(L, off) {
 }
 
 /**
+ * syncCamera(controls, camera) -> what controls.update() returned, with the camera's world
+ * matrices refreshed. update() ends in lookAt, which refreshes the world matrix before it sets
+ * the new rotation, so a projection straight after it used the previous frame's rotation and the
+ * markers trailed the view by a frame.
+ */
+export function syncCamera(controls, camera) {
+  const moved = controls.update();
+  camera.updateMatrixWorld();
+  return moved;
+}
+
+/**
+ * toScreen(camera, p, width, height, v?) -> { x, y } in CSS pixels from the top left, or null
+ * behind the camera; p is [x, y, z] or a Vector3, v a scratch vector.
+ */
+export function toScreen(camera, p, width, height, v = new THREE.Vector3()) {
+  if (Array.isArray(p)) v.set(p[0], p[1], p[2]);
+  else v.copy(p);
+  v.project(camera);
+  if (v.z >= 1) return null;
+  return { x: ((v.x + 1) / 2) * width, y: ((1 - v.y) / 2) * height };
+}
+
+/**
+ * hitRect(rects, x, y, pad = 0) -> the id of the rectangle { id, x, y, w, h } (centre and size
+ * in CSS pixels) that holds (x, y) grown by pad on every side; of several, the one whose centre
+ * is nearest. null for none.
+ */
+export function hitRect(rects, x, y, pad = 0) {
+  let best = null, bestD = Infinity;
+  for (const r of rects) {
+    if (Math.abs(x - r.x) > r.w / 2 + pad || Math.abs(y - r.y) > r.h / 2 + pad) continue;
+    const d = Math.hypot(x - r.x, y - r.y);
+    if (d < bestD) { bestD = d; best = r.id; }
+  }
+  return best;
+}
+
+/**
+ * releaseVelocity(samples, now, win = 80) -> { az, polar } in radians per second: the camera's
+ * azimuth and polar rate over the last win ms of samples [{ t, az, polar }] (t in ms, oldest
+ * first, the release itself the last), at most max. Fewer than two samples in the window, or
+ * samples spanning under 30 ms (a jump, not a flick), give zero.
+ */
+export function releaseVelocity(samples, now, win = 80, max = 4) {
+  const recent = samples.filter(s => now - s.t <= win);
+  if (recent.length < 2) return { az: 0, polar: 0 };
+  const a = recent[0], b = recent[recent.length - 1], dt = (b.t - a.t) / 1000;
+  if (dt < 0.03) return { az: 0, polar: 0 };
+  // the azimuth wraps at +-pi
+  let daz = b.az - a.az;
+  if (daz > Math.PI) daz -= 2 * Math.PI;
+  else if (daz < -Math.PI) daz += 2 * Math.PI;
+  const v = { az: daz / dt, polar: (b.polar - a.polar) / dt }, f = Math.min(1, max / (Math.hypot(v.az, v.polar) || 1));
+  return { az: v.az * f, polar: v.polar * f };
+}
+
+/**
+ * coast(v, dt, tau = 0.35) -> { d, v }: the turn d { az, polar } in radians over the next dt
+ * seconds of a coast at velocity v { az, polar } that decays exponentially with time constant
+ * tau, and the velocity after it. The turn is the decay's integral, so it does not depend on
+ * the frame rate.
+ */
+export function coast(v, dt, tau = 0.35) {
+  const f = Math.exp(-dt / tau), s = tau * (1 - f);
+  return { d: { az: v.az * s, polar: v.polar * s }, v: { az: v.az * f, polar: v.polar * f } };
+}
+
+/**
  * mount(element, model, options) -> { setMarkers, setMode, setSelection, setCar, setLayer, setSun, setTime,
  *                                     reset, resize, dispose, mode, carState, carScreen, layers, time, view }
  *
@@ -262,7 +331,9 @@ export function guardLayer(L, off) {
  *   parks a running drive and closes the gate at once, and 'arrive' then parks). A layer that is
  *   off takes no taps.
  * markers: { id, pos: [x, y, z], icon, state: 'idle'|'on'|'alert'|'off', value?, label?,
- *            room?, look?: [dx, dz], role?, level?: 0..1, pulse?, warm? }
+ *            stateText?, room?, look?: [dx, dz], role?, level?: 0..1, pulse?, warm? }
+ *   label and stateText make the marker's accessible name. Markers take no pointer, so a drag
+ *   that starts on one orbits; a tap on the canvas tests the shown markers' rectangles first.
  *   A marker whose room is a house room shows only with the roof off, unless its state is
  *   'alert'; state 'on' warms that room's floor unless warm is false. role 'pergola-light' drives the pergola's LED glow.
  */
@@ -340,11 +411,7 @@ export function mount(element, model, options = {}) {
     get selection() { return sel; }
   };
   const screenV = new THREE.Vector3();
-  function screen(x, y, z) {
-    screenV.set(x, y, z).project(camera);
-    if (screenV.z >= 1) return null;
-    return { x: ((screenV.x + 1) / 2) * width, y: ((1 - screenV.y) / 2) * height };
-  }
+  const screen = (x, y, z) => toScreen(camera, [x, y, z], width, height, screenV);
   const byId = {};
   const ctx = {
     THREE, kit, C, model, options, style, reduceMotion, state, screen,
@@ -512,7 +579,7 @@ export function mount(element, model, options = {}) {
     overlay.appendChild(el);
     const [x0, z0, x1, z1] = r.rects[0];
     const [lx, lz] = r.label || [(x0 + x1) / 2, (z0 + z1) / 2];
-    return { el, pos: new THREE.Vector3(lx, 0.05, lz) };
+    return { el, pos: new THREE.Vector3(lx, 0.05, lz), disp: '', op: -1, tf: '' };
   });
 
   const markers = new Map(); // id -> { data, el }
@@ -526,15 +593,24 @@ export function mount(element, model, options = {}) {
     if (sel === m.id) c.push('sel');
     return c.join(' ');
   }
+  // a change of class or content can change the size, which is measured again on the next frame
+  // that shows the marker (a hidden one measures 0)
   function renderMarker(rec) {
     const m = rec.data;
-    rec.el.className = markerClass(m);
+    const cls = markerClass(m) + (rec.hover ? ' hover' : '');
+    if (rec.cls !== cls) { rec.el.className = cls; rec.cls = cls; rec.size = null; }
     const html = icon(m.icon) + (m.value !== undefined && m.value !== null && m.value !== '' ? `<span>${String(m.value).replace(/[&<>"]/g, ch => `&#${ch.charCodeAt(0)};`)}</span>` : '');
-    if (rec.html !== html) { rec.el.innerHTML = html; rec.html = html; }
-    const label = m.label || m.id;
-    rec.el.setAttribute('aria-label', label);
-    rec.el.title = label;
+    if (rec.html !== html) { rec.el.innerHTML = html; rec.html = html; rec.size = null; }
+    const label = m.label || m.id, aria = m.stateText ? `${label}, ${m.stateText}` : label;
+    if (rec.aria !== aria) { rec.el.setAttribute('aria-label', aria); rec.el.title = aria; rec.aria = aria; }
   }
+  // the markers on screen now, as hitRect() takes them; a marker fading in or out under the roof
+  // takes taps only once it is mostly there
+  const shownRects = () => {
+    const out = [];
+    for (const [id, rec] of markers) if (rec.shown && rec.size && rec.op >= 0.5) out.push({ id, x: rec.sx, y: rec.sy, w: rec.size[0], h: rec.size[1] });
+    return out;
+  };
 
   function setMarkers(list) {
     const seen = new Set();
@@ -544,9 +620,10 @@ export function mount(element, model, options = {}) {
       if (!rec) {
         const el = document.createElement('button');
         el.type = 'button';
+        // markers take no pointer (a drag over one orbits), so this is the keyboard's Enter and Space
         el.addEventListener('click', ev => { ev.stopPropagation(); if (options.onMarker) options.onMarker(m.id); });
         overlay.appendChild(el);
-        rec = { el, html: '' };
+        rec = { el, html: '', cls: '', aria: '', size: null, shown: false, disp: '', op: -1, tf: '', sx: 0, sy: 0, hover: false };
         markers.set(m.id, rec);
       }
       rec.data = m;
@@ -589,17 +666,61 @@ export function mount(element, model, options = {}) {
     }
     return null;
   }
+  // the marker under a pointer, in the overlay's CSS pixels; a touch gets a little slack
+  function markerAt(ev) {
+    const rect = root.getBoundingClientRect();
+    return hitRect(shownRects(), ev.clientX - rect.left, ev.clientY - rect.top, ev.pointerType === 'mouse' ? 0 : 6);
+  }
+  let hoverMarker = null;
+  function setHoverMarker(id) {
+    if (id === hoverMarker) return;
+    [hoverMarker, id].forEach(k => { const rec = k && markers.get(k); if (rec) { rec.hover = k === id; renderMarker(rec); } });
+    hoverMarker = id;
+  }
   const onMove = ev => {
     if (ev.pointerType !== 'mouse') return;
+    const mk = pointers.size ? null : markerAt(ev);
+    setHoverMarker(mk);
     aim(ev);
-    const h = hitTest();
+    const h = mk ? null : hitTest();
     const over = h && h.target ? h.target : null;
     if (over !== hovered) { hovered = over; invalidate(); }
-    renderer.domElement.style.cursor = h ? 'pointer' : '';
+    renderer.domElement.style.cursor = mk || h ? 'pointer' : '';
   };
-  const onDown = ev => { downAt = [ev.clientX, ev.clientY]; };
+  // While a pointer is down the camera follows it 1:1, without OrbitControls' damping (turning it
+  // off mid-gesture drops nothing: update() then applies the whole delta at once). On release the
+  // view coasts on from the last 80 ms of camera samples; zoom keeps OrbitControls' own damping.
+  const pointers = new Set();
+  let samples = [], spin = null, multi = false;
+  const sampleNow = t => ({ t, az: controls.getAzimuthalAngle(), polar: controls.getPolarAngle() });
+  const onDown = ev => {
+    downAt = pointers.size ? null : [ev.clientX, ev.clientY];
+    pointers.add(ev.pointerId);
+    if (pointers.size > 1) multi = true;
+    spin = null;
+    samples = [sampleNow(performance.now())];
+    controls.enableDamping = false;
+  };
+  const onRelease = ev => {
+    if (!pointers.delete(ev.pointerId) || pointers.size) return;
+    controls.enableDamping = true;
+    if (!multi && !reduceMotion && ev.type === 'pointerup') {
+      const now = performance.now();
+      samples.push(sampleNow(now));
+      const vel = releaseVelocity(samples, now);
+      if (Math.hypot(vel.az, vel.polar) > 0.3) spin = vel;
+    }
+    samples = [];
+    multi = false;
+    invalidate();
+  };
   const onUp = ev => {
-    if (!downAt || Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) > 6) return;
+    const tap = downAt && pointers.size === 1 && Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) <= 6;
+    onRelease(ev);
+    if (!tap) return;
+    downAt = null;
+    const mk = markerAt(ev);
+    if (mk) { if (options.onMarker) options.onMarker(mk); return; }
     aim(ev);
     const h = hitTest();
     if (h && h.car) { if (options.onCar) options.onCar(); return; }
@@ -608,6 +729,7 @@ export function mount(element, model, options = {}) {
   renderer.domElement.addEventListener('pointermove', onMove);
   renderer.domElement.addEventListener('pointerdown', onDown);
   renderer.domElement.addEventListener('pointerup', onUp);
+  renderer.domElement.addEventListener('pointercancel', onRelease);
   controls.addEventListener('change', () => { fitFog(); invalidate(); });
   controls.addEventListener('start', () => invalidate());
 
@@ -670,7 +792,15 @@ export function mount(element, model, options = {}) {
 
   /* ---------- loop: runs only while something moves, a change restarts it ---------- */
   let dirty = true, raf = 0, last = 0, disposed = false;
-  const v = new THREE.Vector3();
+  const v = new THREE.Vector3(), orbitV = new THREE.Vector3(), orbitS = new THREE.Spherical();
+  // the overlay writes a style only when its value changed
+  function place(rec, el, disp, op, tf) {
+    if (rec.disp !== disp) { el.style.display = disp; rec.disp = disp; }
+    if (disp === 'none') return;
+    if (rec.op !== op) { el.style.opacity = op.toFixed(2); rec.op = op; }
+    if (rec.tf !== tf) { el.style.transform = tf; rec.tf = tf; }
+  }
+  const at = p => `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) translate(-50%, -50%)`;
   function invalidate() {
     dirty = true;
     if (!raf && !disposed && visible) { last = performance.now(); raf = requestAnimationFrame(frame); }
@@ -682,7 +812,25 @@ export function mount(element, model, options = {}) {
     last = now;
     if (!visible) { raf = 0; return; }
     const k = reduceMotion ? 1 : 1 - Math.exp(-dt * 4.2);
-    let moving = controls.update();
+    let moving = false;
+    if (spin) {
+      const c = coast(spin, dt);
+      spin = Math.hypot(c.v.az, c.v.polar) > 0.02 ? c.v : null;
+      orbitV.copy(camera.position).sub(controls.target);
+      orbitS.setFromVector3(orbitV);
+      orbitS.theta += c.d.az;
+      orbitS.phi += c.d.polar;
+      orbitS.makeSafe();
+      camera.position.copy(controls.target).add(orbitV.setFromSpherical(orbitS));
+      moving = true;
+    }
+    if (syncCamera(controls, camera)) moving = true;
+    // a coast into the polar limit stops turning that way
+    if (spin && Math.abs(controls.getPolarAngle() - orbitS.phi) > 1e-6) spin = { az: spin.az, polar: 0 };
+    if (pointers.size) {
+      samples.push(sampleNow(now));
+      while (samples.length > 2 && now - samples[0].t > 200) samples.shift();
+    }
     if (!kit.near(fade.cur, fade.to)) { fade.cur += (fade.to - fade.cur) * k; moving = true; } else fade.cur = fade.to;
     layers.forEach(({ L }) => {
       if (!L.lift) return;
@@ -714,18 +862,17 @@ export function mount(element, model, options = {}) {
     for (const rec of markers.values()) {
       // an alert indoors shows through the roof, so a closed view never hides it
       const m = rec.data, el = rec.el, covered = isIndoor(m) && m.state !== 'alert';
-      v.set(m.pos[0], m.pos[1], m.pos[2]).project(camera);
-      if ((!markerLayer.on && m.state !== 'alert') || (covered && roofOpen <= 0.02) || v.z >= 1) { if (el.style.display !== 'none') el.style.display = 'none'; continue; }
-      el.style.display = '';
-      el.style.opacity = (covered ? roofOpen : 1).toFixed(2);
-      el.style.transform = `translate(${((v.x + 1) / 2) * width}px, ${((1 - v.y) / 2) * height}px) translate(-50%, -50%)`;
+      const p = (markerLayer.on || m.state === 'alert') && !(covered && roofOpen <= 0.02) ? toScreen(camera, m.pos, width, height, v) : null;
+      rec.shown = !!p;
+      if (!p) { place(rec, el, 'none'); continue; }
+      place(rec, el, '', Math.round((covered ? roofOpen : 1) * 100) / 100, at(p));
+      rec.sx = p.x;
+      rec.sy = p.y;
+      if (!rec.size) rec.size = [el.offsetWidth, el.offsetHeight];
     }
     labels.forEach(l => {
-      if (roofOpen < 0.02) { l.el.style.display = 'none'; return; }
-      v.copy(l.pos).project(camera);
-      l.el.style.display = v.z < 1 ? '' : 'none';
-      l.el.style.opacity = (roofOpen * 0.8).toFixed(2);
-      l.el.style.transform = `translate(${((v.x + 1) / 2) * width}px, ${((1 - v.y) / 2) * height}px) translate(-50%, -50%)`;
+      const p = roofOpen < 0.02 ? null : toScreen(camera, l.pos, width, height, v);
+      place(l, l.el, p ? '' : 'none', Math.round(roofOpen * 80) / 100, p ? at(p) : '');
     });
     if (bloomOn()) getComposer().render();
     else renderer.render(scene, camera);
@@ -749,6 +896,7 @@ export function mount(element, model, options = {}) {
     renderer.domElement.removeEventListener('pointermove', onMove);
     renderer.domElement.removeEventListener('pointerdown', onDown);
     renderer.domElement.removeEventListener('pointerup', onUp);
+    renderer.domElement.removeEventListener('pointercancel', onRelease);
     controls.dispose();
     layers.forEach(({ L }) => { if (L.dispose) L.dispose(); });
     scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && !Array.isArray(o.material)) o.material.dispose(); });

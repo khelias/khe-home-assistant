@@ -24,7 +24,8 @@ globalThis.document = {
 const THREE = await import(new URL('vendor/three-0.186.1/build/three.module.js', E));
 const { createKit } = await import(new URL('scene/kit.js', E));
 const BUILDERS = await Promise.all(LAYERS.map(id => import(new URL(`scene/layers/${id}.js`, E))));
-const { modelFrame, buildLayer, guardLayer } = await import(new URL('house3d.js', E));
+const { modelFrame, buildLayer, guardLayer, syncCamera, toScreen, hitRect, releaseVelocity, coast } = await import(new URL('house3d.js', E));
+const { OrbitControls } = await import(new URL('vendor/three-0.186.1/examples/jsm/controls/OrbitControls.js', E));
 const { sunPosition, gridBearing, sunDirection, sunGlow } = await import(new URL('scene/sun.js', E));
 const { cornerBoards } = await import(new URL('scene/layers/building.js', E));
 
@@ -648,4 +649,77 @@ test('sunGlow: hidden below the horizon, fading in, warm when low', () => {
   assert.ok(low.visible && low.opacity > 0 && low.opacity < 1);
   assert.equal(low.warm, 1);
   assert.deepEqual(sunGlow(30), { visible: true, opacity: 1, warm: 0 });
+});
+
+// OrbitControls on a stub canvas: listeners and a style are all it touches outside a gesture
+function orbit(aspect = 1.5) {
+  const on = { addEventListener() {}, removeEventListener() {} };
+  const dom = { ...on, style: {}, getRootNode: () => on, ownerDocument: on };
+  const camera = new THREE.PerspectiveCamera(38, aspect, 0.1, 500);
+  camera.position.set(-10, 12, -30);
+  const controls = new OrbitControls(camera, dom);
+  controls.target.set(7, 0.3, 6);
+  syncCamera(controls, camera);
+  return { camera, controls };
+}
+
+test('syncCamera: markers project through this frame\'s camera, not the last one', () => {
+  const { camera, controls } = orbit();
+  const pts = [[8.3, 1.1, 2.3], [16.9, 2.3, 6.9], [4.5, 2.5, 11.8]];
+  // an orbit step: the camera moves round the target, update() turns it to look at the target
+  camera.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.4);
+  controls.update();
+  // the old order projected here, before the world matrix had the new rotation
+  const before = pts.map(p => toScreen(camera, p, 800, 600));
+  syncCamera(controls, camera);
+  const after = pts.map(p => toScreen(camera, p, 800, 600));
+  // the reference: a fresh camera at the same pose, its matrices built from scratch
+  const ref = new THREE.PerspectiveCamera(38, 1.5, 0.1, 500);
+  ref.position.copy(camera.position);
+  ref.quaternion.copy(camera.quaternion);
+  ref.updateMatrixWorld();
+  pts.forEach((p, i) => {
+    const want = toScreen(ref, p, 800, 600);
+    assert.ok(Math.hypot(after[i].x - want.x, after[i].y - want.y) < 1e-6, 'synced');
+    assert.ok(Math.hypot(before[i].x - want.x, before[i].y - want.y) > 5, 'the old order lags');
+  });
+  assert.equal(toScreen(camera, camera.position.clone().addScaledVector(camera.getWorldDirection(new THREE.Vector3()), -5), 800, 600), null, 'behind the camera');
+});
+
+test('hitRect: the rectangle under the point, the nearest centre of several, pad for touch', () => {
+  const rects = [{ id: 'a', x: 100, y: 100, w: 32, h: 32 }, { id: 'b', x: 120, y: 100, w: 32, h: 32 }, { id: 'c', x: 300, y: 300, w: 60, h: 32 }];
+  assert.equal(hitRect(rects, 105, 100), 'a');
+  assert.equal(hitRect(rects, 115, 100), 'b');
+  assert.equal(hitRect(rects, 329, 315), 'c');
+  assert.equal(hitRect(rects, 332, 300), null);
+  assert.equal(hitRect(rects, 332, 300, 6), 'c');
+  assert.equal(hitRect([], 0, 0), null);
+});
+
+test('releaseVelocity: the rate over the last 80 ms, zero after a hold', () => {
+  const s = [0, 20, 40, 60, 80, 100].map(t => ({ t, az: t * 0.002, polar: 1 - t * 0.001 }));
+  const v = releaseVelocity(s, 100);
+  assert.ok(Math.abs(v.az - 2) < 1e-9 && Math.abs(v.polar + 1) < 1e-9);
+  // held still for 120 ms before the release: the window holds the release sample alone
+  assert.deepEqual(releaseVelocity([...s, { t: 220, az: 0.2, polar: 0.9 }], 220), { az: 0, polar: 0 });
+  // across the +-pi seam the short way round
+  const w = releaseVelocity([{ t: 0, az: Math.PI - 0.05, polar: 1 }, { t: 50, az: -Math.PI + 0.05, polar: 1 }], 50);
+  assert.ok(Math.abs(w.az - 2) < 1e-9);
+  // a jump within a frame or two is no flick, and a fast flick is capped
+  assert.deepEqual(releaseVelocity([{ t: 0, az: 0, polar: 1 }, { t: 16, az: 1.9, polar: 1 }], 16), { az: 0, polar: 0 });
+  const fast = releaseVelocity([{ t: 0, az: 0, polar: 1 }, { t: 40, az: 1.2, polar: 1 }], 40);
+  assert.ok(Math.abs(fast.az - 4) < 1e-9 && fast.polar === 0);
+});
+
+test('coast: decays with a 0.35 s time constant, independent of the frame rate', () => {
+  const v = { az: 3, polar: -1 };
+  const one = coast(v, 0.35);
+  assert.ok(Math.abs(one.v.az - 3 / Math.E) < 1e-9 && Math.abs(one.v.polar + 1 / Math.E) < 1e-9);
+  // two half steps travel as far as one whole one
+  const a = coast(v, 0.1), b = coast(a.v, 0.1), whole = coast(v, 0.2);
+  assert.ok(Math.abs(a.d.az + b.d.az - whole.d.az) < 1e-12);
+  // the whole coast travels v * tau
+  let cur = v, total = 0;
+  for (let i = 0; i < 600; i++) { const c = coast(cur, 1 / 60); total += c.d.az; cur = c.v; }
+  assert.ok(Math.abs(total - 3 * 0.35) < 1e-6);
 });
