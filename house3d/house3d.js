@@ -46,7 +46,7 @@
 //   dispose()?      frees what the kit's list and the scene traversal do not
 // ctx: THREE, kit, C (kit.C), model, options, style ('simple' | 'real'),
 //   frame { lotBox, wallBox, ext, E, lotCx, lotCz } (modelFrame),
-//   roof { fns, flat, under, topFn, gap }, ceiling, reduceMotion, state (read-only: mode,
+//   roof { fns, flat, under, topFn, gap, top(id) -> x -> the slab's top }, ceiling, reduceMotion, state (read-only: mode,
 //   roofFade, hovered, selection, night: 0 by day to 1 at night, the real style's only, sun: the
 //   sun's { alt, dir, time } in both styles, null without a place), layer(id), screen(x, y, z) -> { x, y } | null, invalidate().
 //   build() and the first setOn() run before the loop exists: they must not call invalidate()
@@ -60,7 +60,7 @@ import { RenderPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/R
 import { UnrealBloomPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/OutputPass.js';
 
-const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'car', 'fans'];
+const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'car', 'future', 'fans'];
 const QUERY = new URL(import.meta.url).search;
 // a layer module that fails to load drops its layer, not the engine; the kit and the sun are required
 const [KIT, SUN, ...LOADED] = await Promise.allSettled(['kit', 'sun', ...LAYERS.map(id => `layers/${id}`)].map(p => import(`./scene/${p}.js${QUERY}`)));
@@ -169,8 +169,9 @@ const STYLE = `
 `;
 
 /**
- * modelFrame(model) -> { roof: { fns, flat, under, topFn, gap }, frame: { lotBox, wallBox, ext, E, lotCx, lotCz } }
- * The model's roof height functions and its framing boxes, as ctx carries them.
+ * modelFrame(model) -> { roof: { fns, flat, under, topFn, gap, top }, frame: { lotBox, wallBox, ext, E, lotCx, lotCz } }
+ * The model's roof height functions and its framing boxes, as ctx carries them; roof.top(id) is
+ * roofTop() for that roof.
  */
 export function modelFrame(model) {
   const site = model.site || {};
@@ -183,6 +184,8 @@ export function modelFrame(model) {
   const flat = h => () => h;
   const under = id => x => fns[id](x) - ROOF_GAP;
   const topFn = top => (typeof top === 'string' ? under(top) : flat(top));
+  const roof = { fns, flat, under, topFn, gap: ROOF_GAP };
+  roof.top = id => roofTop(roof, model, id);
 
   // the lot sets the scale, the fog and the shadow box; homeBox() frames the home view
   const bbox = pts => pts.reduce((b, [x, z]) => [Math.min(b[0], x), Math.min(b[1], z), Math.max(b[2], x), Math.max(b[3], z)], [Infinity, Infinity, -Infinity, -Infinity]);
@@ -191,7 +194,7 @@ export function modelFrame(model) {
   const lotCx = (lotBox[0] + lotBox[2]) / 2, lotCz = (lotBox[1] + lotBox[3]) / 2;
   const ext = Math.max(lotBox[2] - lotBox[0], lotBox[3] - lotBox[1]);
   const E = ext / 41; // the prototype's framing was tuned on a 41 m lot
-  return { roof: { fns, flat, under, topFn, gap: ROOF_GAP }, frame: { lotBox, wallBox, ext, E, lotCx, lotCz } };
+  return { roof, frame: { lotBox, wallBox, ext, E, lotCx, lotCz } };
 }
 
 /**

@@ -5,7 +5,9 @@ const COLORS = {
   bg: '#060c1b', line: '#6fe3ff', lineSoft: '#5d86d8', roof: '#9aa6ff', roofFill: '#252f6e', wall: '#1b2c5e',
   glass: '#5fd8ff', floor: '#0e1a3c', warm: '#6b4a1c', hover: '#24407f', sel: '#2b5aa0', amber: '#ffc56e',
   teal: '#47d9c4', hedge: '#123b45', furniture: '#7f9bff', gridMajor: '#2a4685', gridMinor: '#172a55',
-  ink: '#e4ecff', alert: '#ff8b7b'
+  ink: '#e4ecff', alert: '#ff8b7b',
+  // the future layer's tint in both styles: a clear violet, apart from every other colour here
+  future: '#b37bff'
 };
 
 // The real style's surfaces, from photos of the house (2026-10-14) where they differ from the

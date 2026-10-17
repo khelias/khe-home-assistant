@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const E = new URL('../../house3d/', import.meta.url);
 const SNAPSHOT = new URL('./simple-snapshot.json', import.meta.url);
-const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'car', 'fans'];
+const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'car', 'future', 'fans'];
 
 // kit.canvasTexture is the only thing under scene/ that touches the DOM
 globalThis.document = {
@@ -29,6 +29,7 @@ const card = await import(new URL('house3d-card.js', E));
 const { OrbitControls } = await import(new URL('vendor/three-0.186.1/examples/jsm/controls/OrbitControls.js', E));
 const { sunPosition, gridBearing, sunDirection, sunGlow } = await import(new URL('scene/sun.js', E));
 const { cornerBoards } = await import(new URL('scene/layers/building.js', E));
+const { panelGrid } = await import(new URL('scene/layers/future.js', E));
 
 const model = JSON.parse(execFileSync('python3', ['-I', fileURLToPath(new URL('../../scripts/house3d_model.py', import.meta.url)), '--layers', 'all',
   fileURLToPath(new URL('./fixture-model.md', import.meta.url))], { encoding: 'utf-8' }));
@@ -973,4 +974,79 @@ test('tapAction: an overlay hit first, then car, feature, room, empty space', ()
   assert.deepEqual(tapAction(null, { feature: 'pv', target: {} }), { feature: 'pv' });
   assert.deepEqual(tapAction(null, { room: 'r2', target: {} }), { room: 'r2' });
   assert.deepEqual(tapAction(null, null), { none: true });
+});
+
+// a ray straight down onto [x, z]
+const downAt = (x, z) => new THREE.Raycaster(new THREE.Vector3(x, 50, z), new THREE.Vector3(0, -1, 0));
+const futureItem = id => model.future.items.find(it => it.id === id);
+
+test('panelGrid: the orientation that holds more, rows centred, never more than asked', () => {
+  const g = panelGrid(7.2, 3.6, 12);
+  assert.equal(g.length, 12);
+  assert.ok(g.every(p => p.long === 1.72), 'landscape on a tie');
+  assert.equal(panelGrid(7.2, 3.6, 5).length, 5);
+  assert.equal(panelGrid(3.5, 1.8, 3).filter(p => p.long === 1.13).length, 3, 'portrait holds three, landscape two');
+  const u = g.map(p => p.u);
+  assert.ok(Math.abs(Math.min(...u) + Math.max(...u)) < 1e-9, 'centred');
+});
+
+for (const style of ['simple', 'real']) {
+  test(`future layer (${style}): the panels lie on the roof inside their rectangle, every item see-through and casting nothing`, () => {
+    const { byId, ctx } = buildAll({ ...options, style });
+    const L = byId.future;
+    assert.ok(L && L.toggle);
+    const pv = futureItem('pv'), top = ctx.roof.top(pv.roof);
+    const [hw, hd] = [pv.size[0] / 2, pv.size[1] / 2];
+    const panels = L.lift.children.filter(o => o.userData.panel);
+    assert.equal(panels.length, pv.panels);
+    const v = new THREE.Vector3();
+    L.lift.updateMatrixWorld(true);
+    panels.forEach(m => {
+      const pa = m.geometry.attributes.position;
+      for (let i = 0; i < pa.count; i++) {
+        v.fromBufferAttribute(pa, i);
+        const under = v.y < 0;
+        v.applyMatrix4(m.matrixWorld);
+        assert.ok(Math.abs(v.x - pv.pos[0]) <= hw + 1e-6 && Math.abs(v.z - pv.pos[1]) <= hd + 1e-6, `inside the rectangle: ${v.x}, ${v.z}`);
+        if (under) assert.ok(Math.abs(v.y - (top(v.x) + 0.05)) <= 0.01, `on the roof: ${v.y} against ${top(v.x)}`);
+      }
+    });
+    let meshes = 0;
+    [L.group, L.lift].forEach(root => root.traverse(o => {
+      if (!o.isMesh) return;
+      meshes++;
+      assert.ok(o.material.transparent && o.material.opacity < 1, `${o.geometry.type} see-through`);
+      assert.equal(o.castShadow, false, `${o.geometry.type} casts nothing`);
+    }));
+    assert.ok(meshes > pv.panels + 4, 'every kind drew something');
+  });
+}
+
+test('future layer: a tap gives the item, the raised panels take none, an indoor item only with the roof off', () => {
+  const { byId, ctx } = buildAll();
+  const L = byId.future;
+  L.group.updateMatrixWorld(true);
+  L.lift.updateMatrixWorld(true);
+  // the panels off their centre: four columns leave a gap there
+  const at = id => downAt(futureItem(id).pos[0] + (id === 'pv' ? 0.4 : 0), futureItem(id).pos[1]);
+  assert.equal(L.hit(at('pv')).feature, 'pv');
+  assert.equal(L.hit(at('tub')).feature, 'tub');
+  assert.equal(L.hit(at('greenhouse')).feature, 'greenhouse');
+  assert.ok(L.hit(at('pv')).target.isMesh);
+  ctx.state.roofFade = 0;
+  assert.equal(L.hit(at('pv')), null, 'no PV tap under a raised, hidden roof');
+  // the battery stands in a house room
+  ctx.state.roofFade = 1;
+  assert.equal(L.hit(at('battery')), null);
+  ctx.state.mode = 'open';
+  assert.equal(L.hit(at('battery')).feature, 'battery');
+  assert.equal(L.hit(downAt(1, -5)), null);
+});
+
+test('future layer: a model without future builds nothing', () => {
+  const m = { ...model };
+  delete m.future;
+  const { ctx } = makeCtx(options, m);
+  assert.equal(BUILDERS[LAYERS.indexOf('future')].default(ctx), null);
+  assert.equal(BUILDERS[LAYERS.indexOf('future')].default(makeCtx(options, { ...model, future: { items: [] } }).ctx), null);
 });
