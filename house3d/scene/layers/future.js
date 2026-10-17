@@ -7,7 +7,9 @@ const PANEL = [1.72, 1.13], PANEL_GAP = 0.02; // as scripts/house3d_model.py's P
 const PANEL_T = 0.04, PANEL_LIFT = 0.05; // a panel's thickness, its underside this far over the roof
 const SIZE = { greenhouse: [3, 4], tub: [2, 2] };
 const EAVES = 1.8, RIDGE = 2.4, BAR = 0.05; // the greenhouse
-const TUB_H = 0.9, WATER = 0.75;
+// the hot tub, a wood-fired one: staves widening to the rim, two steel hoops, the water a hand
+// under the rim, the stove's chimney at the back and a step at the front
+const TUB = { h: 1.05, flare: 0.94, wall: 0.06, floor: 0.12, water: 0.87, hoops: [0.22, 0.85], pipe: 0.06, chimney: 1.0, step: [0.7, 0.42, 0.4] };
 const CHARGER = { post: 1.2, w: 0.3, h: 0.45, d: 0.15 };
 const BATTERY = [0.6, 1.0, 0.3];
 const SIMPLE_FILL = 0.08, SIMPLE_LINE = 0.55, REAL_OPACITY = 0.55, REAL_TINT = 0.45;
@@ -122,12 +124,24 @@ export default function build({ THREE, kit, C, model, style, state, roof }) {
   }
 
   function tub(g, it) {
-    const r = (it.size || SIZE.tub)[0] / 2;
-    // the staves: one segment each, so the simple style's outline draws them
-    add(g, kit.keep(new THREE.CylinderGeometry(r, r, TUB_H, 24, 1, true)), 'timber', it.id).position.set(0, TUB_H / 2, 0);
-    const water = add(g, kit.keep(new THREE.CircleGeometry(r - 0.05, 24)), 'glass', it.id);
+    const r = (it.size || SIZE.tub)[0] / 2, foot = r * TUB.flare, at = y => foot + ((r - foot) * y) / TUB.h;
+    // the staves as one turned wall with a rim; 16 sides, so the simple style's outline draws them
+    const wall = [[foot, 0], [r, TUB.h], [r - TUB.wall, TUB.h], [foot - TUB.wall, TUB.floor]].map(([x, y]) => new THREE.Vector2(x, y));
+    add(g, kit.keep(new THREE.LatheGeometry(wall, 16)), 'timber', it.id);
+    TUB.hoops.forEach(y => {
+      const hoop = add(g, kit.keep(new THREE.TorusGeometry(at(y) + 0.01, 0.014, 4, 32)), 'frame', it.id);
+      hoop.rotation.x = Math.PI / 2;
+      hoop.position.y = y;
+    });
+    const water = add(g, kit.keep(new THREE.CircleGeometry(at(TUB.water) - TUB.wall, 32)), 'glass', it.id);
     water.rotation.x = -Math.PI / 2;
-    water.position.set(0, WATER, 0);
+    water.position.y = TUB.water;
+    // the stove sits inside at the back, its pipe standing above the rim
+    const back = r - TUB.wall - TUB.pipe - 0.12;
+    add(g, kit.keep(new THREE.CylinderGeometry(TUB.pipe, TUB.pipe, TUB.chimney + TUB.h - TUB.water, 12)), 'frame', it.id)
+      .position.set(0, (TUB.water + TUB.h + TUB.chimney) / 2, back);
+    const [sw, sh, sd] = TUB.step;
+    add(g, box(sw, sh, sd), 'timber', it.id).position.set(0, sh / 2, -(foot + sd / 2 + 0.03));
   }
 
   const KINDS = { charger, battery, greenhouse, tub };

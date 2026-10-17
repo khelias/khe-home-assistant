@@ -138,10 +138,9 @@ const origF = Object.fromEntries(futureList.map(f => [fkey(f), clone(f)]));
 const futureEditable = f => ({ pos: f.pos, rot: f.rot || 0 });
 const futures = futureList.map(f => restore(fkey(f), f, futureEditable));
 const futureByKey = Object.fromEntries(futures.map(f => [fkey(f), f]));
-// the plan footprint as the engine draws it; a tub does not turn
+// the plan footprint as the engine draws it
 const FOOT = { greenhouse: [3, 4], tub: [2, 2], charger: [0.3, 0.3], battery: [0.6, 0.3] };
 const footOf = f => f.size || FOOT[f.kind] || [0.5, 0.5];
-const turns = f => f.kind !== 'tub';
 const KINDS = { apple: 'Õunapuu', birch: 'Kask', maple: 'Vaher' };
 const treeName = {};
 {
@@ -300,11 +299,11 @@ function draw() {
     document.getElementById('crownV').textContent = metres(st.crown);
   }
   const rot = document.getElementById('rot'), sf = isFuture(sel) && futureByKey[sel];
-  rot.hidden = !(sf && turns(sf));
-  if (!rot.hidden) rot.querySelectorAll('[data-rot]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.rot) === (sf.rot || 0))));
+  rot.hidden = !sf;
+  if (sf) rot.querySelectorAll('[data-rot]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.rot) === (sf.rot || 0))));
   const hint = document.getElementById('hint');
   if (!sel) hint.innerHTML = 'Vali seade, puu või tuleviku asi nimekirjast või plaanilt.';
-  else if (sf) hint.innerHTML = `<b>${esc(nameOf(sel))}</b>: klõpsa plaanil keskkoha jaoks õigesse kohta või lohista.${turns(sf) ? ' Pööra nuppudega Pööre.' : ''} Suurus ja numbrid on mudelis käsitsi.`;
+  else if (sf) hint.innerHTML = `<b>${esc(nameOf(sel))}</b>: klõpsa plaanil keskkoha jaoks õigesse kohta või lohista. Pööra nuppudega Pööre. Suurus ja numbrid on mudelis käsitsi.`;
   else if (st) hint.innerHTML = `<b>${esc(nameOf(sel))}</b>: klõpsa plaanil õigesse kohta või lohista. Suurust muuda liuguritega Kõrgus ja Võra.`;
   else hint.innerHTML = `<b>${esc(nameOf(sel))}</b>: klõpsa plaanil õigesse kohta või lohista. ${sd.look ? 'Pööramiseks kasuta vasakul liugurit Suund.' : ''}`;
 }
