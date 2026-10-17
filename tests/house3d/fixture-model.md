@@ -1,7 +1,7 @@
 # House 3D test fixture
 
 A made-up house in the shape of the real model (khe-meta `house/house-model.md`), for
-`tests/house3d/` and the public demo at khe.ee/house3d/ (`house3d-build.py --demo`). Nothing
+`tests/house3d/` and the public demo at khe.ee/ha/ (`house3d-build.py --demo`). Nothing
 here describes a real place: the names are invented, the device entity ids start with `test_`,
 and the georeference points nowhere. Every device, car, future item and surroundings coordinate
 has three decimals ending in an odd digit, so the fixture's own privacy scan cannot match numbers

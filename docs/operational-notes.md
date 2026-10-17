@@ -374,7 +374,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   lets a test house device name that matches a real one, judged generic,
   stay in that file. The same script builds the standalone viewer from the shareable
   layers only, and with `--demo` the public demo on the test fixture
-  (khe.ee/house3d/, published by khe-sites), which reads no model: the real
+  (khe.ee/ha/, published by khe-sites), which reads no model: the real
   dashboard from `dashboard_config.build()`, rewritten by
   `scripts/dashboard_demo.py` (every entity id to a demo or fixture entity,
   templated cards to sample text, charts to made-up series), drawn by

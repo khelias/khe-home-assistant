@@ -66,7 +66,7 @@ tests/dashboard/   dashboard config and demo catalogue tests (Python unittest)
 - `python3 -I scripts/house3d-build.py --demo OUTDIR` builds the demo from the
   made-up test house only (`tests/house3d/fixture-model.md`): the card, the
   engine, `demo/` and the generated dashboard, states and series. khe-sites
-  runs it and publishes the result at <https://khe.ee/house3d/> on its next
+  runs it and publishes the result at <https://khe.ee/ha/> on its next
   deploy: a push to khe-sites, its weekly schedule, or
   `gh workflow run deploy.yml -R khelias/khe-sites`.
 - `ha-ws.py` and `ha-dashboard.py` import `websockets`, and `pv-sim.py`
