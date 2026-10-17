@@ -1050,3 +1050,22 @@ test('future layer: a model without future builds nothing', () => {
   assert.equal(BUILDERS[LAYERS.indexOf('future')].default(ctx), null);
   assert.equal(BUILDERS[LAYERS.indexOf('future')].default(makeCtx(options, { ...model, future: { items: [] } }).ctx), null);
 });
+
+test('card: featureText gives the facts, the date in Estonian, and the PV line by day and at night', () => {
+  const pv = futureItem('pv'), tub = futureItem('tub');
+  const t = card.featureText(pv, '2026-10-14', null);
+  assert.equal(t.title, 'Päikesepaneelid');
+  assert.equal(t.sub, 'Plaan · hinnang 14. oktoober 2026');
+  assert.deepEqual(t.facts, pv.facts);
+  assert.equal(t.empty, null);
+  assert.equal(t.pv, null, 'no sun, no line');
+  const none = card.featureText(tub, '2026-10-14', null);
+  assert.deepEqual(none.facts, []);
+  assert.equal(none.empty, 'Numbreid pole veel lisatud.');
+  assert.equal(card.featureText(tub, undefined, null).sub, 'Plaan');
+  const day = new Date(2026, 5, 21, 13, 0), night = new Date(2026, 5, 21, 23, 45);
+  assert.equal(card.featureText(pv, null, { kw: 4.236, alt: 54, time: day, live: true }).pv, 'Praegu selge taevaga kuni 4,2 kW');
+  assert.equal(card.featureText(pv, null, { kw: 4.236, alt: 54, time: day, live: false }).pv, '21. juuni kell 13:00 selge taevaga kuni 4,2 kW');
+  assert.equal(card.featureText(pv, null, { kw: 0, alt: -3, time: night, live: true }).pv, 'Praegu on päike loojunud');
+  assert.equal(card.featureText(pv, null, { kw: 0, alt: -3, time: night, live: false }).pv, '21. juuni kell 23:45 on päike loojunud');
+});

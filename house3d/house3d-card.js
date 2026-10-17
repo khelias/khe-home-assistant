@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 28;
+const HOUSE3D_VERSION = 29;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -53,9 +53,11 @@ function writeSeen(entity, key) {
 }
 
 // The Kihid sheet's switches, in this order; the choice is kept per browser like the arrival key.
-const LAYER_LABELS = { markers: 'Seadmed', fans: 'Kaamerate vaated', trees: 'Puud', car: 'Auto', surroundings: 'Ümbrus' };
+const LAYER_LABELS = { markers: 'Seadmed', fans: 'Kaamerate vaated', trees: 'Puud', car: 'Auto', surroundings: 'Ümbrus', future: 'Tulevik' };
+// switched off until the user turns it on: what the house does not have yet
 const LAYER_ORDER = Object.keys(LAYER_LABELS);
 const LAYERS_KEY = 'house3d-layers';
+const LAYERS_OFF = { future: false };
 function readLayers() {
   try {
     const v = JSON.parse(localStorage.getItem(LAYERS_KEY));
@@ -89,6 +91,22 @@ const yearStart = () => new Date(new Date().getFullYear(), 0, 1);
 const dayOfYear = d => Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - yearStart()) / 86400000);
 const hourText = q => `${pad(Math.floor(q / 4))}:${pad((q % 4) * 15)}`;
 const dayDate = n => new Date(yearStart().getFullYear(), 0, 1 + n);
+const dateFmt = new Intl.DateTimeFormat('et-EE', { day: 'numeric', month: 'long', year: 'numeric' });
+
+// featureText(item, asOf, pv) -> the future item's sheet: { title, sub, facts, empty, pv }. asOf is
+// the future block's 'YYYY-MM-DD'; pv is null (the line is left out) or { kw, alt, time, live },
+// the clear-sky estimate at the sun's time, live when that is now rather than a slider's.
+export function featureText(item, asOf, pv) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(asOf || '');
+  const sub = m ? `Plaan · hinnang ${dateFmt.format(new Date(+m[1], +m[2] - 1, +m[3]))}` : 'Plaan';
+  const facts = Array.isArray(item.facts) ? item.facts : [];
+  let line = null;
+  if (pv) {
+    const when = pv.live ? 'Praegu' : `${dayFmt.format(pv.time)} kell ${pad(pv.time.getHours())}:${pad(pv.time.getMinutes())}`;
+    line = pv.alt > 0 ? `${when} selge taevaga kuni ${nf1.format(pv.kw)} kW` : `${when} on päike loojunud`;
+  }
+  return { title: item.name, sub, facts, empty: facts.length ? null : 'Numbreid pole veel lisatud.', pv: line };
+}
 
 // true when the car is home ('home' from a tracker, 'on' from the arrival helper), null when the
 // state says nothing (unavailable, unknown), false otherwise and for a missing entity
@@ -198,6 +216,8 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .list button.alert svg { color: var(--alert); }
 .list .st { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .empty { color: var(--muted); }
+.pv { margin: 0; padding: 9px 10px; border-radius: 9px; background: var(--chip); font-variant-numeric: tabular-nums; }
+.facts { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
 .list.switches button { grid-template-columns: 1fr auto; }
 .sw { position: relative; width: 34px; height: 20px; border-radius: 10px; background: rgba(138, 155, 194, 0.25); transition: background-color .15s; }
 .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: transform .15s, background-color .15s; }
@@ -338,9 +358,13 @@ class House3dCard extends Base {
         onRoom: id => (id || this._sheet !== 'layers' ? this._openRoom(id) : this._closeSheet()),
         onMode: m => {
           sr.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
-          if (m === 'roof') this._openRoom(null);
+          // the roof going on closes a room sheet; a future item's stays
+          if (m === 'roof' && this._sheet !== 'feature') this._openRoom(null);
         },
-        layers: readLayers(),
+        onFeature: id => this._openFeature(id),
+        // the sun moves on once a minute and with the sliders; an open PV sheet follows it
+        onSun: sun => { if (this._view && this._sheet === 'feature') this._renderPv(sun); },
+        layers: { ...LAYERS_OFF, ...readLayers() },
         style: this._style,
         mode: keep.mode,
         view: keep.view,
@@ -359,7 +383,11 @@ class House3dCard extends Base {
         if (sw) return this._switchLayer(sw.dataset.layer, sw.getAttribute('aria-checked') !== 'true');
         const st = ev.target.closest('[data-style]');
         if (st) return this._restyle(st.dataset.style);
-        if (ev.target.closest('[data-act="now"]')) return this._setTime(null);
+        if (ev.target.closest('[data-act="now"]')) {
+          this._setTime(null);
+          // the simple style shows the button only while a slider time is kept
+          return this._style !== 'real' ? this._openLayers() : undefined;
+        }
         if (ev.target.closest('[data-act="close"]')) return this._sheet === 'layers' ? this._closeSheet() : this._openRoom(null);
       });
       sr.querySelector('.sheet').addEventListener('input', ev => { if (ev.target.closest('[data-time]')) this._setTime(this._sliderTime()); });
@@ -537,6 +565,36 @@ class House3dCard extends Base {
     this._sheet = 'room';
   }
 
+  // a future item's sheet: its facts, and for PV the clear-sky estimate at the sun's time
+  _openFeature(id) {
+    const fut = this._config.model.future || {}, item = (fut.items || []).find(it => it.id === id);
+    if (!item || !this._mod) return;
+    const sheet = this.shadowRoot.querySelector('.sheet');
+    this._room = null;
+    if (this._view) this._view.focusRoom(null);
+    this._feature = item;
+    const t = featureText(item, fut.as_of, null);
+    sheet.innerHTML = `<div class="head"><div><h2>${esc(t.title)}</h2><p>${esc(t.sub)}</p></div>
+      <button type="button" class="close" data-act="close" aria-label="Sulge">${this._mod.icon('close')}</button></div>
+      <p class="pv" hidden></p>
+      ${t.facts.length ? `<ul class="facts">${t.facts.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : `<div class="empty">${esc(t.empty)}</div>`}`;
+    this._sheet = 'feature';
+    this.shadowRoot.querySelector('[data-act="layers"]').setAttribute('aria-expanded', 'false');
+    sheet.hidden = false;
+    this._renderPv(this._view ? this._view.sun : null);
+  }
+
+  // the PV line, left out without a sun (no place) or for another kind
+  _renderPv(sun) {
+    const el = this.shadowRoot.querySelector('.sheet .pv'), item = this._feature, mod = this._mod;
+    if (!el || !item) return;
+    const roofs = this._config.model.roofs || {};
+    if (item.kind !== 'pv' || !sun || !roofs[item.roof] || !(item.kwp > 0)) { el.hidden = true; return; }
+    const kw = mod.pvNow(item.kwp, mod.roofNormal(this._config.model, item.roof), sun);
+    el.textContent = featureText(item, null, { kw, alt: sun.alt, time: sun.time, live: !this._time }).pv;
+    el.hidden = false;
+  }
+
   _openLayers() {
     const sheet = this.shadowRoot.querySelector('.sheet');
     this._room = null;
@@ -546,7 +604,7 @@ class House3dCard extends Base {
       <div class="row"><span>Stiil</span><div class="seg" role="group" aria-label="Stiil">
         <button type="button" data-style="simple" aria-pressed="${this._style === 'simple'}">Lihtne</button>
         <button type="button" data-style="real" aria-pressed="${this._style === 'real'}">Päris</button></div></div>
-      ${this._style === 'real' ? this._timeRows() : ''}
+      ${this._style === 'real' ? this._timeRows() : this._time ? '<button type="button" class="now" data-act="now" aria-pressed="false">Praegu</button>' : ''}
       <div class="list switches"></div>`;
     this._sheet = 'layers';
     this._syncTime();
