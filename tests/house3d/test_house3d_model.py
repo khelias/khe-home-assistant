@@ -163,7 +163,7 @@ def _light_face(L):
 
 
 def _light_off_lot(L):
-    _site(L)["lights"][0]["pos"] = [30, 2, 4]
+    _site(L)["lights"][0]["pos"] = [4, 2, 30]
 
 
 def _planter_finish(L):
@@ -281,7 +281,7 @@ MUTATIONS = [
     ("slide of three numbers", _slide_three, "site.swing: slide must be [x, z]"),
     ("planter y reversed", _planter_y, "site.planters[0]: y must be [y0, y1]"),
     ("unknown plant", _planter_plant, "site.planters[0]: plant 'palm' is not one of thuja, low"),
-    ("unknown opening finish", _opening_finish, "walls[0].openings[2]: finish 'frame' is not cladding"),
+    ("unknown opening finish", _opening_finish, "walls[0].openings[2]: finish 'frame' is not one of cladding"),
     ("unknown light kind", _light_kind, "site.lights[0]: kind 'spot' is not one of ceiling, wall"),
     ("wall light without face", _light_face, "site.lights[1]: a wall light needs face [dx, dz], its outward direction"),
     ("light off the lot", _light_off_lot, "site.lights[0]: pos is outside the lot"),

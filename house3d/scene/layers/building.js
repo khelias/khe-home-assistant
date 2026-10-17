@@ -77,7 +77,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   const rooms = model.rooms || [];
   const roomIds = new Set(rooms.map(r => r.id));
   const group = new THREE.Group(), lift = new THREE.Group();
-  let mH, mR, wallMats, glassFor = () => null;
+  let mH, mR, wallMats, cladLeaf, glassFor = () => null;
   const roomGlass = new Map();
   if (real) {
     // walls and roofs are DoubleSide: a roof's remapped extrusion faces inwards
@@ -91,7 +91,8 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
       if (!roomGlass.has(room)) roomGlass.set(room, kit.surface('glass'));
       return roomGlass.get(room);
     };
-    const frame = kit.surface('frame'), panel = kit.surface('frame', two), door = kit.surface('door'), cladLeaf = kit.surface('cladding');
+    const frame = kit.surface('frame'), panel = kit.surface('frame', two), door = kit.surface('door');
+    cladLeaf = kit.surface('cladding');
     const boarded = { ...clad(two), inner };
     mH = { furn: kit.surface('interior') };
     // the lift's inner faces are never seen, so they keep the cladding's colour without boards
@@ -100,9 +101,10 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     // a panel (the carport's walls and posts) is anthracite; else exterior is thick or running up
     // to a roof, and only it gets the boards and the base strip
     wallMats = w => {
-      if (w.finish === 'panel') return { wall: panel, glass, frame, cladLeaf, base: false };
+      if (w.finish === 'panel') return { wall: panel, glass, frame, base: false };
       const outside = w.t >= 0.3 || typeof w.top === 'string';
-      return outside ? { boarded, glass, frame, cladLeaf, base: true } : { wall: inner, glass, frame: door, cladLeaf, base: false };
+      // an interior wall's frames and door leaves are white
+      return outside ? { boarded, glass, frame, base: true } : { wall: inner, glass, frame: door, base: false };
     };
   } else {
     mH = mats();
@@ -138,7 +140,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     const face = side * (w.t / 2), proud = side * (w.t / 2 + PROUD);
     ops.forEach(o => {
       const x0 = o.c - o.w / 2, x1 = o.c + o.w / 2, y0 = o.sill || 0, y1 = y0 + o.h;
-      if (o.kind === 'door') bar(x0 + FRAME, x1 - FRAME, 0, y1 - FRAME, 0.05, o.finish === 'cladding' ? m.cladLeaf : m.frame).userData.leaf = true;
+      if (o.kind === 'door') bar(x0 + FRAME, x1 - FRAME, 0, y1 - FRAME, 0.05, o.finish === 'cladding' ? cladLeaf : m.frame).userData.leaf = true;
       else {
         const room = paneRoom(w, L, o.c, side);
         const p = new THREE.Mesh(new THREE.PlaneGeometry(o.w, o.h), glassFor(room));

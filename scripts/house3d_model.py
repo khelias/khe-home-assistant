@@ -42,6 +42,7 @@ GATE_KINDS = ("sliding", "swing1", "swing2")
 ROOM_FLOORS = ("tile", "paving")  # the real style's floor finishes besides the default oak
 PLANTS = ("thuja", "low")
 PLANTER_FINISHES = ("frame", "cladding")
+OPENING_FINISHES = ("cladding",)  # a door leaf in the walls' cladding; without it, by the wall
 LIGHT_KINDS = ("ceiling", "wall")  # site.lights: under a roof or soffit, or on a wall's face
 SLIDE_OFFSET = (
     0.12  # a sliding leaf runs this far to the lot side of the fence line, past its rails
@@ -100,6 +101,12 @@ def _num(v):
 
 def _point(v, n=2):
     return isinstance(v, list) and len(v) == n and all(_num(x) for x in v)
+
+
+def _lot(model):
+    """The site's lot outline when it is valid (three or more [x, z] points), else None."""
+    lot = (model.get("site") or {}).get("lot")
+    return lot if isinstance(lot, list) and len(lot) >= 3 and all(_point(p) for p in lot) else None
 
 
 def _rect(v):
@@ -289,8 +296,10 @@ def validate(layers):
                 )
             if o.get("kind") == "window" and not _num(o.get("sill")):
                 bad(f"{where}.openings[{j}]: a window needs a sill")
-            if "finish" in o and o["finish"] != "cladding":
-                bad(f"{where}.openings[{j}]: finish {o['finish']!r} is not cladding")
+            if "finish" in o and o["finish"] not in OPENING_FINISHES:
+                bad(
+                    f"{where}.openings[{j}]: finish {o['finish']!r} is not one of {', '.join(OPENING_FINISHES)}"
+                )
             if o["c"] - o["w"] / 2 < -1e-6 or o["c"] + o["w"] / 2 > length + 1e-6:
                 bad(
                     f"{where}.openings[{j}]: span {o['c'] - o['w'] / 2:.3f}..{o['c'] + o['w'] / 2:.3f} "
@@ -307,11 +316,8 @@ def validate(layers):
             bad(f"{where}: y must be [y0, y1] with y0 < y1")
 
     site = model.get("site", {})
-    if not (
-        isinstance(site.get("lot"), list)
-        and len(site["lot"]) >= 3
-        and all(_point(p) for p in site["lot"])
-    ):
+    lot = _lot(model)
+    if not lot:
         bad("site: lot needs three or more [x, z] points")
     for key in ("hedges", "fences", "bar_fences"):
         for i, seg in enumerate(site.get(key, [])):
@@ -370,11 +376,11 @@ def validate(layers):
         rect(f"site.steps[{i}]", st.get("rect"))
         if not (_num(st.get("height")) and st["height"] > 0):
             bad(f"site.steps[{i}]: height is not a positive number")
-    lot = site.get("lot")
-    lot = lot if isinstance(lot, list) and len(lot) >= 3 and all(_point(p) for p in lot) else None
-    if not isinstance(site.get("lights", []), list):
+    lights = site.get("lights", [])
+    if not isinstance(lights, list):
         bad("site.lights: not a list")
-    for i, li in enumerate(site.get("lights", []) if isinstance(site.get("lights"), list) else []):
+        lights = []
+    for i, li in enumerate(lights):
         where = f"site.lights[{i}]"
         if not isinstance(li, dict):
             bad(f"{where}: not a JSON object")
@@ -474,14 +480,7 @@ def validate(layers):
         n = len(problems)
         _validate_car(model["car"], {r.get("id"): r for r in rooms}, bad)
         car_ok = len(problems) == n
-    lot = site.get("lot")
-    if (
-        car_ok
-        and site.get("gates")
-        and isinstance(lot, list)
-        and len(lot) >= 3
-        and all(_point(p) for p in lot)
-    ):
+    if car_ok and site.get("gates") and lot:
         _validate_drive(model, good_gates, bad)
     if "surroundings" in layers:
         _validate_surroundings(layers["surroundings"], bad)
@@ -515,8 +514,8 @@ def _validate_future(model, roofs, bad):
     items = fut.get("items")
     if not isinstance(items, list):
         return bad("future: items is not a list")
-    lot = (model.get("site") or {}).get("lot")
-    if not (isinstance(lot, list) and len(lot) >= 3 and all(_point(p) for p in lot)):
+    lot = _lot(model)
+    if not lot:
         ends = [p for w in model.get("walls", []) for p in (w.get("a"), w.get("b")) if _point(p)]
         if not ends:
             lot = None

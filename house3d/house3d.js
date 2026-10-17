@@ -454,12 +454,11 @@ export function collide(items, pad = 4) {
     return false;
   };
   const small = it => (it.sizes.length > 1 ? 1 : 0);
-  const alerts = of('alert');
+  const alerts = of('alert'), chips = of('chip'), grow = [...alerts.filter(it => it.chip), ...chips];
   alerts.forEach(it => { if (!it.chip) put(it, 0); else if (!fit(it, small(it))) put(it, small(it)); });
-  const chips = of('chip');
   chips.forEach(it => { if (!fit(it, small(it))) out.set(it.id, -1); });
   const late = of('marker').filter(it => !fit(it, 0, 1));
-  [...alerts.filter(it => it.chip), ...chips].forEach(it => { if (out.get(it.id) > 0 && free(box(it, 0), it.id)) put(it, 0); });
+  grow.forEach(it => { if (out.get(it.id) > 0 && free(box(it, 0), it.id)) put(it, 0); });
   late.forEach(it => { if (!fit(it, 1)) out.set(it.id, -1); });
   return out;
 }
@@ -472,7 +471,7 @@ export function collide(items, pad = 4) {
  */
 export function inChip(m, chip, focus) {
   if (!chip || !m.room || chip.room !== m.room || m.room === focus) return false;
-  return (m.state !== 'alert' && m.state !== 'on') || (chip.ids || []).includes(m.id);
+  return (m.state !== 'alert' && m.state !== 'on') || (!!chip.ids && chip.ids.includes(m.id));
 }
 
 /**
@@ -1147,7 +1146,8 @@ export function mount(element, model, options = {}) {
     const roofOpen = Math.max(0, 1 - fade.cur * 1.6);
     // chips stand in for their rooms' quiet markers only while the roof is off
     const chipsOn = markerLayer.on && mode === 'open' && roofOpen > 0.02;
-    // a chip off screen still stands in for its quiet markers, but not for the active ones it counts
+    // a chip off screen still stands in for its quiet markers, but not for the active ones it counts;
+    // it reads this frame's rec.p, so the chips are projected before the markers
     const chipOf = room => {
       const rec = chipsOn && room ? chips.get(room) : null;
       return !rec ? null : rec.p ? rec.data : rec.quiet || (rec.quiet = { room });

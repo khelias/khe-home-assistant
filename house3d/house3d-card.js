@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 33;
+const HOUSE3D_VERSION = 34;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -130,8 +130,8 @@ const GLOW_MINUTES = 15, MOTION_GLOW = 0.8;
 // motionGlow(st, now) -> the glow a motion sensor's state gives its room: MOTION_GLOW while on or
 // off since less than GLOW_MINUTES before now (the wall clock, never the time slider), else 0
 export function motionGlow(st, now) {
-  if (!st || (st.state !== 'on' && st.state !== 'off')) return 0;
-  if (st.state === 'on') return MOTION_GLOW;
+  if (st && st.state === 'on') return MOTION_GLOW;
+  if (!st || st.state !== 'off') return 0;
   const age = now - new Date(st.last_changed);
   return age < GLOW_MINUTES * 60000 ? MOTION_GLOW : 0;
 }
