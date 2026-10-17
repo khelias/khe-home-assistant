@@ -208,6 +208,8 @@ export default function build({ THREE, kit, C, options, reduceMotion, layer, scr
     id: 'car',
     group: car.g,
     toggle: true,
+    // the car and the drive gate move while update() animates
+    shades: true,
     setOn,
     update,
     // the body mesh, not a bounding box, which would cover the carport floor

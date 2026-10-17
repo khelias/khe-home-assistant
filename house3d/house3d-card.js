@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 21;
+const HOUSE3D_VERSION = 22;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -253,7 +253,11 @@ class House3dCard extends Base {
 
   connectedCallback() {
     this._onResize = this._onResize || (() => this._fit());
-    this._onKey = this._onKey || (ev => { if (ev.key === 'Escape' && this._sheet) this._closeAny(); });
+    // only an Escape from the card or the bare page: one in HA's more-info dialog closes the dialog alone
+    this._onKey = this._onKey || (ev => {
+      const from = ev.composedPath()[0];
+      if (ev.key === 'Escape' && this._sheet && (ev.composedPath().includes(this) || from === document.body || from === document.documentElement)) this._closeAny();
+    });
     window.addEventListener('resize', this._onResize);
     window.addEventListener('keydown', this._onKey);
     if (window.visualViewport) window.visualViewport.addEventListener('resize', this._onResize);
@@ -290,6 +294,7 @@ class House3dCard extends Base {
       <aside class="sheet" hidden aria-live="polite"></aside>${this._credit()}</ha-card>`;
     this._sheet = null;
     const wrap = sr.querySelector('.wrap');
+    if (this._ro) this._ro.disconnect();
     if (typeof ResizeObserver === 'function') {
       this._ro = new ResizeObserver(() => wrap.classList.toggle('narrow', wrap.clientWidth < 600));
       this._ro.observe(wrap);

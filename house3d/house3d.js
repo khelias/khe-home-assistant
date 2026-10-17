@@ -33,6 +33,8 @@
 //   lift?           a group that rises and fades with the roof mode (the building's upper part)
 //   toggle?         true for a switchable layer; listed()? says whether view.layers shows it now
 //   update(dt, k)?  per frame, dt in seconds and k the easing step; true while still animating
+//   shades?         true when what update() animates casts shadows (the real style's shadow map
+//                   is rendered only on change); a layer that only tints or glows leaves it out
 //   markers(list)?  every setMarkers list
 //   hit(ray)?       the tap and hover test on the raycaster: null, { car: true } or
 //                   { room, target }. Layers are tried in reverse build order, so the car wins
@@ -664,8 +666,8 @@ export function mount(element, model, options = {}) {
   // that shows the marker (a hidden one measures 0)
   function renderMarker(rec) {
     const m = rec.data;
-    const cls = markerClass(m) + (rec.hover ? ' hover' : '');
-    if (rec.cls !== cls) { rec.el.className = cls; rec.cls = cls; rec.size = null; }
+    const cls = markerClass(m);
+    if (rec.cls !== cls) { rec.el.className = cls + (rec.hover ? ' hover' : ''); rec.cls = cls; rec.size = null; }
     const html = icon(m.icon) + (m.value !== undefined && m.value !== null && m.value !== '' ? `<span>${String(m.value).replace(/[&<>"]/g, ch => `&#${ch.charCodeAt(0)};`)}</span>` : '');
     if (rec.html !== html) { rec.el.innerHTML = html; rec.html = html; rec.size = null; }
     const label = m.label || m.id, aria = m.stateText ? `${label}, ${m.stateText}` : label;
@@ -698,7 +700,6 @@ export function mount(element, model, options = {}) {
     });
     for (const [id, rec] of markers) if (!seen.has(id)) { rec.el.remove(); markers.delete(id); }
     layers.forEach(({ L }) => { if (L.markers) L.markers(list); });
-    shadowsDirty();
     invalidate();
   }
 
@@ -742,7 +743,8 @@ export function mount(element, model, options = {}) {
   let hoverMarker = null;
   function setHoverMarker(id) {
     if (id === hoverMarker) return;
-    [hoverMarker, id].forEach(k => { const rec = k && markers.get(k); if (rec) { rec.hover = k === id; renderMarker(rec); } });
+    // the hover border keeps the size, so the marker stays measured and tappable
+    [hoverMarker, id].forEach(k => { const rec = k && markers.get(k); if (rec) { rec.hover = k === id; rec.el.classList.toggle('hover', rec.hover); } });
     hoverMarker = id;
   }
   const onMove = ev => {
@@ -794,14 +796,16 @@ export function mount(element, model, options = {}) {
     if (h && h.car) { if (options.onCar) options.onCar(); return; }
     if (options.onRoom) options.onRoom(h && h.room ? h.room : null);
   };
+  const onLeave = () => setHoverMarker(null);
   renderer.domElement.addEventListener('pointermove', onMove);
+  renderer.domElement.addEventListener('pointerleave', onLeave);
   renderer.domElement.addEventListener('pointerdown', onDown);
   renderer.domElement.addEventListener('pointerup', onUp);
   renderer.domElement.addEventListener('pointercancel', onRelease);
   // a camera change under a finger or a wheel zoom is the user's own view: from then on a resize
   // keeps it; 'start' alone fires on every tap and wheel event, so it does not count
   let userMoved = false;
-  const onWheel = () => { userMoved = true; };
+  const onWheel = () => { userMoved = true; spin = null; };
   renderer.domElement.addEventListener('wheel', onWheel, { passive: true });
   controls.addEventListener('change', () => { if (pointers.size) userMoved = true; fitFog(); invalidate(); });
   controls.addEventListener('start', () => invalidate());
@@ -933,7 +937,7 @@ export function mount(element, model, options = {}) {
         });
       });
     }
-    layers.forEach(({ L }) => { if (L.update && L.update(dt, k)) { moving = true; shadowsDirty(); } });
+    layers.forEach(({ L }) => { if (L.update && L.update(dt, k)) { moving = true; if (L.shades) shadowsDirty(); } });
     if (!moving && !dirty) { raf = 0; return; }
     dirty = false;
     raf = requestAnimationFrame(frame);
@@ -979,6 +983,7 @@ export function mount(element, model, options = {}) {
     if (ro) ro.disconnect();
     if (io) io.disconnect();
     renderer.domElement.removeEventListener('pointermove', onMove);
+    renderer.domElement.removeEventListener('pointerleave', onLeave);
     renderer.domElement.removeEventListener('pointerdown', onDown);
     renderer.domElement.removeEventListener('pointerup', onUp);
     renderer.domElement.removeEventListener('pointercancel', onRelease);

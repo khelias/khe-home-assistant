@@ -214,8 +214,9 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   below 720 px width, and the roof and the car cast only while fully shown,
   since the shadow pass ignores opacity. The shadow camera is fixed to the
   lot, so the map is rendered only when the sun moves, the roof fades, a
-  layer animates or is switched, the markers change, the style mounts or a
-  resize replaces the map, never for a camera move.
+  layer that casts animates (the car and the gate; a layer says so with
+  `shades`) or is switched, the style mounts or a resize replaces the map,
+  never for a camera move.
 - **The sun** in the real style comes from HA's own location
   (`hass.config.latitude`/`longitude`, read at runtime, never stored in the
   card config) and the model's `georef.x_axis_bearing_deg`, the plan's
