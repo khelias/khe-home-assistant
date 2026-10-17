@@ -150,6 +150,10 @@ def _planter_plant(L):
     _site(L)["planters"][0]["plant"] = "palm"
 
 
+def _opening_finish(L):
+    _walls(L)[0]["openings"][2]["finish"] = "frame"
+
+
 def _planter_finish(L):
     _site(L)["planters"][1]["finish"] = "brick"
 
@@ -265,6 +269,7 @@ MUTATIONS = [
     ("slide of three numbers", _slide_three, "site.swing: slide must be [x, z]"),
     ("planter y reversed", _planter_y, "site.planters[0]: y must be [y0, y1]"),
     ("unknown plant", _planter_plant, "site.planters[0]: plant 'palm' is not one of thuja, low"),
+    ("unknown opening finish", _opening_finish, "walls[0].openings[2]: finish 'frame' is not cladding"),
     ("unknown planter finish", _planter_finish, "site.planters[1]: finish 'brick' is not one of frame, cladding"),
     ("step without height", _step_height, "site.steps[0]: height is not a positive number"),
     ("planter not an object", _planter_list, "site.planters[0]: not a JSON object"),

@@ -196,7 +196,7 @@ test('sunDirection and gridBearing', () => {
 
 // the real style: each surface colour has one shadow role per layer, [castShadow, receiveShadow]
 const REAL_FLAGS = {
-  building: { cladding: [true, true], interior: [true, true], frame: [true, true], glass: [false, false], floor: [false, true], tile: [false, true], roof: [true, true], paving: [false, true] },
+  building: { cladding: [true, true], interior: [true, true], frame: [true, true], door: [true, true], glass: [false, false], floor: [false, true], tile: [false, true], roof: [true, true], paving: [false, true] },
   site: {
     deck: [false, true], paving: [false, true], hedge: [true, false], unit: [true, false], fence: [true, false],
     stone: [false, true], frame: [true, false], cladding: [true, false], mesh: [false, false],
@@ -315,6 +315,29 @@ test('real style: openings in an exterior wall get trims, reveals and a sill on 
   const inner = wallGroup(root, model.walls[6]);
   assert.ok(inner);
   assert.equal(inner.children.filter(o => o.userData.part).length, 0, 'the interior wall has no trim');
+});
+
+test('real style: interior doors and frames white, the clad door\'s leaf cladding, the rest anthracite', () => {
+  const { ctx, byId } = buildAll({ ...options, style: 'real' });
+  const name = mt => Object.entries(ctx.kit.REAL).find(([, v]) => new THREE.Color(v).getHexString() === mt.color.getHexString())[0];
+  const front = wallGroup(byId.building.group, model.walls[0]), inner = wallGroup(byId.building.group, model.walls[6]);
+  const leaves = g => g.children.filter(o => o.userData.leaf);
+  const frames = g => g.children.filter(o => o.isMesh && o.geometry.type === 'BoxGeometry' && !o.userData.leaf && !o.userData.part);
+  assert.deepEqual(leaves(inner).map(o => name(o.material)), ['door'], 'the interior door\'s leaf');
+  assert.ok(frames(inner).length >= 3 && frames(inner).every(o => name(o.material) === 'door'), 'and its frame');
+  assert.deepEqual(leaves(front).map(o => name(o.material)), ['cladding'], 'the street wall\'s clad door');
+  assert.ok(frames(front).every(o => name(o.material) === 'frame'), 'an exterior wall\'s frames stay anthracite');
+});
+
+test('a glass door narrower than 1.2 m has no centre mullion, in both styles', () => {
+  const m = structuredClone(model);
+  m.walls[6].openings = [{ kind: 'glassdoor', c: 1.6, w: 0.6, h: 2.1 }, { kind: 'glassdoor', c: 4.5, w: 1.4, h: 2.1 }];
+  const real = buildLayer(BUILDERS[LAYERS.indexOf('building')], 'building', makeCtx({ ...options, style: 'real' }, m).ctx);
+  const mull = wallGroup(real.group, m.walls[6]).children.filter(o => o.userData.mullion);
+  assert.deepEqual(mull.map(o => o.position.x), [4.5], 'the wide one only');
+  const simple = buildLayer(BUILDERS[LAYERS.indexOf('building')], 'building', makeCtx(options, m).ctx);
+  const lines = wallGroup(simple.group, m.walls[6]).children.filter(o => o.type === 'LineSegments' && o.geometry.type === 'BufferGeometry');
+  assert.equal(lines.length, 1, 'one mullion line, the wide door\'s');
 });
 
 test('real style: corner boards and fillers at the outer corners only, split at the cut', () => {

@@ -8,7 +8,7 @@ has three decimals ending in an odd digit, so the fixture's own privacy scan can
 in the vendored three.js.
 
 A one-storey house of 10 x 8 m: a kitchen-living room on the west side with a glass door to the
-front garden and a floor window to the back deck, the hall, bathroom and bedroom on the east
+front garden and a floor window to the back deck, a front door clad like the walls, the hall, bathroom and bedroom on the east
 side, and a carport against its east wall, closed by two panel walls, that the car reaches through
 the sliding drive gate. The second garage roof is the canopy over the front door. The play area
 is in the back garden. The future items are 12 PV panels on the back roof, a charger in the
@@ -36,7 +36,7 @@ model, never this file.
   { "a": [2, 2], "b": [12, 2], "t": 0.4, "top": "roofS", "openings": [
    { "kind": "window", "c": 1.7, "w": 1.2, "h": 1.2, "sill": 0.9 },
    { "kind": "glassdoor", "c": 3.9, "w": 1.8, "h": 2.2 },
-   { "kind": "door", "c": 6.3, "w": 1, "h": 2.1 }
+   { "kind": "door", "c": 6.3, "w": 1, "h": 2.1, "finish": "cladding" }
   ] },
   { "a": [12, 2], "b": [12, 6], "t": 0.4, "top": "roofS", "openings": [
    { "kind": "window", "c": 1.6, "w": 0.6, "h": 0.6, "sill": 1.4 }

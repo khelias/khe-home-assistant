@@ -209,7 +209,10 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
 - **Styles:** "Lihtne" (the neon wireframe, the default) and "Päris" (lit
   surfaces in the house's colours and diagonal boarding with anthracite
   trims and corners from photos, paving stones, the play area, bar and mesh
-  fences, the sun in the sky, the real sun and shadows),
+  fences, the sun in the sky, the real sun and shadows; interior walls'
+  doors and frames white, exterior ones anthracite, a door with
+  `"finish": "cladding"` on its opening in the walls' colour, and a glass
+  door under 1.2 m wide in one leaf, without the centre mullion),
   chosen per browser in the Kihid sheet and kept in `localStorage` under
   `house3d-style`. Switching remounts the engine with the roof mode, camera
   and fog kept. The real style has no bloom; its shadow map is 2048 px, 1024

@@ -288,6 +288,8 @@ def validate(layers):
                 )
             if o.get("kind") == "window" and not _num(o.get("sill")):
                 bad(f"{where}.openings[{j}]: a window needs a sill")
+            if "finish" in o and o["finish"] != "cladding":
+                bad(f"{where}.openings[{j}]: finish {o['finish']!r} is not cladding")
             if o["c"] - o["w"] / 2 < -1e-6 or o["c"] + o["w"] / 2 > length + 1e-6:
                 bad(
                     f"{where}.openings[{j}]: span {o['c'] - o['w'] / 2:.3f}..{o['c'] + o['w'] / 2:.3f} "

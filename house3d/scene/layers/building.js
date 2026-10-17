@@ -2,7 +2,8 @@
 // Walls that run up to a roof are cut at the ceiling, and the part above goes in lift with the
 // roofs, which rises and fades with the roof mode. The floors are the room tap targets and warm
 // with a room's markers in state 'on'. The real style draws them as lit surfaces: exterior walls
-// boarded outside and plain inside, interior walls plain, framed openings, floors in the room's
+// boarded outside and plain inside, interior walls plain with white doors and frames, framed
+// openings (a door with finish 'cladding' gets a leaf of plain cladding), floors in the room's
 // finish that tint from their own colour, and the lift on materials of its own, so its fade never
 // reaches the lower walls. Its exterior walls also carry anthracite opening trims with lined
 // reveals and sill flashings, and corner boards on every outer and inner corner; the roofs have an
@@ -16,6 +17,8 @@ const BASE_H = 0.12; // real style: the dark strip along an exterior wall's foot
 // face, and a sill's metal flashing
 const TRIM = 0.1, CORNER = 0.12, PROUD = 0.025, REVEAL = 0.015;
 const FLASH_T = 0.03, FLASH_OUT = 0.06, FLASH_PAST = 0.03;
+// a glass door narrower than this is one leaf, without the centre mullion
+const MULLION_MIN = 1.2;
 // real style at night: the warm glow of a lit room's floor and windows, and how opaque a lit pane gets
 const GLOW = '#ffb45a', FLOOR_GLOW = 0.55, GLASS_GLOW = 1.4, LIT_GLASS = 0.8;
 
@@ -87,7 +90,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
       if (!roomGlass.has(room)) roomGlass.set(room, kit.surface('glass'));
       return roomGlass.get(room);
     };
-    const frame = kit.surface('frame'), panel = kit.surface('frame', two);
+    const frame = kit.surface('frame'), panel = kit.surface('frame', two), door = kit.surface('door'), cladLeaf = kit.surface('cladding');
     const boarded = { ...clad(two), inner };
     mH = { furn: kit.surface('interior') };
     // the lift's inner faces are never seen, so they keep the cladding's colour without boards
@@ -96,9 +99,9 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     // a panel (the carport's walls and posts) is anthracite; else exterior is thick or running up
     // to a roof, and only it gets the boards and the base strip
     wallMats = w => {
-      if (w.finish === 'panel') return { wall: panel, glass, frame, base: false };
+      if (w.finish === 'panel') return { wall: panel, glass, frame, cladLeaf, base: false };
       const outside = w.t >= 0.3 || typeof w.top === 'string';
-      return outside ? { boarded, glass, frame, base: true } : { wall: inner, glass, frame, base: false };
+      return outside ? { boarded, glass, frame, cladLeaf, base: true } : { wall: inner, glass, frame: door, cladLeaf, base: false };
     };
   } else {
     mH = mats();
@@ -116,8 +119,8 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     const mesh = new THREE.Mesh(geo, m.boarded ? faces(geo, m.boarded, side) : m.wall);
     mesh.castShadow = mesh.receiveShadow = true;
     g.add(mesh);
-    const bar = (x0, x1, y0, y1, d = FRAME_D) => {
-      const b = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, d), m.frame);
+    const bar = (x0, x1, y0, y1, d = FRAME_D, mat = m.frame) => {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, d), mat);
       b.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0);
       b.castShadow = b.receiveShadow = true;
       g.add(b);
@@ -134,7 +137,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     const face = side * (w.t / 2), proud = side * (w.t / 2 + PROUD);
     ops.forEach(o => {
       const x0 = o.c - o.w / 2, x1 = o.c + o.w / 2, y0 = o.sill || 0, y1 = y0 + o.h;
-      if (o.kind === 'door') bar(x0 + FRAME, x1 - FRAME, 0, y1 - FRAME, 0.05);
+      if (o.kind === 'door') bar(x0 + FRAME, x1 - FRAME, 0, y1 - FRAME, 0.05, o.finish === 'cladding' ? m.cladLeaf : m.frame).userData.leaf = true;
       else {
         const room = paneRoom(w, L, o.c, side);
         const p = new THREE.Mesh(new THREE.PlaneGeometry(o.w, o.h), glassFor(room));
@@ -146,7 +149,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
       bar(x0, x0 + FRAME, y0, y1);
       bar(x1 - FRAME, x1, y0, y1);
       bar(x0 + FRAME, x1 - FRAME, y1 - FRAME, y1);
-      if (o.kind === 'glassdoor') bar(o.c - FRAME / 2, o.c + FRAME / 2, y0 + FRAME, y1 - FRAME);
+      if (o.kind === 'glassdoor' && o.w >= MULLION_MIN) bar(o.c - FRAME / 2, o.c + FRAME / 2, y0 + FRAME, y1 - FRAME).userData.mullion = true;
       if (!trims) return;
       const sill = o.kind === 'window' && o.sill > 0;
       // never through a cut or a roof
@@ -272,7 +275,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
       const pe = edges(pg, m.glassEdge);
       pe.position.copy(p.position);
       g.add(p, pe);
-      if (o.kind === 'glassdoor') {
+      if (o.kind === 'glassdoor' && o.w >= MULLION_MIN) {
         const mull = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(o.c, 0, 0), new THREE.Vector3(o.c, o.h, 0)]);
         g.add(new THREE.LineSegments(mull, m.glassEdge));
       }

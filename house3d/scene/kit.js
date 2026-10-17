@@ -15,7 +15,7 @@ const COLORS = {
 // (its boards come from boards()), roofs and flashing a mid grey standing seam, and every frame,
 // door, trim, corner board, roof edge, the wall's base strip, the carport's panels and the
 // pergola one anthracite, about RAL 7016 (the drawings' RR25 yellow frames were not built).
-// Inside, the walls are light grey, the living floors oak and the wet rooms a dark wood-look
+// Inside, the walls are light grey, the doors and their frames white, the living floors oak and the wet rooms a dark wood-look
 // tile. The deck is dark composite, the paving light grey-beige concrete pavers with sandy
 // joints (their stones come from pavers()), the entrance step dark grey, the outdoor units white.
 // The bar fence and the gates are black bars (bars()), the other fences a dark wire mesh
@@ -24,7 +24,7 @@ const COLORS = {
 // The car and surroundings are plain stand-ins; outside is the neutral ground beyond the lot.
 const REAL = {
   cladding: '#bebeb8', roof: '#7b8083', frame: '#383e42', unit: '#e4e4e0',
-  glass: '#9fb8c4', interior: '#dddcd8', floor: '#c39566', tile: '#5e4a3c', deck: '#4d4540', paving: '#b8b1a3',
+  glass: '#9fb8c4', interior: '#dddcd8', door: '#f2f1ed', floor: '#c39566', tile: '#5e4a3c', deck: '#4d4540', paving: '#b8b1a3',
   lawn: '#5f7f45', outside: '#8e9088', hedge: '#355a32', crown: '#4f7a3a', trunk: '#5b4636',
   fence: '#4a4d50', car: '#2f3336', neighbour: '#b9b6ae', road: '#6b6b68',
   timber: '#8a6a4c', sand: '#d6c6a0', slide: '#9ed8c2', nest: '#3d4a5c', pad: '#3f8a4b', mat: '#202325',
