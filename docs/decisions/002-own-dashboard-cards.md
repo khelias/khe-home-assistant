@@ -1,6 +1,6 @@
 # ADR-002: A redesigned view draws with our own Lovelace cards
 
-- **Status:** Accepted (2026-10-17)
+- **Status:** Accepted (2026-10-17). Kodu, the first view drawn with the cards, went back to stock cards on 2026-10-18: the operator rejected the A2 direction, not the cards. The next design round decides which view uses them.
 - **Related:** [ADR-001](001-own-3d-engine.md), [estate ADR-007](https://github.com/khelias/khe-architecture/blob/main/decisions/007-automated-writers.md)
 
 ## Context

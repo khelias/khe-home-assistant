@@ -246,24 +246,15 @@ test('every relative import in the demo files carries a version', () => {
   assert.match(readFileSync(join(dir, 'demo.js'), 'utf8'), /\?v=__DEMO_VERSION__`\)/, 'the JSON fetches carry the version');
 });
 
-test('the dashboard cards ship with the demo and Kodu uses all three', () => {
+test('the dashboard cards ship with the demo and the page knows their types', () => {
   assert.ok(built.files.includes('khe-cards.js'));
   assert.match(built.demoJs, /khe-cards\.js\?v=\d+'/);
-  const kodu = typed(dashboard.views.find(v => v.path === 'kodu'));
-  for (const t of ['custom:khe-summary-card', 'custom:khe-price-card', 'custom:khe-tile-card']) {
-    assert.ok(CARD_TYPES.includes(t), t);
-    assert.ok(kodu.some(c => c.type === t), t);
-  }
-  // the forecast carries a series marker, which demo.js expands into prices
-  const price = kodu.find(c => c.type === 'custom:khe-price-card');
-  const key = data.states[price.forecast].attributes.prices_from;
-  assert.ok(series[`${key}|Kokku`] && series[`${key}|Börs`], key);
+  for (const t of ['custom:khe-summary-card', 'custom:khe-price-card', 'custom:khe-tile-card']) assert.ok(CARD_TYPES.includes(t), t);
 });
 
 // The cards hand HA a hass-action; the demo runs its config through runAction as HA's
 // handleAction would, so a tile tap and a mode tap must reach the simulation.
 test('a tile action and a mode action change the simulated state, the mode after its confirmation', async () => {
-  const kodu = typed(dashboard.views.find(v => v.path === 'kodu'));
   const sim = createSim(data, noTimers);
   const asked = [];
   let answer = true;
@@ -275,21 +266,22 @@ test('a tile action and a mode action change the simulated state, the mode after
   };
   const run = detail => runAction(detail.config.tap_action, detail.config.entity, api);
 
-  const lamp = kodu.find(c => c.type === 'custom:khe-tile-card' && (c.tap_action || {}).action === 'toggle');
-  const before = sim.states[lamp.entity].state;
-  assert.equal(await run(tileAction(lamp)), true);
-  assert.notEqual(sim.states[lamp.entity].state, before);
+  const lamp = Object.keys(sim.states).find(e => e.startsWith('light.'));
+  const before = sim.states[lamp].state;
+  assert.equal(await run(tileAction({ entity: lamp, tap_action: { action: 'toggle' } })), true);
+  assert.notEqual(sim.states[lamp].state, before);
   assert.deepEqual(asked, []);
 
-  const vent = kodu.find(c => c.type === 'custom:khe-tile-card' && c.modes);
-  const current = sim.states[vent.entity].state;
-  const other = vent.modes.find(m => m.option !== current);
-  assert.equal(modeAction(vent.entity, vent.modes.find(m => m.option === current), current), null);
+  const select = Object.keys(sim.states).find(e => e.startsWith('select.') && (sim.states[e].attributes.options || []).length > 1);
+  const current = sim.states[select].state;
+  const option = sim.states[select].attributes.options.find(o => o !== current);
+  const mode = { name: option, option, confirm: `Režiimile ${option}?` };
+  assert.equal(modeAction(select, { ...mode, option: current }, current), null);
   answer = false;
-  assert.equal(await run(modeAction(vent.entity, other, current)), false);
-  assert.equal(sim.states[vent.entity].state, current);
+  assert.equal(await run(modeAction(select, mode, current)), false);
+  assert.equal(sim.states[select].state, current);
   answer = true;
-  assert.equal(await run(modeAction(vent.entity, other, current)), true);
-  assert.equal(sim.states[vent.entity].state, other.option);
-  assert.deepEqual(asked, [other.confirm, other.confirm]);
+  assert.equal(await run(modeAction(select, mode, current)), true);
+  assert.equal(sim.states[select].state, option);
+  assert.deepEqual(asked, [mode.confirm, mode.confirm]);
 });

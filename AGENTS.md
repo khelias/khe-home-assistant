@@ -24,7 +24,7 @@ own.
 
 ```
 cards/             the dashboard's own Lovelace cards (khe-cards.js, ADR-002):
-                   summary, price and tile, Kodu drawn with them; deploy
+                   summary, price and tile, no view on them yet; deploy
                    copies them to www/khe-cards/
 config/            what deploy copies into HA's /config
   configuration.yaml
@@ -172,13 +172,12 @@ the operator first; an approval covers that task only.
   public demo is the same `build()` on made-up inputs, so a new entity id
   needs an entry in `dashboard_demo.CATALOGUE` (the dashboard tests name it)
   and a new templated card a sample text in `TEXTS`.
-- **Kodu is drawn with the repo's own cards**
-  ([ADR-002](docs/decisions/002-own-dashboard-cards.md)): `khe_tile()`,
-  `summary()` and `price_card` in the generator, `cards/khe-cards.js` in the
-  browser. A change to the cards bumps `KHE_CARDS_VERSION` and the resource's
-  `?v=` ([notes](docs/operational-notes.md#dashboard-cards-cards)). The other
-  views stay on stock cards until each gets its own design round.
-- **Keep the house idiom in a stock-card view**, and read two existing views first.
+- **A redesigned view uses the repo's own cards**
+  ([ADR-002](docs/decisions/002-own-dashboard-cards.md)), `cards/khe-cards.js`;
+  no view does today, Kodu went back to stock cards on 2026-10-18. A change
+  to the cards bumps `KHE_CARDS_VERSION` and the resource's `?v=`
+  ([notes](docs/operational-notes.md#dashboard-cards-cards)).
+- **Keep the house idiom in a new view**, and read two existing views first.
   A row is a `horizontal-stack` of 2-4 vertical tiles or `third()`, never a
   lone full-width tile; full width is for charts, forecast cards and alerts.
   Each number appears once (turn off a forecast card's `show_current` when a

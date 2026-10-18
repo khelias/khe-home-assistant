@@ -37,9 +37,6 @@ ALARMS = [("alarm_control_panel.maja", "Maja"), ("alarm_control_panel.garaaz", "
 ROOF = "cover.pergola_katus"
 PERGOLA_LIGHT = "light.pergola_valgustus"
 OUTDOOR = "sensor.komfovent_outdoor_temperature"
-# Kodu's tile names for the house partition and the roof, which match device names
-HOUSE_ALARM_TILE = "Maja valve"
-ROOF_TILE = "Pergola katus"
 
 
 # What the two local files carry, as build() gets them (the format is in ha-dashboard.py).
@@ -151,13 +148,86 @@ def hist(title, ents, hours, columns=12):
 
 
 def section(title, cards, column_span=1, **heading):
-    head = [{"type": "heading", "heading": title, **heading}] if title else []
-    return {"type": "grid", "column_span": column_span, "cards": head + cards}
+    return {
+        "type": "grid",
+        "column_span": column_span,
+        "cards": [{"type": "heading", "heading": title, **heading}] + cards,
+    }
 
 
 def nav(path):
     return {"tap_action": {"action": "navigate", "navigation_path": path}}
 
+
+# The "what should I do now" answer, above the curve. Two price bases on purpose:
+# the level word is classified on the bare spot price (see energy_price.yaml), the
+# windows are searched on the billed price, so the text names both numbers.
+# The text is the point here, not a stand-in for the chart below it: one of the two
+# adults does not read the curve. So it gets designed rather than shortened - the
+# verdict as a coloured ha-alert (the colour follows the current hour's band, so a
+# glance is enough), one icon per decision, tomorrow set off on its own line.
+ALERT = (
+    "{% set t = states('sensor.elektri_hinna_tase') %}"
+    "{{ 'success' if t in ['väga odav', 'odav'] else 'info' if t in ['tavaline', 'kõrgevõitu']"
+    " else 'warning' if t == 'kallis' else 'error' }}"
+)
+price_now = {
+    "type": "markdown",
+    "content": (
+        f'<ha-alert alert-type="{ALERT}">'
+        "{{ state_attr('sensor.elektri_hinna_tase', 'hinnang') }}. "
+        "{{ state_attr('sensor.elektri_hinna_tase', 'tekst') }}</ha-alert>\n\n"
+        '<ha-icon icon="mdi:washing-machine"></ha-icon> **Pesu 4 h:** '
+        "{{ state_attr('sensor.odavaim_aken_pesu', 'tekst') }}\n\n"
+        '<ha-icon icon="mdi:hot-tub"></ha-icon> **Saun 2 h:** '
+        "{{ state_attr('sensor.odavaim_aken_saun', 'tekst') }}"
+        "{% if has_value('sensor.homme_elekter') %}\n\n"
+        '<ha-icon icon="mdi:weather-night"></ha-icon> '
+        "{{ state_attr('sensor.homme_elekter', 'tekst') }}{% endif %}"
+    ),
+    "grid_options": {"columns": "full"},
+}
+
+price_chart = {
+    "type": "custom:apexcharts-card",
+    "graph_span": "2d",
+    "span": {"start": "day"},
+    "header": {"show": False},
+    "now": {"show": True, "label": "Praegu"},
+    "yaxis": [{"min": 0, "decimals": 2}],
+    "experimental": {"color_threshold": True},
+    "apex_config": {
+        "chart": {"height": 300},
+        "legend": {"show": True},
+        "plotOptions": {"bar": {"columnWidth": "90%"}},
+        "xaxis": {"labels": {"datetimeFormatter": {"hour": "HH:mm", "day": "ddd"}}},
+    },
+    "series": [
+        {
+            "entity": FORECAST,
+            "name": "Kokku",
+            "type": "column",
+            "float_precision": 3,
+            "show": {"extremas": True},
+            "color_threshold": [
+                {"value": 0, "color": "#43a047"},
+                {"value": 0.15, "color": "#fb8c00"},
+                {"value": 0.25, "color": "#e53935"},
+            ],
+            "data_generator": "return entity.attributes.prices.map(p => [p.s * 1000, p.t]);",
+        },
+        {
+            "entity": FORECAST,
+            "name": "Börs",
+            "type": "line",
+            "curve": "stepline",
+            "stroke_width": 1,
+            "color": "#90a4ae",
+            "float_precision": 3,
+            "data_generator": "return entity.attributes.prices.map(p => [p.s * 1000, p.p]);",
+        },
+    ],
+}
 
 # Daikin exposes per-period arrays as attributes ("Last Monday".."Sunday", "Last January".."December");
 # the integration's state is only the current bucket, so the charts read the attributes directly.
@@ -217,20 +287,15 @@ def daikin_bars(title, entity, span, end_unit, js, fmt):
 MODE = "select.komfovent_operation_mode"
 
 
-def perform(entity, perform_action, data, text):
-    """A tap that runs an action on the entity after a confirmation."""
-    return {
+def action_tile(entity, name, icon, color, perform_action, data, text, **kw):
+    """Quick-mode tile: same size as the other tiles, state hidden, tap runs an action after a confirmation."""
+    act = {
         "action": "perform-action",
         "perform_action": perform_action,
         "target": {"entity_id": entity},
         "data": data,
         "confirmation": {"text": text},
     }
-
-
-def action_tile(entity, name, icon, color, perform_action, data, text, **kw):
-    """Quick-mode tile: same size as the other tiles, state hidden, tap runs an action after a confirmation."""
-    act = perform(entity, perform_action, data, text)
     return tile(
         entity,
         name,
@@ -261,39 +326,55 @@ def label(sensor, select, name, **kw):
 MODE_LABEL = "sensor.ventilatsiooni_reziim"
 
 
-# Kitchen mode is 80/20 on purpose: it pressurises the kitchen so the cooker hood does the
-# extraction. Boost is 100/100 and is the mode that clears the whole house, which is what a
-# sauna or a smoking oven needs. Both belong on Kodu; they are not the same tool.
-VENT_MODES = [("Tavaline", "normal"), ("Köök", "kitchen"), ("Boost", "boost")]
-
-
-def khe_modes():
-    """Kodu's ventilation mode buttons: a tap on another mode asks first."""
-    return [
-        {"name": n, "option": o, "confirm": f"Ventilatsioon režiimile {n}?"} for n, o in VENT_MODES
-    ]
+def mode_button(name, icon, option, color, **kw):
+    """Mode button in its colour only while that mode runs; tapping the running one does nothing."""
+    running = tile(
+        MODE,
+        name,
+        icon=icon,
+        color=color,
+        hide_state=True,
+        tap_action={"action": "none"},
+        icon_tap_action={"action": "none"},
+        **kw,
+    )
+    idle = action_tile(
+        MODE,
+        name,
+        icon,
+        "disabled",
+        "select.select_option",
+        {"option": option},
+        f"Ventilatsioon režiimile {name}?",
+        **kw,
+    )
+    return [third(t) for t in by_state(MODE, option, running, idle)]
 
 
 # Boiler boost, grey while off and orange only in "performance", where a tap ends it
 # instead of asking to start it again. See by_state for why it takes two tiles.
-BOOST_END = (
-    "water_heater.set_operation_mode",
-    {"operation_mode": "on"},
-    "Lõpetad boileri kiirsoojenduse? Vesi soojeneb edasi tavarežiimis.",
-)
-BOOST_START = (
-    "water_heater.set_operation_mode",
-    {"operation_mode": "performance"},
-    "Boileri kiirsoojendus (Daikin Powerful) sisse? Lõpeb ise, kui vesi on soe.",
-)
-
-
 def dhw_boost():
+    act = lambda mode, text: ("water_heater.set_operation_mode", {"operation_mode": mode}, text)
     return by_state(
         DHW,
         "performance",
-        action_tile(DHW, "Kiirsoojendus sees", "mdi:water-boiler", "orange", *BOOST_END),
-        action_tile(DHW, "Kiirsoojendus", "mdi:water-boiler", "disabled", *BOOST_START),
+        action_tile(
+            DHW,
+            "Kiirsoojendus sees",
+            "mdi:water-boiler",
+            "orange",
+            *act("on", "Lõpetad boileri kiirsoojenduse? Vesi soojeneb edasi tavarežiimis."),
+        ),
+        action_tile(
+            DHW,
+            "Kiirsoojendus",
+            "mdi:water-boiler",
+            "disabled",
+            *act(
+                "performance",
+                "Boileri kiirsoojendus (Daikin Powerful) sisse? Lõpeb ise, kui vesi on soe.",
+            ),
+        ),
     )
 
 
@@ -332,10 +413,33 @@ FAULTS = [
 ]
 
 # The TV is on Kodu for one reason: the owner's Google TV profile has no time limits and the
-# children land in it (khe-meta house plan, phase 8). So Kodu has a Teler tile only while the TV
-# is on: it says what is running, and its icon is the off switch.
+# children land in it (khe-meta house plan, phase 8). So the section answers "is it on, and
+# what is running" and offers the off switch; it exists only while the TV is on, and sits
+# last so that it fills the free slot beside Süsteem instead of reflowing the page.
 TV = "media_player.google_tv_streamer"
-TV_ON = [{"condition": "state", "entity": TV, "state_not": ["off", "unavailable", "unknown"]}]
+
+
+def tv_section():
+    s = section(
+        "Teler",
+        [
+            label("sensor.teleri_app", TV, "Teler", icon="mdi:television"),
+            action_tile(
+                TV,
+                "Lülita välja",
+                "mdi:power",
+                None,
+                "media_player.turn_off",
+                {},
+                "Lülitad teleri välja?",
+            ),
+        ],
+        **nav("/lovelace/teler"),
+    )
+    s["visibility"] = [
+        {"condition": "state", "entity": TV, "state_not": ["off", "unavailable", "unknown"]}
+    ]
+    return s
 
 
 # Watch time, not an alarm, shaped like a phone's screen-time page: the day's total as one
@@ -497,7 +601,7 @@ def teler(h):
     }
 
 
-# The two partitions on Valve. Name and state both stay:
+# The two partitions, the same pair on Kodu and Valve. Name and state both stay:
 # the shield icon alone does not say which of the two is armed.
 ALARM_BADGES = [
     {"type": "entity", "entity": e, "name": n, "show_name": True, "show_state": True}
@@ -505,165 +609,177 @@ ALARM_BADGES = [
 ]
 
 
-# Kodu as the A2 design (ADR-002): the house in one sentence with chips, the price, and the
-# devices as tiles lit when on, drawn by the repo's own cards in cards/khe-cards.js. A tile
-# that cannot be switched opens its system's view, which is what the section headings did.
-KHE_TILE = "custom:khe-tile-card"
-LEVEL = "sensor.elektri_hinna_tase"
-# The billed price, €/kWh, where the colour turns from cheap to middle and from middle to dear:
-# Kodu's bars and Energia's month chart share them.
-PRICE_BANDS = (0.15, 0.25)
-METER_FRESH = "binary_sensor.maja_andmed_varsked"
-
-
-def khe_tile(entity, name, icon, color, **kw):
-    """A Kodu tile: half a section, or the full width when it carries mode buttons. HA prefers
-    grid_options over the card's own size, and the demo reads only these."""
-    c = {"type": KHE_TILE, "entity": entity, "name": name, "icon": icon, "color": color, **kw}
-    c["grid_options"] = {"columns": "full"} if "modes" in kw else {"columns": 6, "rows": 2}
-    return c
-
-
-# The sentence and the chips cover what the view's badges did: people, the two partitions and
-# the faults, the meter data's freshness among them (bad when off).
-def summary(h):
-    return {
-        "type": "custom:khe-summary-card",
-        "title": "Kodu",
-        "faults": [{"entity": e, "name": n} for e, n in FAULTS]
-        + [{"entity": METER_FRESH, "name": "Estfeedi andmed hilinevad", "bad": "off"}],
-        "alarms": [{"entity": e, "name": n} for e, n in ALARMS],
-        "people": [{"entity": e, "name": n.removesuffix(" on")} for e, n in h.people],
-        "price": LEVEL,
-        "climate": {
-            "temperature": "sensor.komfovent_extract_temperature",
-            "humidity": "sensor.komfovent_panel_1_humidity",
-        },
-        "energy_path": "/lovelace/energia",
-        "grid_options": {"columns": "full"},
-    }
-
-
-# The price as words and windows, not only as the bars: one of the two adults does not read
-# the curve. Two price bases on purpose: the level word is classified on the bare spot price
-# (see energy_price.yaml), the number and the windows are the billed price.
-price_card = {
-    "type": "custom:khe-price-card",
-    "level": LEVEL,
-    "forecast": FORECAST,
-    "windows": [
-        {"entity": "sensor.odavaim_aken_pesu", "name": "Pesu 4 h"},
-        {"entity": "sensor.odavaim_aken_saun", "name": "Saun 2 h"},
-    ],
-    "tomorrow": "sensor.homme_elekter",
-    "usage": [
-        {"entity": "sensor.maja_tana", "name": "Täna"},
-        {"entity": "sensor.maja_sel_kuul", "name": "Sel kuul"},
-    ],
-    "bands": list(PRICE_BANDS),
-    "energy_path": "/lovelace/energia",
-    "grid_options": {"columns": "full"},
-}
-
-
-# Two columns on a wide screen: Ülevaade beside Maja, then Õu beside Süsteem.
+# Two columns even on a wide screen: sections fill rows in order and are not packed, so with three
+# only Küte sat beside the tall Elekter section and everything else went below it.
 def home(h):
-    alarm = lambda entity, name: khe_tile(
-        entity, name, "shield", "blue", icon_on="shield-check", tap_action={"action": "more-info"}
-    )
-    boost = lambda text, act: khe_tile(
-        DHW,
-        "Kiirsoojendus",
-        "bolt",
-        "warm",
-        active=["performance"],
-        state_text=text,
-        tap_action=perform(DHW, *act),
-    )
     return {
         "title": "Kodu",
         "path": "kodu",
         "icon": "mdi:home",
         "type": "sections",
         "max_columns": 2,
+        "badges": [
+            # Presence as the name alone, the icon green at home and grey away. "X on Kodus" twice
+            # plus the two partitions wrapped to a second row on a phone and pushed the page down.
+            *[
+                {
+                    "type": "entity",
+                    "entity": e,
+                    "name": n.removesuffix(" on"),
+                    "show_name": True,
+                    "show_state": False,
+                }
+                for e, n in h.people
+            ],
+            # Arming on the way out is a daily action, so the state belongs here. Tap
+            # opens more-info, which carries the arm buttons: no detour via the tab.
+            *ALARM_BADGES,
+        ]
+        + [
+            {
+                "type": "entity",
+                "entity": e,
+                "name": n,
+                "color": "red",
+                "show_name": True,
+                "show_state": False,
+                "visibility": [{"condition": "state", "entity": e, "state": "on"}],
+            }
+            for e, n in FAULTS
+        ],
         "sections": [
-            section(None, [summary(h), price_card]),
             section(
-                "Maja",
+                "Elekter",
                 [
-                    # Daikin's climate switch is read-only on the dashboard (nowrite): the tap
-                    # opens the heat pump's view, it never toggles.
-                    khe_tile(
-                        "switch.space_heating_climate_control",
-                        "Küte",
-                        "flame",
-                        "warm",
-                        state_text=["state", "sensor.space_heating_leaving_water_temperature"],
-                        **nav("/lovelace/soojuspump"),
-                    ),
-                    khe_tile(
-                        DHW,
-                        "Boiler",
-                        "drop",
-                        "water",
-                        state_text=["current_temperature"],
-                        **nav("/lovelace/soojuspump"),
-                    ),
-                    # Daikin Powerful: temporary, the unit returns to normal by itself once the
-                    # tank is hot, so an accidental tap costs one heat-up, not a setting.
-                    *by_state(
-                        DHW, "performance", boost("sees", BOOST_END), boost("väljas", BOOST_START)
-                    ),
-                    alarm(ALARMS[0][0], HOUSE_ALARM_TILE),
-                    alarm(*ALARMS[1]),
-                    khe_tile(
-                        TV,
-                        "Teler",
-                        "tv",
-                        "violet",
-                        active=["*"],
-                        state_text=["sensor.teleri_app"],
-                        icon_tap_action=perform(
-                            TV, "media_player.turn_off", {}, "Lülitad teleri välja?"
-                        ),
-                        icon_label="Lülita teler välja",
-                        visibility=TV_ON,
-                        **nav("/lovelace/teler"),
-                    ),
-                    khe_tile(
-                        MODE,
-                        "Ventilatsioon",
-                        "fan",
-                        "green",
-                        active=["*"],
-                        state_text=[
-                            {"entity": "sensor.komfovent_supply_temperature", "label": "sisse"},
-                            {"entity": "sensor.komfovent_extract_temperature", "label": "välja"},
+                    price_now,
+                    titled("Hind täna ja homme, €/kWh", price_chart, columns="full"),
+                    {
+                        "type": "horizontal-stack",
+                        "grid_options": {"columns": "full"},
+                        "cards": [
+                            nowrite(
+                                "sensor.maja_tana",
+                                "Täna",
+                                state_content=["state", "kulu"],
+                                vertical=True,
+                            ),
+                            nowrite(
+                                "sensor.maja_eile",
+                                "Eile",
+                                state_content=["state", "kulu"],
+                                vertical=True,
+                            ),
+                            nowrite(
+                                "sensor.maja_sel_kuul",
+                                "Sel kuul",
+                                state_content=["state", "kulu"],
+                                vertical=True,
+                            ),
                         ],
-                        modes=khe_modes(),
-                        **nav("/lovelace/ventilatsioon"),
+                    },
+                    bars(
+                        "Tarbimine 7 päeva, kWh", [("estfeed:estfeed_consumption_642b", "kWh")], 7
                     ),
+                    bars("Kulu 7 päeva, €", [("estfeed:estfeed_cost_642b", "€")], 7),
                 ],
+                column_span=2,
+                badges=[
+                    {
+                        "type": "entity",
+                        "entity": "binary_sensor.nord_pool_ee_homne_hind_on_saadaval",
+                        "name": "Homne hind olemas",
+                        "state_content": "name",
+                        "visibility": [
+                            {
+                                "condition": "state",
+                                "entity": "binary_sensor.nord_pool_ee_homne_hind_on_saadaval",
+                                "state": "on",
+                            }
+                        ],
+                    },
+                    {
+                        "type": "entity",
+                        "entity": "binary_sensor.maja_andmed_varsked",
+                        "name": "Estfeedi andmed hilinevad",
+                        "state_content": "name",
+                        "color": "red",
+                        "visibility": [
+                            {
+                                "condition": "state",
+                                "entity": "binary_sensor.maja_andmed_varsked",
+                                "state": "off",
+                            }
+                        ],
+                    },
+                ],
+                **nav("/lovelace/energia"),
             ),
             section(
-                "Õu",
+                "Küte",
                 [
-                    khe_tile(
-                        ROOF,
-                        ROOF_TILE,
-                        "pergola",
-                        "green",
-                        active=["open", "opening", "closing"],
-                        **nav("/lovelace/pergola"),
+                    nowrite("switch.space_heating_climate_control", "Küte (Daikin)"),
+                    tile("sensor.space_heating_leaving_water_temperature", "Küttevee temp"),
+                    when_on("binary_sensor.space_heating_unit_state", "Soojuspumba viga"),
+                ],
+                **nav("/lovelace/soojuspump"),
+            ),
+            section(
+                "Soe vesi",
+                [
+                    nowrite(DHW, "Boiler", state_content=["current_temperature"]),
+                    # Daikin Powerful: the one DHW quick mode on Kodu. Temporary, the unit returns to normal
+                    # by itself once the tank is hot, so an accidental tap costs one heat-up, not a setting.
+                    *dhw_boost(),
+                    when_on("binary_sensor.hot_water_tank_state", "Boileri viga"),
+                ],
+                **nav("/lovelace/soojuspump"),
+            ),
+            section(
+                "Ventilatsioon",
+                [
+                    # Kitchen mode is 80/20 on purpose: it pressurises the kitchen so the cooker hood does the
+                    # extraction. Boost is 100/100 and is the mode that clears the whole house, which is
+                    # what a sauna or a smoking oven needs. Both belong here; they are not the same tool.
+                    *mode_button("Tavaline", "mdi:fan", "normal", "green", vertical=True),
+                    *mode_button("Köök", "mdi:stove", "kitchen", "orange", vertical=True),
+                    *mode_button("Boost", "mdi:fan-plus", "boost", "purple", vertical=True),
+                    third(tile("sensor.komfovent_supply_temperature", "Sissepuhe", vertical=True)),
+                    third(
+                        tile("sensor.komfovent_extract_temperature", "Väljatõmme", vertical=True)
                     ),
-                    khe_tile(
-                        PERGOLA_LIGHT,
-                        "Pergola valgus",
-                        "bulb",
-                        "warm",
-                        tap_action={"action": "toggle"},
+                    third(tile("sensor.komfovent_panel_1_humidity", "Niiskus", vertical=True)),
+                    when_on("binary_sensor.komfovent_status_alarm_fault", "Ventilatsiooni viga"),
+                    when_on(
+                        "binary_sensor.komfovent_status_alarm_warning", "Ventilatsiooni hoiatus"
                     ),
                 ],
+                badges=[
+                    {
+                        "type": "entity",
+                        "entity": MODE_LABEL,
+                        "name": "Režiim",
+                        "show_state": True,
+                        "tap_action": {"action": "more-info", "entity": MODE},
+                    }
+                ],
+                **nav("/lovelace/ventilatsioon"),
+            ),
+            section(
+                "Pergola",
+                [
+                    tile(
+                        ROOF,
+                        "Katus",
+                        hide_state=True,
+                        features=[{"type": "cover-open-close"}],
+                    ),
+                    tile(
+                        PERGOLA_LIGHT,
+                        "Valgustus",
+                        features=[{"type": "light-brightness"}],
+                    ),
+                ],
+                **nav("/lovelace/pergola"),
             ),
             section(
                 "Süsteem",
@@ -763,6 +879,7 @@ def home(h):
                 ],
                 **nav("/lovelace/susteem"),
             ),
+            tv_section(),
         ],
     }
 
@@ -804,8 +921,8 @@ price_month = {
             "data_generator": price_stat_js("mean"),
             "color_threshold": [
                 {"value": 0, "color": "#43a047"},
-                {"value": PRICE_BANDS[0], "color": "#fb8c00"},
-                {"value": PRICE_BANDS[1], "color": "#e53935"},
+                {"value": 0.15, "color": "#fb8c00"},
+                {"value": 0.25, "color": "#e53935"},
             ],
         },
         {

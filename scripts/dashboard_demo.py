@@ -1,7 +1,7 @@
 """The public demo's dashboard: the real generator's config on made-up data.
 
 demo_config(model) runs dashboard_config.build() with made-up inputs and rewrites the copy it
-gets back: every entity id to a demo id (CATALOGUE), every statistic id to a demo one, the
+gets back: every entity id to a demo id (CATALOGUE), every statistic id to a demo one, the six
 labels that name the house's own devices (LABELS), every templated markdown card to sample text
 (TEXTS), and every apexcharts data_generator away; the charts take series() instead. An id the
 catalogue does not know fails the build, so a new entity in the generator needs an entry here.
@@ -30,8 +30,6 @@ LABELS = {
     dc.NET[0][1]: "Lüüs",
     dc.SMOKE_GROUP: "Suitsuandur",
     dict(dc.BASE_UPDATES)["update.komfovent_update"]: "Ventilatsiooniseade",
-    dc.HOUSE_ALARM_TILE: "Valve",
-    dc.ROOF_TILE: "Pergola kate",
 }
 
 # the inputs build() gets: the fixture's two cameras, a made-up family, no NVR app
@@ -151,6 +149,12 @@ binary(
     "on",
     "Arvesti andmed värsked",
     "connectivity",
+)
+entry(
+    "binary_sensor.nord_pool_ee_homne_hind_on_saadaval",
+    "binary_sensor.demo_tomorrow_price",
+    "on",
+    "Homne hind olemas",
 )
 
 # cameras: the grid's substream is the same camera in the demo
@@ -553,6 +557,7 @@ entry("button.komfovent_set_system_time", "button.demo_set_clock", "unknown", "S
 
 # electricity: what the house used and what it cost, the price now and the forecast
 entry("sensor.maja_tana", "sensor.demo_house_today", "9.2", "Täna", kulu="1,18 €", **KWH)
+entry("sensor.maja_eile", "sensor.demo_house_yesterday", "18.4", "Eile", kulu="2,61 €", **KWH)
 entry(
     "sensor.maja_sel_kuul",
     "sensor.demo_house_month",
@@ -571,41 +576,7 @@ entry(
     hind="0,137 €/kWh",
     **KWH,
 )
-# The forecast's prices cannot be baked here: the build has no clock and khe-sites rebuilds
-# weekly. prices_from names the series demo/demo.js expands into {s, p, t} for today and
-# tomorrow before the simulation starts.
-FORECAST_ID = "sensor.demo_price_forecast"
-entry(dc.FORECAST, FORECAST_ID, "täna ja homme", "Elektri hinna prognoos", prices_from=FORECAST_ID)
-entry(
-    dc.LEVEL,
-    "sensor.demo_price_level",
-    "odav",
-    "Elektri hinna tase",
-    arvel=8.8,
-    hinnang="Odav päev, praegu alla keskmise",
-)
-entry(
-    "sensor.odavaim_aken_pesu",
-    "sensor.demo_window_laundry",
-    "22:00",
-    "Odavaim aken, pesu",
-    tekst="Täna 22.00–02.00, keskmiselt 11,2 senti",
-)
-entry(
-    "sensor.odavaim_aken_saun",
-    "sensor.demo_window_sauna",
-    "20:00",
-    "Odavaim aken, saun",
-    tekst="Täna 20.00–22.00, keskmiselt 12,4 senti",
-)
-entry(
-    "sensor.homme_elekter",
-    "sensor.demo_price_tomorrow",
-    "0.128",
-    "Homme elekter",
-    unit_of_measurement="EUR/kWh",
-    tekst="Homme keskmiselt 12,8 senti, odavaim aeg 03.00–05.00.",
-)
+entry(dc.FORECAST, "sensor.demo_price_forecast", "36", "Prognoos katab", unit_of_measurement="h")
 entry("sensor.elektri_hind_see_tund", "sensor.demo_price_hour", "0.139", "Hind see tund", **PRICE)
 entry("sensor.elektri_hind_kokku", "sensor.demo_price_total", "0.143", "Kokku, 15 min", **PRICE)
 entry("sensor.nord_pool_ee_praegune_hind", "sensor.demo_spot_now", "0.088", "Börs praegu", **PRICE)
@@ -725,6 +696,14 @@ MIRRORS = {
 
 # sample text for each templated markdown card, in the subset demo/cards.js renders
 TEXTS = {
+    dc.price_now["content"]: (
+        '<ha-alert alert-type="success">Odav tund. Praegu 8,8 senti kilovatt-tunni eest, '
+        "kõigi tasudega 13,9 senti.</ha-alert>\n\n"
+        '<ha-icon icon="mdi:washing-machine"></ha-icon> **Pesu 4 h:** täna 22.00–02.00, '
+        "keskmiselt 11,2 senti\n\n"
+        '<ha-icon icon="mdi:hot-tub"></ha-icon> **Saun 2 h:** täna 20.00–22.00, keskmiselt 12,4 senti\n\n'
+        '<ha-icon icon="mdi:weather-night"></ha-icon> Homme keskmiselt 12,8 senti, odavaim aeg 03.00–05.00.'
+    ),
     dc.tv_today["content"]: (
         "# 1 t 25 min\n\n"
         '<ha-icon icon="mdi:youtube"></ha-icon> **YouTube** 52 min\n\n'
@@ -880,8 +859,8 @@ def demo_series():
         s[key] = {"step": step, "points": points}
 
     ids = {real: e["id"] for real, e in CATALOGUE.items()}
-    put(f"{FORECAST_ID}|Kokku", "hour_of_today", [[h, _total(h)] for h in range(48)])
-    put(f"{FORECAST_ID}|Börs", "hour_of_today", [[h, _spot(h)] for h in range(48)])
+    put(f"{ids[dc.FORECAST]}|Kokku", "hour_of_today", [[h, _total(h)] for h in range(48)])
+    put(f"{ids[dc.FORECAST]}|Börs", "hour_of_today", [[h, _spot(h)] for h in range(48)])
     hour = ids["sensor.elektri_hind_see_tund"]
     put(
         f"{hour}|Keskmine",

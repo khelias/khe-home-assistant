@@ -9,7 +9,6 @@ import './house3d-card.js?v=__HOUSE3D_VERSION__';
 import './khe-cards.js?v=__KHE_CARDS_VERSION__';
 import { svg, entityIcon } from './icons.js?v=__DEMO_VERSION__';
 import { createSim } from './sim.js?v=__DEMO_VERSION__';
-import { points } from './charts.js?v=__DEMO_VERSION__';
 import { renderSections, renderPanel, runAction, formatState, stateColor, ago } from './cards.js?v=__DEMO_VERSION__';
 
 const toolbar = document.querySelector('.toolbar');
@@ -38,18 +37,6 @@ try {
 } catch (e) {
   viewsEl.innerHTML = '<div class="fallback">Töölaua laadimine ebaõnnestus.</div>';
   throw e;
-}
-
-// The price forecast's hours, which the build cannot bake (it has no clock): a state naming its
-// series in prices_from gets {s, p, t} per hour from them, as the real forecast sensor carries.
-const now0 = new Date();
-for (const st of Object.values(data.states)) {
-  const key = st.attributes && st.attributes.prices_from;
-  if (!key) continue;
-  const spot = new Map(points(series[`${key}|Börs`], now0));
-  const prices = points(series[`${key}|Kokku`], now0).map(([ms, t]) => ({ s: ms / 1000, p: spot.get(ms), t }));
-  const { prices_from, ...rest } = st.attributes;
-  st.attributes = { ...rest, prices };
 }
 
 const light = new URLSearchParams(location.search).has('light');

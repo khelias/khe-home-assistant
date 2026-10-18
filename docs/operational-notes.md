@@ -10,8 +10,8 @@ backup and restore) is in khe-homelab's
 **Every `template/reload` must be followed at once by
 `POST /api/events/khe_price_refresh`.** Trigger-based template sensors do not
 re-run on reload, so the whole price stack (`elektri_hinna_prognoos`, `_tase`,
-`odavaim_aken_*`) goes blank and the Kodu price card shows "Hind pole teada"
-and "Hinnaprognoosi pole" until the hourly tick. A restart is safe, the package has a `start` trigger;
+`odavaim_aken_*`) goes blank and the Kodu Elekter card renders `None. None`
+until the hourly tick. A restart is safe, the package has a `start` trigger;
 only reload breaks it. An `event_template_reloaded` trigger does not fix it,
 the reload races the entities listening for it (core issues #65832, #101835).
 
@@ -170,9 +170,11 @@ on the select (`"entity": <select>`), so the picker is one tap away as before.
 
 ## Dashboard cards (`cards`)
 
-Kodu is drawn with the repo's own Lovelace cards in `cards/khe-cards.js`:
+The repo's own Lovelace cards are in `cards/khe-cards.js`:
 `custom:khe-summary-card`, `custom:khe-price-card` and `custom:khe-tile-card`
-([ADR-002](decisions/002-own-dashboard-cards.md)). Deploy replaces
+([ADR-002](decisions/002-own-dashboard-cards.md)). Kodu was drawn with them
+on 2026-10-17 and went back to stock cards the next day; no view uses them
+until the next design round. Deploy replaces
 `www/khe-cards/` in HA's config volume, so HA serves them as
 `/local/khe-cards/`, and a change arrives without a restart.
 
@@ -180,8 +182,8 @@ Kodu is drawn with the repo's own Lovelace cards in `cards/khe-cards.js`:
   with `scripts/ha-ws.py '{"type": "lovelace/resources/create", "res_type":
   "module", "url": "/local/khe-cards/khe-cards.js?v=1"}'`, then moved with
   `lovelace/resources/update` and its `resource_id` (from
-  `lovelace/resources`). Without it Kodu shows HA's "Custom element doesn't
-  exist" in every card.
+  `lovelace/resources`); the house has had it since 2026-10-17. Without it
+  a view on these cards shows HA's "Custom element doesn't exist".
 - **Cache:** every change to the module bumps `KHE_CARDS_VERSION` and the same
   `?v=` on the resource, as for the 3D card.
 - **Colours** follow `hass.themes.darkMode`, the dark mode of the device or of
@@ -189,8 +191,8 @@ Kodu is drawn with the repo's own Lovelace cards in `cards/khe-cards.js`:
   its OS dark schedule.
 - **Actions:** a card fires `hass-action` with the tile's `tap_action` and HA's
   `handleAction` runs it, confirmation dialogs included. A frontend change
-  there would leave the tiles dead, so after each HA bump tap a Kodu tile and
-  a ventilation mode button and see HA act.
+  there would leave the tiles dead, so while a view uses them, tap a tile
+  and a mode button after each HA bump and see HA act.
 - **Demo:** the demo mounts the same module on its simulated hass and runs
   each `hass-action` through its action runner; `?light` shows the light
   palette.
