@@ -938,6 +938,31 @@ test('card: roomChips on the test house\'s own devices', () => {
   assert.equal(r1.parts.find(q => q.icon === 'motion').text, '2', 'the kitchen and the living room sensors');
 });
 
+test('card: roomChips and toMarker in English with language en, Estonian by default', () => {
+  const ms = [
+    { id: 'light.a1', icon: 'light', room: 'r1', state: 'on' },
+    { id: 'light.a2', icon: 'light', room: 'r1', state: 'on' },
+    { id: 'binary_sensor.b_door', icon: 'door', room: 'r2', state: 'alert' },
+    { id: 'binary_sensor.d_smoke', icon: 'smoke', room: 'r4', state: 'alert' },
+    { id: 'sensor.d_temp', icon: 'sensor', room: 'r4', state: 'idle', value: '20.0°' },
+    { id: 'alarm_control_panel.e', icon: 'alarm', room: 'r5', state: 'on' }
+  ];
+  const [r1, r2, , r4, r5] = card.roomChips(ms, model.rooms, 'en');
+  assert.equal(r1.parts[0].label, '2 lights on');
+  assert.equal(r2.parts[0].label, 'door open');
+  assert.deepEqual(r4.parts.map(q => q.label), ['smoke alarm going off', 'temperature 20.0°']);
+  assert.equal(r5.parts[0].label, 'armed');
+  assert.equal(card.roomChips(ms, model.rooms)[0].parts[0].label, '2 valgustit põleb');
+  const d = { entity: 'sensor.t', type: 'sensor', room: 'r1', pos: [0, 0, 0], name: 't' };
+  assert.equal(card.toMarker(d, { state: '21.44' }, new Date(), 'en').value, '21.4°');
+  assert.equal(card.toMarker(d, { state: '21.44' }).value, '21,4°');
+});
+
+test('card: both languages have the same strings', () => {
+  const shape = o => Object.keys(o).sort().map(k => (o[k] && typeof o[k] === 'object' ? [k, shape(o[k])] : k));
+  assert.deepEqual(shape(card.TEXT.en), shape(card.TEXT.et));
+});
+
 test('card: motionGlow lights a room while motion is on and 15 minutes after', () => {
   const now = new Date('2026-10-17T21:00:00Z'), ago = min => new Date(now - min * 60000).toISOString();
   assert.equal(card.motionGlow({ state: 'on', last_changed: ago(60) }, now), 0.8);
@@ -1159,4 +1184,15 @@ test('card: featureText gives the facts, the date in Estonian, and the PV line b
   assert.equal(card.featureText(pv, null, { kw: 4.236, alt: 54, time: day, live: false }).pv, '21. juuni kell 13:00 selge taevaga kuni 4,2 kW');
   assert.equal(card.featureText(pv, null, { kw: 0, alt: -3, time: night, live: true }).pv, 'Praegu on päike loojunud');
   assert.equal(card.featureText(pv, null, { kw: 0, alt: -3, time: night, live: false }).pv, '21. juuni kell 23:45 on päike loojunud');
+});
+
+test('card: featureText in English', () => {
+  const pv = futureItem('pv'), tub = futureItem('tub');
+  assert.equal(card.featureText(pv, '2026-10-14', null, 'en').sub, 'Plan · estimate of 14 October 2026');
+  assert.equal(card.featureText(tub, '2026-10-14', null, 'en').empty, 'No figures added yet.');
+  assert.equal(card.featureText(tub, undefined, null, 'en').sub, 'Plan');
+  const day = new Date(2026, 5, 21, 13, 0), night = new Date(2026, 5, 21, 23, 45);
+  assert.equal(card.featureText(pv, null, { kw: 4.236, alt: 54, time: day, live: true }, 'en').pv, 'Now up to 4.2 kW under a clear sky');
+  assert.equal(card.featureText(pv, null, { kw: 4.236, alt: 54, time: day, live: false }, 'en').pv, '21 June at 13:00 up to 4.2 kW under a clear sky');
+  assert.equal(card.featureText(pv, null, { kw: 0, alt: -3, time: night, live: false }, 'en').pv, '21 June at 23:45 the sun has set');
 });

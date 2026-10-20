@@ -320,24 +320,24 @@ dialog.confirm::backdrop { background: rgba(0, 0, 0, .5); }
 </head>
 <body>
 <header class="toolbar">
-  <button type="button" class="icon-button" data-act="menu" aria-label="Menüü" aria-haspopup="dialog"></button>
-  <button type="button" class="icon-button" data-act="back" aria-label="Tagasi"></button>
-  <h1 class="main-title">Kodu</h1>
-  <nav class="tabs" role="tablist" aria-label="Vaated"></nav>
+  <button type="button" class="icon-button" data-act="menu" aria-label="Menüü" data-t-aria="menu" aria-haspopup="dialog"></button>
+  <button type="button" class="icon-button" data-act="back" aria-label="Tagasi" data-t-aria="back"></button>
+  <h1 class="main-title" data-t="home">Kodu</h1>
+  <nav class="tabs" role="tablist" aria-label="Vaated" data-t-aria="views"></nav>
 </header>
 <main class="views"></main>
-<dialog class="drawer" aria-label="Külgriba">
-  <div class="d-head"><button type="button" class="icon-button" data-act="close" aria-label="Sulge menüü"></button><span>Home Assistant</span></div>
-  <nav class="d-nav"><a href="#" data-act="close" aria-current="page"><span class="d-icon"></span>Kodu</a></nav>
+<dialog class="drawer" aria-label="Külgriba" data-t-aria="sidebar">
+  <div class="d-head"><button type="button" class="icon-button" data-act="close" aria-label="Sulge menüü" data-t-aria="closeMenu"></button><span>Home Assistant</span></div>
+  <nav class="d-nav"><a href="#" data-act="close" aria-current="page"><span class="d-icon"></span><span data-t="home">Kodu</span></a></nav>
   <div class="d-about">
-    <p>See on väljamõeldud maja Home Assistanti töölaual. Seadmete olekud on simuleeritud ja lähtestuvad, kui lehe uuesti laadid; päris majas tulevad need Home Assistantist.</p>
-    <p><a href="https://github.com/khelias/khe-home-assistant">Lähtekood GitHubis</a></p>
+    <p data-t="about">See on väljamõeldud maja Home Assistanti töölaual. Seadmete olekud on simuleeritud ja lähtestuvad, kui lehe uuesti laadid; päris majas tulevad need Home Assistantist.</p>
+    <p><a href="https://github.com/khelias/khe-home-assistant" data-t="source">Lähtekood GitHubis</a></p>
   </div>
 </dialog>
 <dialog class="info" aria-labelledby="info-name">
   <div class="handle" aria-hidden="true"></div>
   <div class="i-head">
-    <button type="button" class="icon-button" data-act="close" aria-label="Sulge"></button>
+    <button type="button" class="icon-button" data-act="close" aria-label="Sulge" data-t-aria="close"></button>
     <span class="i-icon"></span>
     <div class="i-title"><p class="i-area"></p><h2 class="i-name" id="info-name"></h2></div>
   </div>
@@ -350,7 +350,7 @@ dialog.confirm::backdrop { background: rgba(0, 0, 0, .5); }
 <dialog class="confirm" aria-labelledby="confirm-text">
   <form method="dialog">
     <p class="c-text" id="confirm-text"></p>
-    <div class="c-actions"><button type="button" data-ok="no">Loobu</button><button type="button" data-ok="yes">Kinnita</button></div>
+    <div class="c-actions"><button type="button" data-ok="no" data-t="cancel">Loobu</button><button type="button" data-ok="yes" data-t="confirm">Kinnita</button></div>
   </form>
 </dialog>
 <script type="module" src="demo.js?v=__DEMO_VERSION__"></script>

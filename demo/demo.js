@@ -4,12 +4,14 @@
 // the real house3d card and Kodu's real cards (khe-cards.js). Taps run as HA runs them: more-info
 // opens a dialog like HA's, toggles and service calls change the simulated states, navigate opens
 // a view or a subview. This file names no entity: the data names them, so it works for any
-// generated dashboard. ?light shows HA's light theme, which the dashboard cards follow.
+// generated dashboard. ?light shows HA's light theme, which the dashboard cards follow; ?lang=en
+// shows the English demo, the .en.json files and demo/strings.js (ADR-003).
 import './house3d-card.js?v=__HOUSE3D_VERSION__';
 import './khe-cards.js?v=__KHE_CARDS_VERSION__';
 import { svg, entityIcon } from './icons.js?v=__DEMO_VERSION__';
 import { createSim } from './sim.js?v=__DEMO_VERSION__';
 import { renderSections, renderPanel, runAction, formatState, stateColor, ago } from './cards.js?v=__DEMO_VERSION__';
+import { lang, locale, t } from './strings.js?v=__DEMO_VERSION__';
 
 const toolbar = document.querySelector('.toolbar');
 const tabs = document.querySelector('.tabs');
@@ -20,8 +22,7 @@ const viewsEl = document.querySelector('.views');
 const drawer = document.querySelector('dialog.drawer');
 const dialog = document.querySelector('dialog.info');
 const confirmDlg = document.querySelector('dialog.confirm');
-const nf0 = new Intl.NumberFormat('et-EE', { maximumFractionDigits: 0 });
-const nf1 = new Intl.NumberFormat('et-EE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const nf1 = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
 const domainOf = entity => entity.split('.')[0];
 
@@ -29,13 +30,17 @@ menuBtn.innerHTML = svg('menu');
 backBtn.innerHTML = svg('arrow-left');
 document.querySelectorAll('[data-act="close"].icon-button').forEach(b => { b.innerHTML = svg('close'); });
 document.querySelector('.d-icon').outerHTML = svg('home');
+document.documentElement.lang = lang;
+document.querySelectorAll('[data-t]').forEach(el => { el.textContent = t[el.dataset.t]; });
+document.querySelectorAll('[data-t-aria]').forEach(el => { el.setAttribute('aria-label', t[el.dataset.tAria]); });
 
 const load = name => fetch(`./${name}?v=__DEMO_VERSION__`).then(r => { if (!r.ok) throw new Error(name); return r.json(); });
+const suffix = lang === 'en' ? '.en.json' : '.json';
 let model, dashboard, data, series;
 try {
-  [model, dashboard, data, series] = await Promise.all(['model.json', 'dashboard.json', 'states.json', 'series.json'].map(load));
+  [model, dashboard, data, series] = await Promise.all(['model', 'dashboard', 'states', 'series'].map(n => load(n + suffix)));
 } catch (e) {
-  viewsEl.innerHTML = '<div class="fallback">Töölaua laadimine ebaõnnestus.</div>';
+  viewsEl.innerHTML = `<div class="fallback">${esc(t.loadFailed)}</div>`;
   throw e;
 }
 
@@ -43,7 +48,7 @@ const light = new URLSearchParams(location.search).has('light');
 document.documentElement.classList.toggle('light', light);
 const sim = createSim(data);
 const byEntity = new Map((model.devices || []).map(d => [d.entity, d]));
-const roomName = id => (id === 'oues' ? 'Õu' : ((model.rooms || []).find(r => r.id === id) || {}).name || '');
+const roomName = id => (id === 'oues' ? t.outdoors : ((model.rooms || []).find(r => r.id === id) || {}).name || '');
 const nameOf = e => (sim.states[e] && sim.states[e].attributes.friendly_name) || (byEntity.get(e) || {}).name || e;
 const areaOf = e => (byEntity.has(e) ? roomName(byEntity.get(e).room) : '');
 const carEntity = model.car && model.car.entity;
@@ -103,10 +108,11 @@ const ctx = {
   now: () => new Date(),
   act: (action, entity) => runAction(action, entity, api),
   resize: (el, fn) => { resizers.set(el, fn); ro.observe(el); },
-  house3d: () => {
+  // the card's own config from the dashboard, as HA passes it: in English it carries language: en
+  house3d: conf => {
     const el = document.createElement('house3d-card');
-    el.setAttribute('aria-label', 'Maja kolmemõõtmeline mudel');
-    el.setConfig({ model });
+    el.setAttribute('aria-label', t.house3d);
+    el.setConfig({ ...conf, model });
     card3d = el;
     return { el, update: h => { el.hass = h; } };
   },
@@ -203,7 +209,7 @@ let dragging = false;
 
 const btn = (act, label, extra = '') => `<button type="button" data-do="${esc(act)}" ${extra}>${esc(label)}</button>`;
 const iconBtn = (act, label, k, off) => `<button type="button" data-do="${act}" aria-label="${esc(label)}"${off ? ' disabled' : ''}>${svg(k)}</button>`;
-const power = on => `<button type="button" class="round" data-do="toggle" aria-pressed="${on}" aria-label="${on ? 'Lülita välja' : 'Lülita sisse'}">${svg('power')}</button>`;
+const power = on => `<button type="button" class="round" data-do="toggle" aria-pressed="${on}" aria-label="${on ? t.turnOff : t.turnOn}">${svg('power')}</button>`;
 const slider = (label, value, min) => `<div class="pill slider" role="slider" tabindex="0" data-level aria-label="${esc(label)}"
   aria-valuemin="${min}" aria-valuemax="100" aria-valuenow="${value}" aria-valuetext="${value}%" style="--v:${value}%"><span class="fill"></span></div>`;
 
@@ -220,52 +226,51 @@ function thermostat(e, st) {
   const min = a.min_temp ?? 5, max = a.max_temp ?? 30, target = a.temperature;
   const f = Math.min(1, Math.max(0, (target - min) / (max - min)));
   const step = domainOf(e) === 'water_heater' ? 1 : 0.5;
-  const big = off ? 'Väljas' : `${step < 1 ? nf1.format(target) : Math.round(target)}<span class="unit">°C</span>`;
+  const big = off ? t.modes.off : `${step < 1 ? nf1.format(target) : Math.round(target)}<span class="unit">°C</span>`;
   return `<div class="thermo" style="--c:${stateColor(e, st)}">
     <svg viewBox="0 0 200 200" aria-hidden="true"><path class="track" d="${arcPath(0, 1)}"/>${off ? '' : `<path class="value" d="${arcPath(0, f)}"/>`}</svg>
-    <div class="t-mid"><span class="t-label">${off ? '' : 'Soovitud'}</span><span class="t-big" aria-live="polite">${big}</span>
+    <div class="t-mid"><span class="t-label">${off ? '' : t.target}</span><span class="t-big" aria-live="polite">${big}</span>
       <span class="t-now">${svg('thermometer')} ${nf1.format(a.current_temperature)} °C</span></div>
   </div>
-  <div class="t-steps">${iconBtn('down', 'Sihttemperatuur alla', 'minus', off)}${iconBtn('up', 'Sihttemperatuur üles', 'plus', off)}</div>`;
+  <div class="t-steps">${iconBtn('down', t.targetDown, 'minus', off)}${iconBtn('up', t.targetUp, 'plus', off)}</div>`;
 }
-const MODE_TEXT = { off: 'Väljas', heat: 'Küte', cool: 'Jahutus', auto: 'Automaatne', on: 'Tavaline', performance: 'Kiirsoojendus', eco: 'Säästlik' };
-const modeButtons = (modes, s, prefix) => (modes.length ? `<div class="modes" role="group" aria-label="Režiim">${modes.map(m => btn(`${prefix}:${m}`, MODE_TEXT[m] || m, `aria-pressed="${s === m}"`)).join('')}</div>` : '');
+const modeButtons = (modes, s, prefix) => (modes.length ? `<div class="modes" role="group" aria-label="${t.mode}">${modes.map(m => btn(`${prefix}:${m}`, t.modes[m] || m, `aria-pressed="${s === m}"`)).join('')}</div>` : '');
 const options = (st, label) => `<div class="pill seg options" role="group" aria-label="${esc(label)}">${(st.attributes.options || []).map(o => btn(`option:${o}`, o, `aria-pressed="${st.state === o}"`)).join('')}</div>`;
 
 function controls(e, st) {
   const a = st.attributes, s = st.state, on = s === 'on';
   switch (domainOf(e)) {
-    case 'light': return slider('Heledus', on ? Math.round((a.brightness || 255) / 2.55) : 0, 1) + power(on);
-    case 'fan': return slider('Kiirus', on ? a.percentage || 40 : 0, 10) + power(on);
+    case 'light': return slider(t.brightness, on ? Math.round((a.brightness || 255) / 2.55) : 0, 1) + power(on);
+    case 'fan': return slider(t.speed, on ? a.percentage || 40 : 0, 10) + power(on);
     case 'switch': case 'input_boolean':
-      return `<button type="button" class="pill switch" role="switch" data-do="toggle" aria-checked="${on}" aria-label="Lülita"><span class="fill"></span></button>`;
+      return `<button type="button" class="pill switch" role="switch" data-do="toggle" aria-checked="${on}" aria-label="${t.toggle}"><span class="fill"></span></button>`;
     case 'cover':
-      return `<div class="pill buttons" role="group" aria-label="Juhtimine">
-        ${iconBtn('open', 'Ava', 'chevron-up', s === 'open' && 'current_position' in a)}${iconBtn('stop', 'Peata', 'stop')}${iconBtn('close', 'Sulge', 'chevron-down', s === 'closed' && 'current_position' in a)}</div>`
-        + ('current_position' in a ? '' : '<p class="note">See seade asendit ei teata, nii et olek on viimane käsk.</p>');
+      return `<div class="pill buttons" role="group" aria-label="${t.controls}">
+        ${iconBtn('open', t.open, 'chevron-up', s === 'open' && 'current_position' in a)}${iconBtn('stop', t.stop, 'stop')}${iconBtn('close', t.close, 'chevron-down', s === 'closed' && 'current_position' in a)}</div>`
+        + ('current_position' in a ? '' : `<p class="note">${t.noPosition}</p>`);
     case 'climate': return `<div class="thermostat">${thermostat(e, st)}${modeButtons(a.hvac_modes || [], s, 'hvac')}</div>`;
     case 'water_heater': return `<div class="thermostat">${thermostat(e, st)}${modeButtons(a.operation_list || [], s, 'op')}</div>`;
     case 'alarm_control_panel':
-      return `<div class="pill seg" role="group" aria-label="Valvestus">${btn('arm_away', 'Valves (eemal)', `aria-pressed="${s === 'armed_away'}"`)}${btn('arm_home', 'Valves (kodus)', `aria-pressed="${s === 'armed_home'}"`)}${btn('disarm', 'Valvest maas', `aria-pressed="${s === 'disarmed'}"`)}</div>`
-        + (s === 'disarmed' ? '' : `<div class="row">${btn('trigger', 'Testhäire', s === 'triggered' ? 'disabled' : '')}</div>`);
+      return `<div class="pill seg" role="group" aria-label="${t.arming}">${btn('arm_away', t.state.armed_away, `aria-pressed="${s === 'armed_away'}"`)}${btn('arm_home', t.state.armed_home, `aria-pressed="${s === 'armed_home'}"`)}${btn('disarm', t.state.disarmed, `aria-pressed="${s === 'disarmed'}"`)}</div>`
+        + (s === 'disarmed' ? '' : `<div class="row">${btn('trigger', t.testAlarm, s === 'triggered' ? 'disabled' : '')}</div>`);
     case 'binary_sensor':
-      if (a.device_class === 'door') return `<div class="row">${btn('flip', on ? 'Sulge uks' : 'Ava uks')}</div><p class="note">Simulatsioon: päris majas muudab seda andur.</p>`;
-      if (a.device_class === 'motion') return `<div class="row">${btn('pulse', 'Simuleeri liikumist', on ? 'disabled' : '')}</div>`;
-      return `<div class="row">${on ? btn('flip', 'Lähtesta') : btn('flip', 'Testi andurit')}</div><p class="note">Simulatsioon: päris majas muudab seda andur.</p>`;
+      if (a.device_class === 'door') return `<div class="row">${btn('flip', on ? t.closeDoor : t.openDoor)}</div><p class="note">${t.simSensor}</p>`;
+      if (a.device_class === 'motion') return `<div class="row">${btn('pulse', t.simMotion, on ? 'disabled' : '')}</div>`;
+      return `<div class="row">${on ? btn('flip', t.reset) : btn('flip', t.testSensor)}</div><p class="note">${t.simSensor}</p>`;
     case 'sensor':
-      if (a.device_class === 'temperature') return `<div class="row">${btn('down', 'Jahedamaks')}${btn('up', 'Soojemaks')}</div><p class="note">Simulatsioon: päris majas tuleb väärtus andurilt.</p>`;
+      if (a.device_class === 'temperature') return `<div class="row">${btn('down', t.cooler)}${btn('up', t.warmer)}</div><p class="note">${t.simValue}</p>`;
       return '';
-    case 'select': case 'input_select': return options(st, 'Valikud');
+    case 'select': case 'input_select': return options(st, t.options);
     case 'number': case 'input_number':
-      return `<div class="row stepper">${iconBtn('dec', 'Vähem', 'minus', Number(s) <= a.min)}${iconBtn('inc', 'Rohkem', 'plus', Number(s) >= a.max)}</div>`;
-    case 'media_player': return power(s !== 'off') + (a.app_name && s !== 'off' ? `<p class="note">Rakendus: ${esc(a.app_name)}</p>` : '');
+      return `<div class="row stepper">${iconBtn('dec', t.less, 'minus', Number(s) <= a.min)}${iconBtn('inc', t.more, 'plus', Number(s) >= a.max)}</div>`;
+    case 'media_player': return power(s !== 'off') + (a.app_name && s !== 'off' ? `<p class="note">${esc(t.app(a.app_name))}</p>` : '');
     case 'update':
-      return `<p class="note">Paigaldatud ${esc(a.installed_version)}, uusim ${esc(a.latest_version)}</p>${on ? `<div class="row">${btn('install', 'Paigalda')}</div>` : ''}`;
-    case 'button': return `<div class="row">${btn('press', 'Vajuta')}</div>`;
+      return `<p class="note">${esc(t.installed(a.installed_version, a.latest_version))}</p>${on ? `<div class="row">${btn('install', t.install)}</div>` : ''}`;
+    case 'button': return `<div class="row">${btn('press', t.press)}</div>`;
     case 'camera':
-      return `<div class="cam" role="img" aria-label="Kaamerapildi asemik">${svg('cctv')}</div><p class="note">Päris majas näitab Home Assistant siin otsepilti. 3D-vaates on kaamera vaatesektor.</p>`;
+      return `<div class="cam" role="img" aria-label="${t.camPlaceholder}">${svg('cctv')}</div><p class="note">${t.camNote}</p>`;
     case 'device_tracker':
-      return `<div class="row">${btn('arrive', 'Saabub', s === 'home' ? 'disabled' : '')}${btn('leave', 'Lahkub', s === 'home' ? '' : 'disabled')}</div>`;
+      return `<div class="row">${btn('arrive', t.arrive, s === 'home' ? 'disabled' : '')}${btn('leave', t.leave, s === 'home' ? '' : 'disabled')}</div>`;
     default: return '';
   }
 }
@@ -307,7 +312,7 @@ function renderInfo() {
   if (!st) return dialog.close();
   shownState = st;
   dialog.querySelector('.state').textContent = formatState(st);
-  dialog.querySelector('.when').textContent = `Muudetud ${ago(st.last_changed)}`;
+  dialog.querySelector('.when').textContent = t.changed(ago(st.last_changed));
   const box = dialog.querySelector('.controls');
   box.style.setProperty('--c', stateColor(e, st));
   // a slider in use keeps its element and only moves; any other control is rebuilt and gets its focus back
@@ -318,7 +323,7 @@ function renderInfo() {
     live.setAttribute('aria-valuenow', String(v));
     live.setAttribute('aria-valuetext', `${v}%`);
     const p = box.querySelector('[data-do="toggle"]');
-    if (p) { p.setAttribute('aria-pressed', 'true'); p.setAttribute('aria-label', 'Lülita välja'); }
+    if (p) { p.setAttribute('aria-pressed', 'true'); p.setAttribute('aria-label', t.turnOff); }
     return;
   }
   const focused = box.contains(document.activeElement) ? document.activeElement : null;
@@ -341,7 +346,7 @@ function openInfo(entity) {
   if (!dialog.open) dialog.showModal();
 }
 setInterval(() => {
-  if (dialog.open && sim.states[openEntity]) dialog.querySelector('.when').textContent = `Muudetud ${ago(sim.states[openEntity].last_changed)}`;
+  if (dialog.open && sim.states[openEntity]) dialog.querySelector('.when').textContent = t.changed(ago(sim.states[openEntity].last_changed));
 }, 30000);
 
 // taps on a dialog's backdrop land on the dialog element, outside its box

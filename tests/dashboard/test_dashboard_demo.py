@@ -5,6 +5,7 @@ Run from the repo root: python3 -I -m unittest discover -s tests/dashboard
 """
 
 import json
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -13,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 import dashboard_config as dc
 import dashboard_demo as dd
+import dashboard_demo_en as en
 import house3d_model
 
 FIXTURE = ROOT / "tests/house3d/fixture-model.md"
@@ -57,6 +59,23 @@ CONFIG = dd.demo_config(MODEL)
 STATES = dd.demo_states(MODEL)["states"]
 SERIES = dd.demo_series()
 FIXTURE_IDS = {d["entity"] for d in MODEL["devices"]} | {MODEL["car"]["entity"]}
+CONFIG_EN = dd.demo_config_en(MODEL)
+STATES_EN = dd.demo_states_en(MODEL)
+SERIES_EN = dd.demo_series_en()
+MODEL_EN = dd.demo_model_en(MODEL)
+ESTONIAN = re.compile("[õäöüšžÕÄÖÜŠŽ]")
+
+
+def pairs(a, b, key=None):
+    """(key, Estonian, English) for every string at the same place in two same-shaped trees."""
+    if isinstance(a, dict):
+        for k in a:
+            yield from pairs(a[k], b[k], k)
+    elif isinstance(a, list):
+        for x, y in zip(a, b, strict=True):
+            yield from pairs(x, y, key)
+    elif isinstance(a, str):
+        yield key, a, b
 
 
 class DemoConfig(unittest.TestCase):
@@ -148,6 +167,79 @@ class DemoConfig(unittest.TestCase):
             self.assertIn(target, STATES)
             self.assertIn(m["from"], STATES)
             self.assertEqual(STATES[target]["state"], m["map"][STATES[m["from"]]["state"]])
+
+
+class DemoEnglish(unittest.TestCase):
+    def test_no_visible_string_stays_estonian_unless_the_same_in_both(self):
+        found = list(pairs(CONFIG, CONFIG_EN))
+        visible = [(k, a, b) for k, a, b in found if k in dd.VISIBLE or k == "content"]
+        self.assertTrue(visible)
+        for k, a, b in visible:
+            if a == b:
+                self.assertIn(a, en.SAME, k)
+        for e, st in STATES.items():
+            a, b = st["attributes"]["friendly_name"], STATES_EN["states"][e]["attributes"]
+            if a == b["friendly_name"]:
+                self.assertIn(a, en.SAME, e)
+        texts = ("rooms", "devices", "car", "future")
+        for k, a, b in pairs({t: MODEL[t] for t in texts}, {t: MODEL_EN[t] for t in texts}):
+            if k in ("name", "facts") and a == b:
+                self.assertIn(a, en.SAME, k)
+
+    def test_the_english_files_hold_no_estonian_letter(self):
+        for name, o in (("config", CONFIG_EN), ("states", STATES_EN), ("model", MODEL_EN)):
+            text = json.dumps(o, ensure_ascii=False)
+            self.assertIsNone(ESTONIAN.search(text), (name, ESTONIAN.findall(text)[:5]))
+
+    def test_an_unmapped_visible_string_or_state_word_fails_the_build(self):
+        with self.assertRaises(KeyError):
+            dd._walk_en({"type": "tile", "name": "Pole tõlget"})
+        with self.assertRaises(KeyError):
+            dd._walk_en({"type": "markdown", "content": "Pole tõlget"})
+        with self.assertRaises(KeyError):
+            dd._word("Pole tõlget")
+        for bad in ("T", " "):
+            with self.assertRaises(KeyError):
+                dd._word(bad)
+        for raw in ("", "armed_away", "21", "13.6", "-5", "23:00:00", "2026-10-14 16:20:00"):
+            self.assertEqual(dd._word(raw), raw)
+
+    def test_the_3d_card_is_english(self):
+        house3d = [c for c in cards(CONFIG_EN) if c["type"] == "custom:house3d-card"]
+        self.assertEqual(house3d, [{"type": "custom:house3d-card", "language": "en"}])
+
+    def test_series_cover_every_english_chart(self):
+        wanted = set()
+        for c in cards(CONFIG_EN):
+            if c["type"] == "custom:apexcharts-card":
+                wanted |= {f"{x['entity']}|{x['name']}" for x in c["series"]}
+        self.assertTrue(wanted)
+        self.assertEqual(sorted(wanted - set(SERIES_EN)), [])
+        self.assertEqual(len(SERIES_EN), len(SERIES))
+
+    def test_selects_hold_their_options_and_mirrors_follow(self):
+        states = STATES_EN["states"]
+        for e, st in states.items():
+            if e.split(".")[0] in ("select", "input_select"):
+                self.assertIn(st["state"], st["attributes"]["options"], e)
+        for target, m in STATES_EN["mirrors"].items():
+            self.assertEqual(states[target]["state"], m["map"][states[m["from"]]["state"]])
+
+    def test_costs_take_a_decimal_point(self):
+        a = STATES_EN["states"][dd.CATALOGUE["sensor.maja_sel_kuul"]["id"]]["attributes"]
+        self.assertEqual((a["kulu"], a["hind"]), ("41.30 €", "0.144 €/kWh"))
+        self.assertIsNone(re.search(r"\d,\d", json.dumps(STATES_EN, ensure_ascii=False)))
+
+    def test_no_private_label_survives(self):
+        for _, s in strings(CONFIG_EN):
+            for label in dd.LABELS:
+                self.assertNotIn(label, s)
+
+    def test_the_real_config_is_unchanged_by_the_english_demo(self):
+        before = json.dumps(dc.build({}, [], MODEL), ensure_ascii=False)
+        dd.demo_config_en(MODEL)
+        dd.demo_model_en(MODEL)
+        self.assertEqual(json.dumps(dc.build({}, [], MODEL), ensure_ascii=False), before)
 
 
 if __name__ == "__main__":

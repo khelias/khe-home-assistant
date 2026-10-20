@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 35;
+const HOUSE3D_VERSION = 36;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -31,7 +31,101 @@ function loadEngine() {
   return engine;
 }
 
-const nf1 = new Intl.NumberFormat('et-EE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+// The card's strings: Estonian, or English with `language: en` in the card config, which only the
+// public demo sets (ADR-003), so the house's own card stays Estonian whatever HA's profile says.
+export const TEXT = {
+  et: {
+    locale: 'et-EE',
+    layers: { markers: 'Seadmed', fans: 'Kaamerate vaated', trees: 'Puud', car: 'Auto', surroundings: 'Ümbrus', future: 'Tulevik' },
+    view: 'Vaade',
+    roof: 'Katusega',
+    open: 'Katuseta',
+    resetView: 'Lähtesta vaade',
+    layersTitle: 'Kihid',
+    loadFailed: '3D-vaate laadimine ebaõnnestus.',
+    retry: 'Proovi uuesti',
+    noWebGL: 'See seade ei toeta WebGL-i, mistõttu 3D-vaadet ei saa näidata.',
+    time: 'Kellaaeg',
+    date: 'Kuupäev',
+    now: 'Praegu',
+    credit: 'Ümbrus: Maa- ja Ruumiamet, ETAK',
+    missing: 'puudub',
+    onPlan: (no, area) => `Plaanil ${no} · ${area} m²`,
+    close: 'Sulge',
+    noDevices: 'Selles ruumis seadmeid pole.',
+    style: 'Stiil',
+    simple: 'Lihtne',
+    real: 'Päris',
+    noLayers: 'Lülitatavaid kihte pole.',
+    plan: 'Plaan',
+    planAsOf: date => `Plaan · hinnang ${date}`,
+    at: (day, hhmm) => `${day} kell ${hhmm}`,
+    pvUpTo: (when, kw) => `${when} selge taevaga kuni ${kw} kW`,
+    pvSunset: when => `${when} on päike loojunud`,
+    noFacts: 'Numbreid pole veel lisatud.',
+    temperature: v => `temperatuur ${v}`,
+    motion: 'liikumine',
+    motions: n => `liikumine, ${n} andurit`,
+    light: 'valgus põleb',
+    lights: n => `${n} valgustit põleb`,
+    door: 'uks on lahti',
+    doors: n => `${n} ust on lahti`,
+    smoke: 'suitsuandur annab häiret',
+    smokes: n => `${n} suitsuandurit annab häiret`,
+    alarm: 'häire',
+    armed: 'valve on peal'
+  },
+  en: {
+    locale: 'en-GB',
+    layers: { markers: 'Devices', fans: 'Camera views', trees: 'Trees', car: 'Car', surroundings: 'Surroundings', future: 'Future' },
+    view: 'View',
+    roof: 'Roof on',
+    open: 'Roof off',
+    resetView: 'Reset view',
+    layersTitle: 'Layers',
+    loadFailed: 'Loading the 3D view failed.',
+    retry: 'Try again',
+    noWebGL: 'This device does not support WebGL, so the 3D view cannot be shown.',
+    time: 'Time',
+    date: 'Date',
+    now: 'Now',
+    credit: 'Surroundings: Estonian Land and Spatial Development Board, ETAK',
+    missing: 'missing',
+    onPlan: (no, area) => `Room ${no} on the plan · ${area} m²`,
+    close: 'Close',
+    noDevices: 'No devices in this room.',
+    style: 'Style',
+    simple: 'Simple',
+    real: 'Real',
+    noLayers: 'No layers to switch.',
+    plan: 'Plan',
+    planAsOf: date => `Plan · estimate of ${date}`,
+    at: (day, hhmm) => `${day} at ${hhmm}`,
+    pvUpTo: (when, kw) => `${when} up to ${kw} kW under a clear sky`,
+    pvSunset: when => `${when} the sun has set`,
+    noFacts: 'No figures added yet.',
+    temperature: v => `temperature ${v}`,
+    motion: 'motion',
+    motions: n => `motion, ${n} sensors`,
+    light: 'light on',
+    lights: n => `${n} lights on`,
+    door: 'door open',
+    doors: n => `${n} doors open`,
+    smoke: 'smoke alarm going off',
+    smokes: n => `${n} smoke alarms going off`,
+    alarm: 'alarm',
+    armed: 'armed'
+  }
+};
+const FORMATS = Object.fromEntries(Object.entries(TEXT).map(([lang, { locale }]) => [lang, {
+  nf1: new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+  dayFmt: new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long' }),
+  dateFmt: new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric' })
+}]));
+const langOf = lang => (lang === 'en' ? 'en' : 'et');
+const textFor = lang => TEXT[langOf(lang)];
+const formatsFor = lang => FORMATS[langOf(lang)];
+
 const esc = s => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
 const num = v => (v === null || v === undefined || v === '' || isNaN(Number(v)) ? null : Number(v));
 
@@ -53,9 +147,8 @@ function writeSeen(entity, key) {
 }
 
 // The Kihid sheet's switches, in this order; the choice is kept per browser like the arrival key.
-const LAYER_LABELS = { markers: 'Seadmed', fans: 'Kaamerate vaated', trees: 'Puud', car: 'Auto', surroundings: 'Ümbrus', future: 'Tulevik' };
+const LAYER_ORDER = ['markers', 'fans', 'trees', 'car', 'surroundings', 'future'];
 // switched off until the user turns it on: what the house does not have yet
-const LAYER_ORDER = Object.keys(LAYER_LABELS);
 const LAYERS_KEY = 'house3d-layers';
 const LAYERS_OFF = { future: false };
 function readLayers() {
@@ -85,27 +178,26 @@ function writeStyle(v) {
 }
 
 // The real style's sliders: the time of day in quarter hours (96 is 24:00) and the day of this year.
-const dayFmt = new Intl.DateTimeFormat('et-EE', { day: 'numeric', month: 'long' });
 const pad = n => String(n).padStart(2, '0');
 const yearStart = () => new Date(new Date().getFullYear(), 0, 1);
 const dayOfYear = d => Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - yearStart()) / 86400000);
 const hourText = q => `${pad(Math.floor(q / 4))}:${pad((q % 4) * 15)}`;
 const dayDate = n => new Date(yearStart().getFullYear(), 0, 1 + n);
-const dateFmt = new Intl.DateTimeFormat('et-EE', { day: 'numeric', month: 'long', year: 'numeric' });
 
-// featureText(item, asOf, pv) -> the future item's sheet: { title, sub, facts, empty, pv }. asOf is
-// the future block's 'YYYY-MM-DD'; pv is null (the line is left out) or { kw, alt, time, live },
-// the clear-sky estimate at the sun's time, live when that is now rather than a slider's.
-export function featureText(item, asOf, pv) {
+// featureText(item, asOf, pv, lang) -> the future item's sheet: { title, sub, facts, empty, pv }.
+// asOf is the future block's 'YYYY-MM-DD'; pv is null (the line is left out) or { kw, alt, time,
+// live }, the clear-sky estimate at the sun's time, live when that is now rather than a slider's.
+export function featureText(item, asOf, pv, lang = 'et') {
+  const t = textFor(lang), { nf1, dayFmt, dateFmt } = formatsFor(lang);
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(asOf || '');
-  const sub = m ? `Plaan · hinnang ${dateFmt.format(new Date(+m[1], +m[2] - 1, +m[3]))}` : 'Plaan';
+  const sub = m ? t.planAsOf(dateFmt.format(new Date(+m[1], +m[2] - 1, +m[3]))) : t.plan;
   const facts = Array.isArray(item.facts) ? item.facts : [];
   let line = null;
   if (pv) {
-    const when = pv.live ? 'Praegu' : `${dayFmt.format(pv.time)} kell ${pad(pv.time.getHours())}:${pad(pv.time.getMinutes())}`;
-    line = pv.alt > 0 ? `${when} selge taevaga kuni ${nf1.format(pv.kw)} kW` : `${when} on päike loojunud`;
+    const when = pv.live ? t.now : t.at(dayFmt.format(pv.time), `${pad(pv.time.getHours())}:${pad(pv.time.getMinutes())}`);
+    line = pv.alt > 0 ? t.pvUpTo(when, nf1.format(pv.kw)) : t.pvSunset(when);
   }
-  return { title: item.name, sub, facts, empty: facts.length ? null : 'Numbreid pole veel lisatud.', pv: line };
+  return { title: item.name, sub, facts, empty: facts.length ? null : t.noFacts, pv: line };
 }
 
 // true when the car is home ('home' from a tracker, 'on' from the arrival helper), null when the
@@ -137,8 +229,9 @@ export function motionGlow(st, now) {
 }
 
 // One device and its entity state -> a generic engine marker; a motion marker carries glow while
-// motionGlow() at now gives one.
-export function toMarker(d, st, now = new Date()) {
+// motionGlow() at now gives one. lang picks the decimal mark of a temperature.
+export function toMarker(d, st, now = new Date(), lang = 'et') {
+  const { nf1 } = formatsFor(lang);
   const m = { id: d.entity, pos: d.pos, icon: d.type, room: d.room, label: d.name, state: 'idle' };
   if (d.look) m.look = d.look;
   if (d.role) m.role = d.role;
@@ -183,7 +276,8 @@ export function toMarker(d, st, now = new Date()) {
 // none of these shows its name alone. The chip is 'alert' with a door open, smoke or the alarm
 // triggered, 'on' with motion or a light. ids are the markers counted in a part, which the engine
 // then draws in the chip instead of beside it (inChip()).
-export function roomChips(markers, rooms) {
+export function roomChips(markers, rooms, lang = 'et') {
+  const t = textFor(lang);
   const domain = m => m.id.split('.')[0];
   const RANK = { alert: 0, on: 1 };
   return rooms.filter(r => r.floor !== 'paving').map(r => {
@@ -194,15 +288,15 @@ export function roomChips(markers, rooms) {
       parts.push({ ...one, text: list.length > 1 ? String(list.length) : undefined, label: list.length > 1 ? many(list.length) : one.label });
     };
     const temp = ms.find(m => domain(m) === 'sensor' && m.value) || ms.find(m => domain(m) === 'climate' && m.value);
-    if (temp) parts.push({ icon: 'climate', text: temp.value, label: `temperatuur ${temp.value}` });
-    count(ms.filter(m => m.icon === 'motion' && m.state === 'on'), { icon: 'motion', state: 'on', label: 'liikumine' }, n => `liikumine, ${n} andurit`);
-    count(ms.filter(m => domain(m) === 'light' && m.state === 'on'), { icon: 'light', state: 'on', label: 'valgus põleb' }, n => `${n} valgustit põleb`);
-    count(ms.filter(m => m.icon === 'door' && m.state === 'alert'), { icon: 'door', state: 'alert', label: 'uks on lahti' }, n => `${n} ust on lahti`);
-    count(ms.filter(m => m.icon === 'smoke' && m.state === 'alert'), { icon: 'smoke', state: 'alert', label: 'suitsuandur annab häiret' }, n => `${n} suitsuandurit annab häiret`);
+    if (temp) parts.push({ icon: 'climate', text: temp.value, label: t.temperature(temp.value) });
+    count(ms.filter(m => m.icon === 'motion' && m.state === 'on'), { icon: 'motion', state: 'on', label: t.motion }, t.motions);
+    count(ms.filter(m => domain(m) === 'light' && m.state === 'on'), { icon: 'light', state: 'on', label: t.light }, t.lights);
+    count(ms.filter(m => m.icon === 'door' && m.state === 'alert'), { icon: 'door', state: 'alert', label: t.door }, t.doors);
+    count(ms.filter(m => m.icon === 'smoke' && m.state === 'alert'), { icon: 'smoke', state: 'alert', label: t.smoke }, t.smokes);
     const alarm = ms.filter(m => domain(m) === 'alarm_control_panel' && (m.state === 'on' || m.state === 'alert'));
     if (alarm.length) {
       ids.push(...alarm.map(m => m.id));
-      parts.push(alarm.some(m => m.state === 'alert') ? { icon: 'alarm', state: 'alert', label: 'häire' } : { icon: 'alarm', label: 'valve on peal' });
+      parts.push(alarm.some(m => m.state === 'alert') ? { icon: 'alarm', state: 'alert', label: t.alarm } : { icon: 'alarm', label: t.armed });
     }
     parts.sort((p, q) => (RANK[p.state] ?? 2) - (RANK[q.state] ?? 2));
     const state = parts.some(q => q.state === 'alert') ? 'alert' : parts.some(q => q.state === 'on') ? 'on' : 'idle';
@@ -283,11 +377,13 @@ class House3dCard extends Base {
 
   setConfig(config) {
     if (!config || !config.model || !Array.isArray(config.model.walls)) throw new Error('house3d-card: config.model with walls is required');
-    const changed = this._config && this._config.model !== config.model;
+    const changed = this._config && (this._config.model !== config.model || this._config.language !== config.language);
     this._config = config;
+    this._lang = langOf(config.language);
+    this._t = TEXT[this._lang];
     this._devices = config.model.devices || [];
     this._car = config.model.car && config.model.car.profile && config.model.car.path ? config.model.car : null;
-    // another model starts from its own home view
+    // another model starts from its own home view; another language redraws the card's text
     if (changed) { this._unmount(); this._states.clear(); this._keep = null; }
     this._render();
   }
@@ -355,13 +451,13 @@ class House3dCard extends Base {
 
   _render() {
     if (!this._config || !this.isConnected || this._view || this._mounting) return;
-    const sr = this.shadowRoot;
+    const sr = this.shadowRoot, t = this._t;
     sr.innerHTML = `<style>${STYLE}</style><ha-card class="wrap"><div class="view"></div>
-      <div class="bar"><div class="seg" role="group" aria-label="Vaade">
-        <button type="button" data-mode="roof" aria-pressed="true">Katusega</button>
-        <button type="button" data-mode="open" aria-pressed="false">Katuseta</button></div>
-        <button type="button" class="icon-btn" data-act="reset" aria-label="Lähtesta vaade" title="Lähtesta vaade"></button>
-        <button type="button" class="icon-btn" data-act="layers" aria-label="Kihid" title="Kihid" aria-expanded="false"></button></div>
+      <div class="bar"><div class="seg" role="group" aria-label="${t.view}">
+        <button type="button" data-mode="roof" aria-pressed="true">${t.roof}</button>
+        <button type="button" data-mode="open" aria-pressed="false">${t.open}</button></div>
+        <button type="button" class="icon-btn" data-act="reset" aria-label="${t.resetView}" title="${t.resetView}"></button>
+        <button type="button" class="icon-btn" data-act="layers" aria-label="${t.layersTitle}" title="${t.layersTitle}" aria-expanded="false"></button></div>
       <aside class="sheet" hidden aria-live="polite"></aside>${this._credit()}</ha-card>`;
     this._sheet = null;
     const wrap = sr.querySelector('.wrap');
@@ -398,7 +494,8 @@ class House3dCard extends Base {
         car: this._car ? { profile: this._car.profile, path: this._car.path } : undefined,
         surroundings: this._config.model.surroundings,
         // a tap on the car replays the drive-in; the stored arrival stays as it is
-        onCar: () => { if (this._carHome) this._view.setCar('arrive'); }
+        onCar: () => { if (this._carHome) this._view.setCar('arrive'); },
+        noWebGL: t.noWebGL
       });
       sr.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => this._view.setMode(b.dataset.mode)));
       sr.querySelector('[data-act="reset"]').addEventListener('click', () => this._view.reset());
@@ -430,8 +527,8 @@ class House3dCard extends Base {
       // a newer render or a disconnect owns the card now; a mount that threw has cleared the token
       if ((this._mounting && this._mounting !== token) || !this.isConnected) return;
       this._mounting = null;
-      sr.querySelector('.view').innerHTML = `<div class="msg"><span>3D-vaate laadimine ebaõnnestus.</span>
-        <button type="button" class="now" data-act="retry">Proovi uuesti</button><small>${esc(err && err.message || err)}</small></div>`;
+      sr.querySelector('.view').innerHTML = `<div class="msg"><span>${t.loadFailed}</span>
+        <button type="button" class="now" data-act="retry">${t.retry}</button><small>${esc(err && err.message || err)}</small></div>`;
       sr.querySelector('[data-act="retry"]').addEventListener('click', () => this._render());
     });
   }
@@ -478,17 +575,17 @@ class House3dCard extends Base {
       day.value = String(dayOfYear(now));
     }
     sr.querySelector('[data-out="hour"]').textContent = this._time ? hourText(Number(hour.value)) : `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    sr.querySelector('[data-out="day"]').textContent = dayFmt.format(dayDate(Number(day.value)));
+    sr.querySelector('[data-out="day"]').textContent = formatsFor(this._lang).dayFmt.format(dayDate(Number(day.value)));
     sr.querySelector('[data-act="now"]').setAttribute('aria-pressed', String(!this._time));
   }
 
   _timeRows() {
-    const days = Math.round((new Date(yearStart().getFullYear() + 1, 0, 1) - yearStart()) / 86400000);
-    return `<div class="slider"><div class="row"><label for="h3d-hour">Kellaaeg</label><output data-out="hour"></output></div>
+    const days = Math.round((new Date(yearStart().getFullYear() + 1, 0, 1) - yearStart()) / 86400000), t = this._t;
+    return `<div class="slider"><div class="row"><label for="h3d-hour">${t.time}</label><output data-out="hour"></output></div>
         <input id="h3d-hour" type="range" min="0" max="96" step="1" data-time="hour"></div>
-      <div class="slider"><div class="row"><label for="h3d-day">Kuupäev</label><output data-out="day"></output></div>
+      <div class="slider"><div class="row"><label for="h3d-day">${t.date}</label><output data-out="day"></output></div>
         <input id="h3d-day" type="range" min="0" max="${days - 1}" step="1" data-time="day"></div>
-      <button type="button" class="now" data-act="now" aria-pressed="true">Praegu</button>`;
+      <button type="button" class="now" data-act="now" aria-pressed="true">${t.now}</button>`;
   }
 
   // the licence asks for the licensor, the dataset and its date; the bottom corners hold the
@@ -498,7 +595,7 @@ class House3dCard extends Base {
     const sur = this._config.model.surroundings;
     if (!sur || !String(sur.source || '').startsWith('ETAK,')) return '';
     const d = /(\d{4})-(\d{2})-(\d{2})/.exec(sur.source || '');
-    return `<div class="credit">Ümbrus: Maa- ja Ruumiamet, ETAK${d ? `, ${d[3]}.${d[2]}.${d[1]}` : ''}</div>`;
+    return `<div class="credit">${this._t.credit}${d ? `, ${d[3]}.${d[2]}.${d[1]}` : ''}</div>`;
   }
 
   _push() {
@@ -507,12 +604,12 @@ class House3dCard extends Base {
     // the state goes into the marker's accessible name; toMarker has no hass to format it
     const markers = this._devices.map(d => {
       const st = this._states.get(d.entity);
-      return { ...toMarker(d, st, now), stateText: this._stateText(st) };
+      return { ...toMarker(d, st, now, this._lang), stateText: this._stateText(st) };
     });
     this._view.setMarkers(markers);
     // a motion glow goes out with no state change, so the markers are pushed again once a minute
     this._glowTick(markers.some(m => m.glow));
-    this._view.setRoomChips(roomChips(markers, this._config.model.rooms || []));
+    this._view.setRoomChips(roomChips(markers, this._config.model.rooms || [], this._lang));
     this._pushCar();
     if (this._sheet === 'room') this._refreshRoom();
     else if (this._sheet === 'layers') { this._renderLayers(); this._syncTime(); }
@@ -558,7 +655,7 @@ class House3dCard extends Base {
   }
 
   _stateText(st) {
-    if (!st) return 'puudub';
+    if (!st) return this._t.missing;
     if (this._hass && typeof this._hass.formatEntityState === 'function') return this._hass.formatEntityState(st);
     return st.state;
   }
@@ -593,9 +690,10 @@ class House3dCard extends Base {
       const st = this._states.get(d.entity), m = toMarker(d, st);
       return `<button type="button" data-entity="${esc(d.entity)}" class="${m.state}">${mod.icon(d.type)}<span>${esc(d.name)}</span><span class="st">${esc(this._stateText(st))}</span></button>`;
     }).join('');
-    sheet.innerHTML = `<div class="head"><div><h2>${esc(room.name)}</h2><p>Plaanil ${esc(room.no)} · ${nf1.format(mod.roomArea(room))} m²</p></div>
-      <button type="button" class="close" data-act="close" aria-label="Sulge">${mod.icon('close')}</button></div>
-      ${rows ? `<div class="list">${rows}</div>` : '<div class="empty">Selles ruumis seadmeid pole.</div>'}`;
+    const t = this._t;
+    sheet.innerHTML = `<div class="head"><div><h2>${esc(room.name)}</h2><p>${esc(t.onPlan(room.no, formatsFor(this._lang).nf1.format(mod.roomArea(room))))}</p></div>
+      <button type="button" class="close" data-act="close" aria-label="${t.close}">${mod.icon('close')}</button></div>
+      ${rows ? `<div class="list">${rows}</div>` : `<div class="empty">${t.noDevices}</div>`}`;
     sheet.hidden = false;
     this._sheet = 'room';
   }
@@ -608,9 +706,9 @@ class House3dCard extends Base {
     this._room = null;
     if (this._view) this._view.focusRoom(null);
     this._feature = item;
-    const t = featureText(item, fut.as_of, null);
+    const t = featureText(item, fut.as_of, null, this._lang);
     sheet.innerHTML = `<div class="head"><div><h2>${esc(t.title)}</h2><p>${esc(t.sub)}</p></div>
-      <button type="button" class="close" data-act="close" aria-label="Sulge">${this._mod.icon('close')}</button></div>
+      <button type="button" class="close" data-act="close" aria-label="${this._t.close}">${this._mod.icon('close')}</button></div>
       <p class="pv" hidden></p>
       ${t.facts.length ? `<ul class="facts">${t.facts.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : `<div class="empty">${esc(t.empty)}</div>`}`;
     this._sheet = 'feature';
@@ -626,7 +724,7 @@ class House3dCard extends Base {
     const roofs = this._config.model.roofs || {};
     if (item.kind !== 'pv' || !sun || !roofs[item.roof] || !(item.kwp > 0)) { el.hidden = true; return; }
     const kw = mod.pvNow(item.kwp, mod.roofNormal(this._config.model, item.roof), sun);
-    el.textContent = featureText(item, null, { kw, alt: sun.alt, time: sun.time, live: !this._time }).pv;
+    el.textContent = featureText(item, null, { kw, alt: sun.alt, time: sun.time, live: !this._time }, this._lang).pv;
     el.hidden = false;
   }
 
@@ -634,12 +732,13 @@ class House3dCard extends Base {
     const sheet = this.shadowRoot.querySelector('.sheet');
     this._room = null;
     if (this._view) this._view.focusRoom(null);
-    sheet.innerHTML = `<div class="head"><div><h2>Kihid</h2></div>
-      <button type="button" class="close" data-act="close" aria-label="Sulge">${this._mod.icon('close')}</button></div>
-      <div class="row"><span>Stiil</span><div class="seg" role="group" aria-label="Stiil">
-        <button type="button" data-style="simple" aria-pressed="${this._style === 'simple'}">Lihtne</button>
-        <button type="button" data-style="real" aria-pressed="${this._style === 'real'}">Päris</button></div></div>
-      ${this._style === 'real' ? this._timeRows() : this._time ? '<button type="button" class="now" data-act="now" aria-pressed="false">Praegu</button>' : ''}
+    const t = this._t;
+    sheet.innerHTML = `<div class="head"><div><h2>${t.layersTitle}</h2></div>
+      <button type="button" class="close" data-act="close" aria-label="${t.close}">${this._mod.icon('close')}</button></div>
+      <div class="row"><span>${t.style}</span><div class="seg" role="group" aria-label="${t.style}">
+        <button type="button" data-style="simple" aria-pressed="${this._style === 'simple'}">${t.simple}</button>
+        <button type="button" data-style="real" aria-pressed="${this._style === 'real'}">${t.real}</button></div></div>
+      ${this._style === 'real' ? this._timeRows() : this._time ? `<button type="button" class="now" data-act="now" aria-pressed="false">${t.now}</button>` : ''}
       <div class="list switches"></div>`;
     this._sheet = 'layers';
     this._syncTime();
@@ -658,8 +757,8 @@ class House3dCard extends Base {
     if (list.dataset.ids !== ids || !layers.length) {
       list.dataset.ids = ids;
       list.innerHTML = layers.length ? layers.map(l => `<button type="button" role="switch" data-layer="${esc(l.id)}" aria-checked="${l.on}">
-        <span>${esc(LAYER_LABELS[l.id] || l.id)}</span><span class="sw" aria-hidden="true"></span></button>`).join('')
-        : '<div class="empty">Lülitatavaid kihte pole.</div>';
+        <span>${esc(this._t.layers[l.id] || l.id)}</span><span class="sw" aria-hidden="true"></span></button>`).join('')
+        : `<div class="empty">${this._t.noLayers}</div>`;
       return;
     }
     list.querySelectorAll('[data-layer]').forEach((row, i) => row.setAttribute('aria-checked', String(layers[i].on)));

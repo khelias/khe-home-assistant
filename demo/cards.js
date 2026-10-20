@@ -8,42 +8,32 @@
 import { svg, iconFor, entityIcon } from './icons.js?v=__DEMO_VERSION__';
 import { CHARTS } from './charts.js?v=__DEMO_VERSION__';
 import { canToggle } from './sim.js?v=__DEMO_VERSION__';
+import { t, locale } from './strings.js?v=__DEMO_VERSION__';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
 const domainOf = entity => entity.split('.')[0];
-const nf = d => new Intl.NumberFormat('et-EE', { minimumFractionDigits: d, maximumFractionDigits: d });
+const nf = d => new Intl.NumberFormat(locale, { minimumFractionDigits: d, maximumFractionDigits: d });
 const nf1 = nf(1);
-const rtf = new Intl.RelativeTimeFormat('et-EE', { numeric: 'auto' });
-const dtf = new Intl.DateTimeFormat('et-EE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+const dtf = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 export const CARD_TYPES = ['tile', 'heading', 'horizontal-stack', 'vertical-stack', 'entities', 'markdown', 'button', 'statistics-graph', 'history-graph', 'custom:apexcharts-card', 'weather-forecast', 'picture-glance', 'custom:advanced-camera-card', 'custom:house3d-card', 'custom:khe-summary-card', 'custom:khe-price-card', 'custom:khe-tile-card'];
 export const FEATURE_TYPES = ['cover-open-close', 'light-brightness', 'select-options', 'numeric-input', 'target-temperature', 'bar-gauge', 'alarm-modes'];
 export const ACTIONS = ['more-info', 'toggle', 'navigate', 'perform-action', 'url', 'none'];
 
-/* ---------- state text, as HA's formatEntityState in Estonian ---------- */
+/* ---------- state text, as HA's formatEntityState in the page's language ---------- */
 
-const TEXT = {
-  on: 'Sees', off: 'Väljas', idle: 'Ootel', home: 'Kodus', not_home: 'Eemal', open: 'Avatud', closed: 'Suletud',
-  opening: 'Avaneb', closing: 'Sulgub', heat: 'Küte', eco: 'Säästlik', performance: 'Jõudlus',
-  disarmed: 'Valvest maas', armed_home: 'Valves (kodus)', armed_away: 'Valves (eemal)', armed_night: 'Valves (öö)',
-  triggered: 'Häire!', playing: 'Mängib', paused: 'Pausil', standby: 'Ootel', unknown: 'Teadmata', unavailable: 'Pole saadaval',
-  cloudy: 'Pilves', partlycloudy: 'Vahelduv pilvisus', rainy: 'Vihmane', sunny: 'Päikseline'
-};
-const BINARY = {
-  door: ['Suletud', 'Avatud'], motion: ['Vaikne', 'Liikumine'], smoke: ['Korras', 'Suits!'], problem: ['OK', 'Probleem'],
-  connectivity: ['Ühenduseta', 'Ühendatud'], tamper: ['Korras', 'Rikkumine'], sound: ['Vaikne', 'Heli']
-};
 
 function ago(iso, now = Date.now()) {
   const s = Math.round((Date.parse(iso) - now) / 1000);
-  if (s > -45) return 'just praegu';
+  if (s > -45) return t.justNow;
   if (s > -3600) return rtf.format(Math.round(s / 60), 'minute');
   if (s > -86400) return rtf.format(Math.round(s / 3600), 'hour');
   return rtf.format(Math.round(s / 86400), 'day');
 }
 export { ago };
 
-// a number as its state string carries it, with the Estonian decimal comma
+// a number as its state string carries it, with the locale's decimal mark
 function number(v) {
   const s = String(v), n = Number(s);
   if (s === '' || !Number.isFinite(n)) return null;
@@ -51,17 +41,17 @@ function number(v) {
 }
 
 export function formatState(st) {
-  if (!st) return 'Puudub';
+  if (!st) return t.missing;
   const a = st.attributes || {}, s = st.state, d = domainOf(st.entity_id);
-  if (d === 'binary_sensor' && BINARY[a.device_class]) return BINARY[a.device_class][s === 'on' ? 1 : 0];
-  if (d === 'update') return s === 'on' ? 'Uuendus saadaval' : s === 'off' ? 'Ajakohane' : TEXT[s] || s;
-  if (d === 'button' || (d === 'sensor' && a.device_class === 'timestamp')) return s === 'unknown' ? 'Pole vajutatud' : ago(s);
+  if (d === 'binary_sensor' && t.binary[a.device_class]) return t.binary[a.device_class][s === 'on' ? 1 : 0];
+  if (d === 'update') return s === 'on' ? t.updateAvailable : s === 'off' ? t.upToDate : t.state[s] || s;
+  if (d === 'button' || (d === 'sensor' && a.device_class === 'timestamp')) return s === 'unknown' ? t.neverPressed : ago(s);
   if (d === 'input_datetime') return a.has_date ? dtf.format(new Date(s.replace(' ', 'T'))) : s.slice(0, 5);
-  if (d === 'water_heater') return `${TEXT[s] || s}, ${nf(0).format(a.temperature)} °C`;
-  if (d === 'light' && s === 'on' && a.brightness) return `Sees, ${nf(0).format(a.brightness / 2.55)} %`;
+  if (d === 'water_heater') return `${t.state[s] || s}, ${nf(0).format(a.temperature)} °C`;
+  if (d === 'light' && s === 'on' && a.brightness) return t.lightOn(nf(0).format(a.brightness / 2.55));
   const n = number(s);
   if (n !== null) return a.unit_of_measurement ? `${n} ${a.unit_of_measurement}` : n;
-  return TEXT[s] ?? s;
+  return t.state[s] ?? s;
 }
 
 // one state_content item: the state, the name, a time, or an attribute as HA shows it
@@ -153,7 +143,7 @@ export function actionFor(conf, which = 'tap') {
 // api: { confirm(text) -> Promise<bool>, moreInfo(entity), toggle(entity), callService(d, s, data, target), navigate(path), openUrl(url) }
 export async function runAction(action, entity, api) {
   if (!action || action.action === 'none') return false;
-  if (action.confirmation && !(await api.confirm(action.confirmation.text || 'Kas oled kindel?'))) return false;
+  if (action.confirmation && !(await api.confirm(action.confirmation.text || t.sure))) return false;
   switch (action.action) {
     case 'more-info': api.moreInfo(action.entity || entity); break;
     case 'toggle': api.toggle(action.entity || entity); break;
@@ -285,7 +275,7 @@ function feature(f, e, ctx) {
   let update = () => {};
   switch (f.type) {
     case 'cover-open-close':
-      el.innerHTML = [['open_cover', 'arrow-up', 'Ava'], ['stop_cover', 'stop', 'Peata'], ['close_cover', 'arrow-down', 'Sulge']]
+      el.innerHTML = [['open_cover', 'arrow-up', t.open], ['stop_cover', 'stop', t.stop], ['close_cover', 'arrow-down', t.close]]
         .map(([s, i, l]) => `<button type="button" data-s="${s}" aria-label="${l}">${svg(i)}</button>`).join('');
       el.addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) call('cover', b.dataset.s); });
       update = st => {
@@ -294,7 +284,7 @@ function feature(f, e, ctx) {
       };
       break;
     case 'light-brightness':
-      el.innerHTML = '<input type="range" min="1" max="100" aria-label="Heledus"><span class="fill"></span>';
+      el.innerHTML = `<input type="range" min="1" max="100" aria-label="${t.brightness}"><span class="fill"></span>`;
       el.querySelector('input').addEventListener('change', ev => call('light', 'turn_on', { brightness_pct: Number(ev.target.value) }));
       update = st => {
         const v = st && st.state === 'on' ? Math.round((st.attributes.brightness || 255) / 2.55) : 0;
@@ -311,7 +301,7 @@ function feature(f, e, ctx) {
       break;
     case 'numeric-input': case 'target-temperature': {
       const temp = f.type === 'target-temperature';
-      el.innerHTML = `<button type="button" data-d="-1" aria-label="Vähem">${svg('minus')}</button><span class="value"></span><button type="button" data-d="1" aria-label="Rohkem">${svg('plus')}</button>`;
+      el.innerHTML = `<button type="button" data-d="-1" aria-label="${t.less}">${svg('minus')}</button><span class="value"></span><button type="button" data-d="1" aria-label="${t.more}">${svg('plus')}</button>`;
       let cur = null;
       el.addEventListener('click', ev => {
         const b = ev.target.closest('button');
@@ -339,9 +329,9 @@ function feature(f, e, ctx) {
       };
       break;
     case 'alarm-modes': {
-      const MODE = { armed_away: ['shield-lock', 'alarm_arm_away', 'Valves (eemal)'], armed_home: ['shield-home', 'alarm_arm_home', 'Valves (kodus)'], armed_night: ['shield-moon', 'alarm_arm_night', 'Valves (öö)'], disarmed: ['shield-off', 'alarm_disarm', 'Valvest maas'] };
+      const MODE = { armed_away: ['shield-lock', 'alarm_arm_away'], armed_home: ['shield-home', 'alarm_arm_home'], armed_night: ['shield-moon', 'alarm_arm_night'], disarmed: ['shield-off', 'alarm_disarm'] };
       const modes = (f.modes || Object.keys(MODE)).filter(m => MODE[m]);
-      el.innerHTML = modes.map(m => `<button type="button" data-m="${m}" aria-label="${MODE[m][2]}" title="${MODE[m][2]}">${svg(MODE[m][0])}</button>`).join('');
+      el.innerHTML = modes.map(m => `<button type="button" data-m="${m}" aria-label="${t.state[m]}" title="${t.state[m]}">${svg(MODE[m][0])}</button>`).join('');
       el.addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) call('alarm_control_panel', MODE[b.dataset.m][1]); });
       update = st => modes.forEach(m => el.querySelector(`[data-m="${m}"]`).setAttribute('aria-pressed', String(!!st && st.state === m)));
       break;
@@ -492,8 +482,8 @@ function cameraCard(conf) {
   let i = 0;
   const el = document.createElement('div');
   el.className = 'camera-card';
-  el.innerHTML = `<div class="cam-stage" role="img" aria-label="Kaamerapildi asemik">${svg('cctv')}<p>Päris majas on siin kaamera otsepilt, mida saab suumida.</p></div>
-    <div class="cam-bar"><button type="button" data-d="-1" aria-label="Eelmine kaamera">${svg('arrow-left')}</button><span class="cam-name"></span><button type="button" data-d="1" aria-label="Järgmine kaamera">${svg('chevron-right')}</button></div>`;
+  el.innerHTML = `<div class="cam-stage" role="img" aria-label="${t.camPlaceholder}">${svg('cctv')}<p>${t.camLive}</p></div>
+    <div class="cam-bar"><button type="button" data-d="-1" aria-label="${t.prevCam}">${svg('arrow-left')}</button><span class="cam-name"></span><button type="button" data-d="1" aria-label="${t.nextCam}">${svg('chevron-right')}</button></div>`;
   const show = () => { el.querySelector('.cam-name').textContent = (cams[i] || {}).title || ''; };
   el.querySelector('.cam-bar').addEventListener('click', ev => {
     const b = ev.target.closest('button');
@@ -508,7 +498,7 @@ function cameraCard(conf) {
 function unknownCard(conf) {
   const el = document.createElement('div');
   el.className = 'card unknown';
-  el.textContent = `Tundmatu kaart: ${conf.type}`;
+  el.textContent = t.unknownCard(conf.type);
   return { el, update() {} };
 }
 

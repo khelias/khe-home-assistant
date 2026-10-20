@@ -6,6 +6,9 @@ labels that name the house's own devices (LABELS), every templated markdown card
 (TEXTS), and every apexcharts data_generator away; the charts take series() instead. An id the
 catalogue does not know fails the build, so a new entity in the generator needs an entry here.
 house3d-build.py --demo writes the result, demo_states() and demo_series() next to the demo.
+demo_config_en() and its siblings are the same demo in English (ADR-003): they walk the Estonian
+output and look every visible string and state word up in dashboard_demo_en, and one it lacks
+fails the build as an uncatalogued id does.
 
 Stdlib only and no I/O: khe-sites runs the demo build in CI without a venv or khe-meta. The real
 ids that name the house's own devices are spelled once, in dashboard_config, and taken from
@@ -17,6 +20,7 @@ import math
 import re
 
 import dashboard_config as dc
+import dashboard_demo_en as en
 
 ID = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
 STAT = re.compile(r"^[a-z_]+:[a-z0-9_]+$")
@@ -930,3 +934,93 @@ def demo_series():
         ],
     }
     return s
+
+
+# ---------- the demo in English (ADR-003) ----------
+
+VISIBLE = ("title", "heading", "name", "text", "label")
+RAW = re.compile(r"^[a-z0-9_]*$")
+NUMBER = re.compile(r"^-?\d+(\.\d+)?$")
+WHEN = re.compile(r"^(\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?|\d{2}:\d{2}(:\d{2})?)$")
+
+
+def _en(s):
+    """English for a visible string."""
+    if s in en.SAME:
+        return s
+    if s not in en.EN:
+        raise KeyError(f"no English for {s!r} (add it to dashboard_demo_en.EN or SAME)")
+    return en.EN[s]
+
+
+def _word(s):
+    """English for a state value or select option; a raw HA key, a number or a time passes."""
+    if RAW.match(s) or NUMBER.match(s) or WHEN.match(s) or s in en.SAME:
+        return s
+    if s not in en.WORDS:
+        raise KeyError(f"no English for the state word {s!r} (add it to dashboard_demo_en.WORDS)")
+    return en.WORDS[s]
+
+
+def _walk_en(o, key=None):
+    if isinstance(o, dict):
+        if o.get("type") == "custom:house3d-card":
+            o = {**o, "language": "en"}
+        md = o.get("type") == "markdown"
+        return {k: _walk_en(v, "markdown" if md and k == "content" else k) for k, v in o.items()}
+    if isinstance(o, list):
+        return [_walk_en(v, key) for v in o]
+    if isinstance(o, str):
+        if key == "markdown":
+            return en.TEXTS_EN[o] if o in en.TEXTS_EN else _en(o)
+        if key in VISIBLE:
+            return _en(o)
+        if key in ("state", "state_not"):
+            return _word(o)
+    return o
+
+
+def demo_config_en(model):
+    """demo_config() in English, its 3D card set to English."""
+    return _walk_en(demo_config(model))
+
+
+def demo_states_en(model):
+    """demo_states() in English: names, state words, options, mirrors, and a decimal point in
+    every other text attribute (the cost and price texts)."""
+    data = demo_states(model)
+    for st in data["states"].values():
+        a = st["attributes"]
+        a["friendly_name"] = _en(a["friendly_name"])
+        st["state"] = _word(st["state"])
+        if "options" in a:
+            a["options"] = [_word(o) for o in a["options"]]
+        for k, v in a.items():
+            if k != "friendly_name" and isinstance(v, str):
+                a[k] = re.sub(r"(\d),(\d)", r"\1.\2", v)
+    for m in data["mirrors"].values():
+        m["map"] = {k: _word(v) for k, v in m["map"].items()}
+    return data
+
+
+def demo_series_en():
+    """demo_series() keyed by the English config's series names."""
+    out = {}
+    for k, v in demo_series().items():
+        entity, apex, name = k.partition("|")
+        out[f"{entity}|{_en(name)}" if apex else k] = v
+    return out
+
+
+def demo_model_en(model):
+    """The test house in English: room, device, car and future-item names and facts."""
+    m = copy.deepcopy(model)
+    for item in m.get("rooms", []) + m.get("devices", []):
+        item["name"] = _en(item["name"])
+    if (m.get("car") or {}).get("name"):
+        m["car"]["name"] = _en(m["car"]["name"])
+    for item in (m.get("future") or {}).get("items", []):
+        item["name"] = _en(item["name"])
+        if "facts" in item:
+            item["facts"] = [_en(f) for f in item["facts"]]
+    return m

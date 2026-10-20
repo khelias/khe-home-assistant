@@ -1,0 +1,386 @@
+"""The demo's English (ADR-003): the Estonian strings of the demo output and their English.
+
+dashboard_demo.demo_config_en() and its siblings walk the Estonian demo and look every visible
+string up here; one that is missing fails the English build. EN is visible text (titles,
+headings, names, labels, confirmations, friendly names, the test house's names and facts);
+WORDS are state values, select options and the label sensors' mirrored words, which read
+differently from the same word as a name ("Sees" is "Indoor" on a tile, "On" as a state); SAME
+reads the same in both languages (product names, units); TEXTS_EN is the sample markdown, keyed
+by the Estonian sample text in dashboard_demo.TEXTS. Wording follows Home Assistant's English UI.
+
+The keys are the demo's own strings, already public in dashboard.json; the privacy scan
+(check.sh) passes over this file too.
+"""
+
+SAME = {
+    "3D",
+    "Advanced Camera Card",
+    "ApexCharts Card",
+    "Boost",
+    "Daikin Altherma",
+    "ECO",
+    # a TV service's product name
+    "Elisa Elamus",
+    "Estfeed",
+    "Filter",
+    "Go3",
+    "HACS",
+    "Internet",
+    "Jupiter",
+    "OK",
+    "Override",
+    "Pergola",
+    "Pergola LED",
+    "Stremio",
+    "UniFi AP",
+    "UniFi Gateway",
+    "Wi-Fi",
+    "YouTube",
+    "kWh",
+    "€",
+}
+
+EN = {
+    # the dashboard: views, sections, tiles, badges, charts
+    "Aiakaamera": "Garden camera",
+    "Ainult kui kodus": "Only when home",
+    "Ajakava": "Schedule",
+    "Aktiivsed alarmid": "Active alarms",
+    "Aku": "Battery",
+    "Autom.": "Auto",
+    "Automaatrežiim": "Auto mode",
+    "Ava": "Open",
+    "Boiler": "Water heater",
+    "Boiler kuus, kWh": "Water heater per month, kWh",
+    "Boiler päevas, kWh": "Water heater per day, kWh",
+    "Boileri vee temperatuur 48 h": "Water heater temperature 48 h",
+    "Boileri vesi": "Tank water",
+    "Boileri viga": "Water heater fault",
+    "Börs": "Spot",
+    "Börs järgmine": "Spot next",
+    "Börs praegu": "Spot now",
+    "ECO sees": "ECO on",
+    "Eelmine kuu": "Last month",
+    "Eemal": "Away",
+    "Eile": "Yesterday",
+    "Elekter": "Electricity",
+    "Energia": "Energy",
+    "Enne loojangut": "Before sunset",
+    "Estfeedi andmed hilinevad": "Estfeed data is late",
+    "Garaaž": "Garage",
+    "Harva kasutatavad režiimid": "Rarely used modes",
+    "Heledus": "Brightness",
+    "Hind": "Price",
+    "Hind täna ja homme, €/kWh": "Price today and tomorrow, €/kWh",
+    "Hoiatus": "Warning",
+    "Homne hind olemas": "Tomorrow's price available",
+    "Hooldus": "Maintenance",
+    "Ilm": "Weather",
+    "Intensiivne": "Intensive",
+    "Jaan": "John",
+    "Juhtimine": "Controls",
+    "Järelküte": "Electric heater",
+    "Kaamerad": "Cameras",
+    "Kaamerate seaded": "Camera settings",
+    "Kamin": "Fireplace",
+    "Kasutegur": "Efficiency",
+    "Katus": "Roof",
+    "Katus poolte kaupa": "Roof by side",
+    "Katuse automaatika": "Roof automation",
+    "Keskmine": "Average",
+    "Kestus min": "Duration min",
+    "Kiirsoojendus": "High performance",
+    "Kiirsoojendus sees": "High performance on",
+    "Kodu": "Home",
+    "Koguhind 30 päeva, €/kWh": "Total price 30 days, €/kWh",
+    "Kokku": "Total",
+    "Kokku, 15 min": "Total, 15 min",
+    "Kulu 7 päeva, €": "Cost 7 days, €",
+    "Kulu päevas, € (ilma kuutasudeta)": "Cost per day, € (without monthly fees)",
+    "Kustub": "Turns off",
+    "Kustuta alarmid": "Clear alarms",
+    "Kuu järelküte": "Heater this month",
+    "Kuu kokku": "Month total",
+    "Kõrgeim tund": "Highest hour",
+    "Kõvera nihe": "Curve offset",
+    "Köök": "Kitchen",
+    "Küte": "Heating",
+    "Küte (Daikin)": "Heating (Daikin)",
+    "Kütte režiim": "Heating mode",
+    "Kütteblokeering": "Heater blocking",
+    "Küttevee nihe": "Leaving water offset",
+    "Küttevee temp": "Leaving water temp",
+    "Küttevesi": "Leaving water",
+    "Küttevesi ja välistemperatuur 48 h": "Leaving water and outdoor temperature 48 h",
+    "Lapsed": "Kids",
+    "Liikumine": "Motion",
+    "Liikumistuvastus": "Motion detection",
+    "Lülita välja": "Turn off",
+    "Lüüs": "Gateway",
+    "Maja": "House",
+    "Mari": "Mary",
+    "Max sissepuhe": "Max supply",
+    "Mikroventilatsioon": "Micro-ventilation",
+    "Min sissepuhe": "Min supply",
+    "Muu": "Other",
+    "Mõlemad korraga. Poolenurk: Stopp keset liikumist.": (
+        "Both at once. Half-open: Stop mid-travel."
+    ),
+    "NVR ketas": "NVR disk",
+    "Niiskus": "Humidity",
+    "Nord Pool toorandmed": "Nord Pool raw data",
+    "Nädal": "Week",
+    "Parem": "Right",
+    "Pergola seaded": "Pergola settings",
+    "Praegu": "Now",
+    "Prognoos katab": "Forecast covers",
+    "Puhaste filtrite kalibreerimine": "Clean filter calibration",
+    "Puhkus": "Holiday",
+    "Pult": "Remote",
+    "Päevade kaupa, tundides": "By day, in hours",
+    "Pääsupunkt": "Access point",
+    "Põhiprofiil": "Main profile",
+    "Põhivood": "Airflows",
+    "Reegel": "Rule",
+    "Režiim": "Mode",
+    "Rikkumine": "Tamper",
+    "Sademed kahe tunniga": "Rain in two hours",
+    "Sajab": "Rain now",
+    "Sea seadme kell": "Set device clock",
+    "Seade": "Unit",
+    "Seade päevas, kWh": "Unit per day, kWh",
+    "Seade sees": "Unit on",
+    "Seaded": "Settings",
+    # a tile's name for the indoor temperature; as a state word it is "On" (WORDS)
+    "Sees": "Indoor",
+    "Sel kuul": "This month",
+    "Siht": "Target",
+    "Siht 55 °C, mitte alla 45 °C (legionella).": "Target 55 °C, never below 45 °C (legionella).",
+    "Sihttemp": "Target temp",
+    "Sireen": "Siren",
+    "Sisse": "Supply",
+    "Sissepuhe": "Supply air",
+    "Soe vesi": "Hot water",
+    "Soojuspumba seaded": "Heat pump settings",
+    "Soojuspumba viga": "Heat pump fault",
+    "Soojuspump": "Heat pump",
+    "Soojustagastus": "Heat recovery",
+    "Soojusvaheti": "Heat exchanger",
+    "Stopp": "Stop",
+    "Suitsuandur": "Smoke detector",
+    "Sulge": "Close",
+    "Suuremad tarbijad sel kuul": "Biggest consumers this month",
+    "Süsteem": "System",
+    "Tagastatud": "Recovered",
+    "Tagastatud päevas, kWh": "Recovered per day, kWh",
+    "Tagastus": "Recovery",
+    "Tagauks": "Back door",
+    "Tarbimine 7 päeva, kWh": "Consumption 7 days, kWh",
+    "Tarbimine päevas, kWh": "Consumption per day, kWh",
+    "Tavaline": "Normal",
+    "Teavitus": "Notification",
+    "Telefon": "Phone",
+    "Telefoni aku": "Phone battery",
+    "Teler": "TV",
+    "Temperatuurid 48 h": "Temperatures 48 h",
+    "Terrassi uks": "Terrace door",
+    "Toad": "Rooms",
+    "Toon": "Tone",
+    "Toon parem": "Tone right",
+    "Toon vasak": "Tone left",
+    "Tulekahju": "Fire",
+    "Täna": "Today",
+    "Täna ajas": "Today's sessions",
+    "Täna kõrgeim": "Highest today",
+    "Täna madalaim": "Lowest today",
+    "Uksed": "Doors",
+    "Uuendused": "Updates",
+    "Vaba jahutus": "Free cooling",
+    "Vaheti": "Exchanger",
+    "Vaikus": "Quiet time",
+    "Valgus": "Light",
+    "Valgus poolte kaupa": "Light by side",
+    "Valguse automaatika": "Light automation",
+    "Valgustus": "Lighting",
+    "Valve": "Alarm",
+    "Vasak": "Left",
+    "Ventilatsioon": "Ventilation",
+    "Ventilatsiooni hoiatus": "Ventilation warning",
+    "Ventilatsiooni seaded": "Ventilation settings",
+    "Ventilatsiooni viga": "Ventilation fault",
+    "Ventilatsiooniseade": "Ventilation unit",
+    "Vesi": "Water",
+    "Viga": "Fault",
+    "Viide start": "Start delay",
+    "Viide stopp": "Stop delay",
+    "Viimane teade": "Last notice",
+    "Välisuks": "Front door",
+    "Välisõhk": "Outdoor air",
+    "Välja": "Extract",
+    # a tile's name for the outdoor temperature; as a state word it is "Off" (WORDS)
+    "Väljas": "Outdoor",
+    "Väljatõmme": "Extract air",
+    "Väravakaamera": "Gate camera",
+    "Võimsus": "Power",
+    "Võrk": "Network",
+    "WiFi kliendid": "Wi-Fi clients",
+    "Õhk": "Air",
+    "Õhtune toon": "Evening tone",
+    "Õhuvool alandatud": "Airflow reduced",
+    "Ühendus": "Connection",
+    "Ühendus katkes": "Connection lost",
+    "Ühisruumid": "Shared rooms",
+    # confirmations
+    "Boileri kiirsoojendus (Daikin Powerful) sisse? Lõpeb ise, kui vesi on soe.": (
+        "Turn on high performance (Daikin Powerful)? It ends by itself once the water is hot."
+    ),
+    "Järelküte selles režiimis. Kindel?": "Switch the electric heater in this mode. Are you sure?",
+    "Kindel?": "Are you sure?",
+    "Lõpetad boileri kiirsoojenduse? Vesi soojeneb edasi tavarežiimis.": (
+        "End high performance? The water keeps heating in normal mode."
+    ),
+    "Lülitad kogu ventilatsiooni. Kindel?": "This switches the whole ventilation. Are you sure?",
+    "Lülitad maja kütte. Kindel?": "This switches the heating of the house. Are you sure?",
+    "Lülitad teleri välja?": "Turn off the TV?",
+    "Suvine vaba jahutus. Sees: soojusvaheti seisab, kui välisõhk on toast jahedam. "
+    "Talvel peab olema väljas. Kindel?": (
+        "Summer free cooling. On: the heat exchanger stops while the outdoor air is cooler "
+        "than indoors. Must be off in winter. Are you sure?"
+    ),
+    "Vahetad teleri profiilile Lapsed?": "Switch the TV to the Kids profile?",
+    "Vahetad teleri profiilile Põhiprofiil? PIN tuleb sisestada teleris.": (
+        "Switch the TV to the Main profile? The PIN is entered on the TV."
+    ),
+    "Ventilatsioon režiimile Boost?": "Set the ventilation to Boost?",
+    "Ventilatsioon režiimile Köök?": "Set the ventilation to Kitchen?",
+    "Ventilatsioon režiimile Tavaline?": "Set the ventilation to Normal?",
+    "Väljalülitamine lubab elektrilise järelkütte. Kindel?": (
+        "Turning this off allows the electric heater. Are you sure?"
+    ),
+    "Kõik korras.": "All good.",
+    # friendly names the dashboard does not override
+    "Aiakaamera liikumine": "Garden camera motion",
+    "Aiakaamera liikumistuvastus": "Garden camera motion detection",
+    "Arvesti andmed värsked": "Meter data fresh",
+    "Boiler sel kuul": "Water heater this month",
+    "Boiler täna": "Water heater today",
+    "Eeskoja suitsuandur": "Hall smoke detector",
+    "Elutoa lamp": "Living room lamp",
+    "Elutoa suitsuandur": "Living room smoke detector",
+    "Filtrite kalibreerimine": "Filter calibration",
+    "Hind see tund": "Price this hour",
+    "Järelküte sel kuul": "Electric heater this month",
+    "Katus parem": "Roof right",
+    "Katus vasak": "Roof left",
+    "Kestus": "Duration",
+    "Lamellkatus": "Louvred roof",
+    "Magamistoa lamp": "Bedroom lamp",
+    "Magamistoa temperatuur": "Bedroom temperature",
+    "Pergola valgus": "Pergola light",
+    "Põrandaküte": "Floor heating",
+    "Sea kell": "Set clock",
+    "Terrassi andur": "Terrace sensor",
+    "Tuba 1": "Room 1",
+    "Tuba 2": "Room 2",
+    "Valgus parem": "Light right",
+    "Valgus vasak": "Light left",
+    "Valvesüsteem": "Alarm system",
+    "Varikatuse andur": "Porch sensor",
+    "Ventilatsioon sel kuul": "Ventilation this month",
+    "Ventilatsiooni režiim": "Ventilation mode",
+    "Vihmateavitus": "Rain notification",
+    "Väravakaamera liikumine": "Gate camera motion",
+    "Väravakaamera liikumistuvastus": "Gate camera motion detection",
+    # the test house: rooms, devices, the car, the future items
+    "Eeskoda": "Hall",
+    "Eeskoja liikumisandur": "Hall motion sensor",
+    "Elutoa andur": "Living room sensor",
+    "Elutoa temperatuur": "Living room temperature",
+    "Elutuba": "Living room",
+    "Galerii": "Gallery",
+    "Köögi andur": "Kitchen sensor",
+    "Lastetuba": "Children's room",
+    "Magamistoa andur": "Bedroom sensor",
+    "Magamistuba": "Bedroom",
+    "Majapidamisruum": "Utility room",
+    "Pere köök-elutuba": "Family kitchen and living room",
+    "Suur magamistuba": "Main bedroom",
+    "Testauto": "Test car",
+    "Töötuba": "Study",
+    "Vannitoa andur": "Bathroom sensor",
+    "Vannituba": "Bathroom",
+    "Varjualune": "Carport",
+    "Varjualuse liikumisandur": "Carport motion sensor",
+    "Õuetemperatuur": "Outdoor temperature",
+    "Akusalvesti": "Home battery",
+    "Laadimispunkt": "EV charger",
+    "Puuküttega kümblustünn": "Wood-fired hot tub",
+    "Päikesejaam": "Solar panels",
+    "Väike kasvuhoone": "Small greenhouse",
+    "8,8 kWp, 20 paneeli põhjatiiva lõuna poole kalduval katusel": (
+        "8.8 kWp, 20 panels on the north wing's south-facing roof"
+    ),
+    "Aastas umbes 8 000 kWh": "About 8,000 kWh a year",
+    "Hind paigaldatuna umbes 9 000 €": "About €9,000 installed",
+    "Tasuvusaeg umbes 10 aastat": "Pays back in about 10 years",
+    "11 kW, kolm faasi": "11 kW, three-phase",
+    "Koormuse juhtimine peakaitsme järgi": "Load management by the main fuse",
+    "12 kWh, seinale kinnitatud": "12 kWh, wall-mounted",
+    "Hind umbes 6 000 €": "About €6,000",
+}
+
+WORDS = {
+    "Automaatne": "Auto",
+    "Eemal": "Away",
+    "Intensiivne": "Intensive",
+    "Jahutus": "Cooling",
+    "Kamin": "Fireplace",
+    "Kodus": "At home",
+    "Köök": "Kitchen",
+    "Külm valge": "Cool white",
+    "Küte": "Heating",
+    "Neutraalne": "Neutral",
+    "Oma": "Custom",
+    "Puhkus": "Holiday",
+    "Sees": "On",
+    "Soe valge": "Warm white",
+    "Tavaline": "Normal",
+    "Töökoht": "Office",
+    "Tööpäevad": "Workdays",
+    "Väljas": "Off",
+}
+
+# keyed by the Estonian sample text, so a reworded sample needs its English here too
+TEXTS_EN = {
+    '<ha-alert alert-type="success">Odav tund. Praegu 8,8 senti kilovatt-tunni eest, '
+    "kõigi tasudega 13,9 senti.</ha-alert>\n\n"
+    '<ha-icon icon="mdi:washing-machine"></ha-icon> **Pesu 4 h:** täna 22.00–02.00, '
+    "keskmiselt 11,2 senti\n\n"
+    '<ha-icon icon="mdi:hot-tub"></ha-icon> **Saun 2 h:** täna 20.00–22.00, keskmiselt 12,4 senti\n\n'
+    '<ha-icon icon="mdi:weather-night"></ha-icon> Homme keskmiselt 12,8 senti, odavaim aeg 03.00–05.00.': (
+        '<ha-alert alert-type="success">Cheap hour. Now 8.8 cents per kilowatt-hour, '
+        "13.9 cents with all fees.</ha-alert>\n\n"
+        '<ha-icon icon="mdi:washing-machine"></ha-icon> **Laundry 4 h:** today 22:00–02:00, '
+        "11.2 cents on average\n\n"
+        '<ha-icon icon="mdi:hot-tub"></ha-icon> **Sauna 2 h:** today 20:00–22:00, '
+        "12.4 cents on average\n\n"
+        '<ha-icon icon="mdi:weather-night"></ha-icon> Tomorrow 12.8 cents on average, '
+        "cheapest 03:00–05:00."
+    ),
+    "# 1 t 25 min\n\n"
+    '<ha-icon icon="mdi:youtube"></ha-icon> **YouTube** 52 min\n\n'
+    '<ha-icon icon="mdi:television-play"></ha-icon> **Jupiter** 33 min\n\n': (
+        "# 1 h 25 min\n\n"
+        '<ha-icon icon="mdi:youtube"></ha-icon> **YouTube** 52 min\n\n'
+        '<ha-icon icon="mdi:television-play"></ha-icon> **Jupiter** 33 min\n\n'
+    ),
+    "| Aeg | Äpp | Kestus |\n|:--|:--|--:|\n"
+    "| 19:40–praegu | YouTube | 22 min |\n"
+    "| 18:05–18:38 | Jupiter | 33 min |\n"
+    "| 16:10–16:40 | YouTube | 30 min |": (
+        "| Time | App | Duration |\n|:--|:--|--:|\n"
+        "| 19:40–now | YouTube | 22 min |\n"
+        "| 18:05–18:38 | Jupiter | 33 min |\n"
+        "| 16:10–16:40 | YouTube | 30 min |"
+    ),
+}

@@ -409,7 +409,15 @@ class BuildAndScan(unittest.TestCase):
 
 class Demo(unittest.TestCase):
     DEMO_FILES = ("index.html", "demo.js", "house3d-card.js", "house3d.js", "model.json")
-    DATA_FILES = ("dashboard.json", "states.json", "series.json")
+    DATA_FILES = (
+        "dashboard.json",
+        "states.json",
+        "series.json",
+        "dashboard.en.json",
+        "states.en.json",
+        "series.en.json",
+        "model.en.json",
+    )
 
     def build(self, tmp, env=None):
         r = run("--demo", tmp, env=env)
@@ -436,9 +444,11 @@ class Demo(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = self.build(tmp)
             data = {n: json.loads((out / n).read_text(encoding="utf-8")) for n in self.DATA_FILES}
-            self.assertEqual(data["dashboard.json"]["views"][0]["path"], "maja-3d")
-            self.assertIn("states", data["states.json"])
-            self.assertTrue(data["series.json"])
+            for lang in ("", ".en"):
+                self.assertEqual(data[f"dashboard{lang}.json"]["views"][0]["path"], "maja-3d")
+                self.assertIn("states", data[f"states{lang}.json"])
+                self.assertTrue(data[f"series{lang}.json"])
+            self.assertIn("walls", data["model.en.json"])
             self.assertFalse((out / "dashboard.js").exists())
 
     def test_demo_carries_the_card_and_demo_versions(self):

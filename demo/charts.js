@@ -4,15 +4,16 @@
 // takes the card's config, the series, the time and the width to draw at, and returns markup.
 // No DOM and no eval, so the CSP holds and the tests load it in Node.
 import { svg, WEATHER } from './icons.js?v=__DEMO_VERSION__';
+import { t, locale } from './strings.js?v=__DEMO_VERSION__';
 
 const esc = s => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
 const PALETTE = ['#4269d0', '#efb118', '#ff725c', '#6cc5b0', '#3ca951', '#ff8ab7', '#a463f2', '#97bbf5'];
 const HOUR = 3600e3, DAY = 24 * HOUR;
-const fmt = d => new Intl.NumberFormat('et-EE', { minimumFractionDigits: d, maximumFractionDigits: d });
-const hhmm = new Intl.DateTimeFormat('et-EE', { hour: '2-digit', minute: '2-digit' });
-const dayMonth = new Intl.DateTimeFormat('et-EE', { day: 'numeric', month: 'short' });
-const monthYear = new Intl.DateTimeFormat('et-EE', { month: 'short', year: '2-digit' });
-const weekday = new Intl.DateTimeFormat('et-EE', { weekday: 'short' });
+const fmt = d => new Intl.NumberFormat(locale, { minimumFractionDigits: d, maximumFractionDigits: d });
+const hhmm = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
+const dayMonth = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' });
+const monthYear = new Intl.DateTimeFormat(locale, { month: 'short', year: '2-digit' });
+const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short' });
 
 const midnight = now => new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -74,7 +75,7 @@ export function statisticsGraph(conf, series, now, width = 400) {
   const days = conf.days_to_show || 7, height = 180, stack = conf.chart_type === 'bar-stack';
   const ents = conf.entities.map((e, i) => ({ name: e.name || e.entity, color: PALETTE[i % PALETTE.length], pts: points(series[e.entity], now).slice(-days) }));
   const times = [...new Set(ents.flatMap(e => e.pts.map(p => p[0])))].sort((a, b) => a - b);
-  if (!times.length) return '<p class="nodata">Andmed puuduvad</p>';
+  if (!times.length) return `<p class="nodata">${t.noData}</p>`;
   const sums = times.map(t => ents.reduce((s, e) => s + (stack ? ((e.pts.find(p => p[0] === t) || [0, 0])[1]) : 0), 0));
   const max = stack ? Math.max(...sums) : Math.max(...ents.flatMap(e => e.pts.map(p => p[1])));
   const yt = ticks(0, max * 1.05), left = 40;
@@ -101,7 +102,7 @@ export function historyGraph(conf, series, now, width = 400, nameOf = e => e) {
   const hours = conf.hours_to_show || 24, height = 180, from = now.getTime() - hours * HOUR;
   const ents = conf.entities.map((e, i) => ({ name: e.name || nameOf(e.entity), color: PALETTE[i % PALETTE.length], pts: points(series[e.entity], now).filter(p => p[0] >= from) }));
   const all = ents.flatMap(e => e.pts.map(p => p[1]));
-  if (!all.length) return '<p class="nodata">Andmed puuduvad</p>';
+  if (!all.length) return `<p class="nodata">${t.noData}</p>`;
   const yt = ticks(Math.min(...all) - 0.5, Math.max(...all) + 0.5), left = 36;
   const x = t => left + ((t - from) / (now.getTime() - from)) * (width - left - 8);
   const marks = [];
@@ -127,7 +128,7 @@ export function apexChart(conf, series, now, width = 400) {
   else { to = day0 + DAY; from = to - span; }
   const list = conf.series.map((s, i) => ({ ...s, pts: points(series[`${s.entity}|${s.name}`], now).filter(p => p[0] >= from && p[0] < to), color: s.color || PALETTE[i % PALETTE.length] }));
   const all = list.flatMap(s => s.pts.map(p => p[1]));
-  if (!all.length) return '<p class="nodata">Andmed puuduvad</p>';
+  if (!all.length) return `<p class="nodata">${t.noData}</p>`;
   const y0 = ((conf.yaxis || [])[0] || {}).min ?? Math.min(...all);
   const yt = ticks(y0, Math.max(...all) * 1.05);
   const dec = ((conf.yaxis || [])[0] || {}).decimals;
@@ -165,7 +166,7 @@ export function apexChart(conf, series, now, width = 400) {
 
 export function weatherForecast(conf, series, now, width = 400) {
   const f = ((series[conf.entity] || {}).forecast || []);
-  if (!f.length) return '<p class="nodata">Prognoos puudub</p>';
+  if (!f.length) return `<p class="nodata">${t.noForecast}</p>`;
   const n = Math.max(3, Math.min(f.length, Math.floor(width / 56)));
   const base = new Date(now);
   base.setMinutes(0, 0, 0);

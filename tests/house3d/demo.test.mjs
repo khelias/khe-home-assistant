@@ -19,11 +19,11 @@ const { createSim } = await mod('sim.js');
 const { tileAction, modeAction } = await import(new URL('cards/khe-cards.js', `file://${ROOT}`));
 
 const out = mkdtempSync(join(tmpdir(), 'house3d-demo-'));
-let model, dashboard, data, series, built;
+let model, dashboard, data, series, modelEn, built;
 try {
   execFileSync('python3', ['-I', join(ROOT, 'scripts/house3d-build.py'), '--demo', out], { stdio: ['ignore', 'ignore', 'inherit'] });
   const read = f => JSON.parse(readFileSync(join(out, f), 'utf8'));
-  [model, dashboard, data, series] = ['model.json', 'dashboard.json', 'states.json', 'series.json'].map(read);
+  [model, dashboard, data, series, modelEn] = ['model.json', 'dashboard.json', 'states.json', 'series.json', 'model.en.json'].map(read);
   built = { files: readdirSync(out), demoJs: readFileSync(join(out, 'demo.js'), 'utf8') };
 } finally {
   rmSync(out, { recursive: true, force: true });
@@ -225,7 +225,8 @@ test('the demo files name no fixture entity or device and hold no devices key', 
   const files = readdirSync(dir).filter(f => f.endsWith('.js') || f === 'index.html');
   assert.ok(!files.includes('dashboard.js'));
   const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const strings = [...model.devices.flatMap(d => [d.entity, d.name]), model.car.entity, model.car.name].filter(Boolean);
+  const names = m => [...m.devices.flatMap(d => [d.entity, d.name]), m.car.entity, m.car.name];
+  const strings = [...names(model), ...names(modelEn)].filter(Boolean);
   const devicesKey = /["']?\bdevices["']?\s*:/;
   for (const f of files) {
     const text = readFileSync(join(dir, f), 'utf8');

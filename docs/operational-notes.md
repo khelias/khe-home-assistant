@@ -407,8 +407,15 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   dashboard from `dashboard_config.build()`, rewritten by
   `scripts/dashboard_demo.py` (every entity id to a demo or fixture entity,
   templated cards to sample text, charts to made-up series), drawn by
-  `demo/cards.js` on a simulated hass, 3D first. Its bars and views start
-  below `--host-h`, 0 here, where khe-sites puts the khe.ee site header. Every `demo/` file and the
+  `demo/cards.js` on a simulated hass, 3D first. With `?lang=en` it is in
+  English ([ADR-003](decisions/003-demo-in-english.md)): `demo.js` loads the
+  `*.en.json` files, which `dashboard_demo.demo_config_en` and its siblings
+  make from the Estonian ones through `scripts/dashboard_demo_en.py`,
+  `demo/strings.js` holds the page's own strings in both languages, and the
+  3D card turns English with `language: en` in its config (only the demo sets
+  it). khe.ee's header keeps `?lang` current and reloads the page on a switch.
+  Its bars and views start below `--host-h`, 0 here, where khe-sites puts the
+  khe.ee site header. Every `demo/` file and the
   generated JSON are versioned by one hash (`__DEMO_VERSION__`), the card and
   engine by `HOUSE3D_VERSION`. The generator names the real house's devices,
   so `check.sh` scans the whole demo build and the test house with the real

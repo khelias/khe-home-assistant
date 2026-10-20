@@ -17,9 +17,10 @@ model argument or HOUSE3D_MODEL, and writes every .html, .js, .css and .svg of d
 card, the engine, the dashboard cards (cards/khe-cards.js), model.json with every layer the card
 gets in HA, and the dashboard: the real generator's views on made-up data
 (scripts/dashboard_demo.py) as dashboard.json, their starting states as states.json and their
-chart data as series.json. In the demo's files __HOUSE3D_VERSION__ becomes the card's version,
+chart data as series.json, and the same in English with the test house's model as
+dashboard.en.json, states.en.json, series.en.json and model.en.json. In the demo's files __HOUSE3D_VERSION__ becomes the card's version,
 __KHE_CARDS_VERSION__ the dashboard cards' version and __DEMO_VERSION__ a hash of the demo's
-files, the three JSON files and those two versions. khe-sites publishes it at khe.ee/house3d/. The fixture is
+files, the generated JSON files and those two versions. khe-sites publishes it at khe.ee/house3d/. The fixture is
 public; the dashboard comes from the generator, which names the real house's devices, so
 check.sh scans the demo build with the real model whenever one is at hand.
 
@@ -253,12 +254,17 @@ def demo_model():
 
 
 def demo_data(model):
-    """The demo dashboard's generated files, name -> text: the config, states and series."""
+    """The demo dashboard's generated files, name -> text: the config, states and series, and
+    the same in English with the test house's model (ADR-003)."""
     dump = lambda o: json.dumps(o, ensure_ascii=False, separators=(",", ":"))
     return {
         "dashboard.json": dump(dashboard_demo.demo_config(model)),
         "states.json": dump(dashboard_demo.demo_states(model)),
         "series.json": dump(dashboard_demo.demo_series()),
+        "dashboard.en.json": dump(dashboard_demo.demo_config_en(model)),
+        "states.en.json": dump(dashboard_demo.demo_states_en(model)),
+        "series.en.json": dump(dashboard_demo.demo_series_en()),
+        "model.en.json": dump(dashboard_demo.demo_model_en(model)),
     }
 
 

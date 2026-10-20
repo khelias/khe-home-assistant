@@ -10,8 +10,9 @@ This file holds rules and pointers; the reference lives in:
 - [docs/operational-notes.md](docs/operational-notes.md) - per-integration
   quirks, measured behaviour and the 3D view
 - [docs/decisions/](docs/decisions/) - this repo's decisions, estate-style
-  ADRs (the estate's own are in khe-architecture): the 3D engine (ADR-001)
-  and the dashboard's own cards ([ADR-002](docs/decisions/002-own-dashboard-cards.md))
+  ADRs (the estate's own are in khe-architecture): the 3D engine (ADR-001),
+  the dashboard's own cards ([ADR-002](docs/decisions/002-own-dashboard-cards.md))
+  and the demo's English ([ADR-003](docs/decisions/003-demo-in-english.md))
 - [ROADMAP.md](ROADMAP.md) - house automation, near-term and the long form
 
 House documentation (HA rollout, dashboard layout, HVAC protocols, energy)
@@ -33,7 +34,8 @@ config/            what deploy copies into HA's /config
 demo/              the public demo: the real dashboard's views on made-up
                    data, 3D first, on a simulated hass (sim.js); the sections
                    view and its cards in cards.js, charts.js, icons.js, the
-                   page in demo.js and index.html; not deployed to HA
+                   page in demo.js and index.html, its UI strings in both
+                   languages in strings.js; not deployed to HA
 docs/              operational notes and the README screenshot
   decisions/       ADRs: NNN-slug.md, numbered from 001
 house3d/           3D house view: engine (core house3d.js, scene/ layer
@@ -42,7 +44,8 @@ house3d/           3D house view: engine (core house3d.js, scene/ layer
 scripts/           dashboard_config.py (the HA Overview as data, no I/O),
                    ha-dashboard.py (reads the private inputs, saves it),
                    dashboard_demo.py (the demo's made-up entities, texts and
-                   series for the same config),
+                   series for the same config), dashboard_demo_en.py (its
+                   English, ADR-003),
                    ha-ws.py (HA WebSocket commands from the CLI),
                    house3d-* and house3d_model.py (3D view build, vendoring,
                    device and tree placement, ETAK surroundings, model),
@@ -71,7 +74,8 @@ tests/cards/       the dashboard cards' pure helpers (node:test)
 - `python3 -I scripts/house3d-build.py --demo OUTDIR` builds the demo from the
   made-up test house only (`tests/house3d/fixture-model.md`): the card, the
   engine, the dashboard cards, `demo/` and the generated dashboard, states
-  and series. khe-sites
+  and series, in Estonian and as `*.en.json` in English, which the demo
+  shows with `?lang=en` ([ADR-003](docs/decisions/003-demo-in-english.md)). khe-sites
   runs it and publishes the result at <https://khe.ee/ha/> on its next
   deploy: a push to khe-sites, its weekly schedule, or
   `gh workflow run deploy.yml -R khelias/khe-sites`.
@@ -171,7 +175,10 @@ the operator first; an approval covers that task only.
   `local_config()`, compare with a WebSocket `lovelace/config` read. The
   public demo is the same `build()` on made-up inputs, so a new entity id
   needs an entry in `dashboard_demo.CATALOGUE` (the dashboard tests name it)
-  and a new templated card a sample text in `TEXTS`.
+  and a new templated card a sample text in `TEXTS`. The demo is English
+  too, so a new visible string needs its English line in
+  `scripts/dashboard_demo_en.py` (`EN`, a state word in `WORDS`, a sample
+  text in `TEXTS_EN`); the demo build's `KeyError` names it.
 - **A redesigned view uses the repo's own cards**
   ([ADR-002](docs/decisions/002-own-dashboard-cards.md)), `cards/khe-cards.js`;
   no view does today, Kodu went back to stock cards on 2026-10-18. A change

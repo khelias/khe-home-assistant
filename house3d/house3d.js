@@ -507,6 +507,8 @@ export function inChip(m, chip, focus) {
  *   view             { position, target } as the view getter gives it: the first framing puts
  *                    the camera there instead of the home view, so a remount keeps the user's orbit
  *   labels(roomId)   room label text; the room's own name when it returns nothing
+ *   noWebGL          the text shown where WebGL is missing; default Estonian (the card passes
+ *                    its language's)
  *   layers           { id: bool }: the starting state of the switchable layers, default on
  *   car              { profile, path }: a vehicle drawn from profile, built hidden. profile is in
  *                    metres in the car's frame (origin on the ground at its centre, +x forward,
@@ -577,7 +579,7 @@ export function mount(element, model, options = {}) {
   } catch (e) {
     const msg = document.createElement('div');
     msg.className = 'h3d-fallback';
-    msg.textContent = 'See seade ei toeta WebGL-i, mistõttu 3D-vaadet ei saa näidata.';
+    msg.textContent = options.noWebGL || 'See seade ei toeta WebGL-i, mistõttu 3D-vaadet ei saa näidata.';
     stage.appendChild(msg);
     const noop = () => {};
     return { failed: true, setMarkers: noop, setRoomChips: noop, focusRoom: noop, setMode: noop, setSelection: noop, setCar: noop, setLayer: noop, reset: noop, resize: noop,
