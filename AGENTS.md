@@ -177,6 +177,13 @@ the operator first; an approval covers that task only.
   no view does today, Kodu went back to stock cards on 2026-10-18. A change
   to the cards bumps `KHE_CARDS_VERSION` and the resource's `?v=`
   ([notes](docs/operational-notes.md#dashboard-cards-cards)).
+- **The house is the House room of the KHE family**
+  ([estate ADR-015](https://github.com/khelias/khe-architecture/blob/main/decisions/015-family-design-layer.md)):
+  its accent (`house`) and its ground (`house-ground`) are in khe-sites'
+  `DESIGN.md`. The dashboard and the 3D view are application content with
+  their own visual language; only the chrome around them is the family's.
+  On `/ha/` the header takes the dark family values until the 3D view has a
+  light theme.
 - **Keep the house idiom in a new view**, and read two existing views first.
   A row is a `horizontal-stack` of 2-4 vertical tiles or `third()`, never a
   lone full-width tile; full width is for charts, forecast cards and alerts.
