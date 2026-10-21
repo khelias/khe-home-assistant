@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 37;
+const HOUSE3D_VERSION = 38;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -535,10 +535,41 @@ class House3dCard extends Base {
 
   // a new style remounts the engine; the mode, the camera, the time and the open Kihid sheet carry over
   _restyle(style) {
+    // during a scene, picking the style it shows is still the visitor's choice for clearScene()
+    if (style === this._style && this._sceneTime !== undefined) writeStyle(style);
     if (style === this._style || !this._view) return;
     this._style = style;
     writeStyle(style);
-    this._keep = { mode: this._view.mode, view: this._view.view, layers: this._sheet === 'layers' };
+    this._remount();
+  }
+
+  // setScene({ style, time }): a page's scene (the demo's scenarios) shows a style and a fixed
+  // instant for a while, before the engine mounts too. The style is not stored, so clearScene()
+  // goes back to the visitor's own; a call with a time only moves the sky without a remount.
+  setScene({ style, time } = {}) {
+    const at = time ? new Date(time) : null;
+    this._sceneTime = at;
+    if (!style || style === this._style) return this._setTime(at);
+    this._style = style;
+    this._time = at;
+    this._remount();
+  }
+
+  // the stored style and the live time again; a style or time the visitor picked during the scene
+  // stays, as their own choice
+  clearScene() {
+    if (this._sceneTime === undefined) return;
+    const live = this._time === this._sceneTime;
+    this._sceneTime = undefined;
+    const style = readStyle();
+    if (style === this._style) return live ? this._setTime(null) : undefined;
+    this._style = style;
+    if (live) this._time = null;
+    this._remount();
+  }
+
+  _remount() {
+    if (this._view) this._keep = { mode: this._view.mode, view: this._view.view, layers: this._sheet === 'layers' };
     this._unmount();
     this._render();
   }
@@ -569,11 +600,9 @@ class House3dCard extends Base {
   _syncTime() {
     const sr = this.shadowRoot, hour = sr.querySelector('[data-time="hour"]'), day = sr.querySelector('[data-time="day"]');
     if (!hour || !day) return;
-    const now = new Date();
-    if (!this._time) {
-      hour.value = String(now.getHours() * 4 + Math.floor(now.getMinutes() / 15));
-      day.value = String(dayOfYear(now));
-    }
+    const now = new Date(), at = this._time || now;
+    hour.value = String(at.getHours() * 4 + Math.floor(at.getMinutes() / 15));
+    day.value = String(dayOfYear(at));
     sr.querySelector('[data-out="hour"]').textContent = this._time ? hourText(Number(hour.value)) : `${pad(now.getHours())}:${pad(now.getMinutes())}`;
     sr.querySelector('[data-out="day"]').textContent = formatsFor(this._lang).dayFmt.format(dayDate(Number(day.value)));
     sr.querySelector('[data-act="now"]').setAttribute('aria-pressed', String(!this._time));

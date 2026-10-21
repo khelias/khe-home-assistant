@@ -5,11 +5,13 @@
 // opens a dialog like HA's, toggles and service calls change the simulated states, navigate opens
 // a view or a subview. This file names no entity: the data names them, so it works for any
 // generated dashboard. ?light shows HA's light theme, which the dashboard cards follow; ?lang=en
-// shows the English demo, the .en.json files and demo/strings.js (ADR-003).
+// shows the English demo, the .en.json files and demo/strings.js (ADR-003). The toolbar's
+// scenarios (scenarios.json, played by scenario.js) tell short stories on the same simulated hass.
 import './house3d-card.js?v=__HOUSE3D_VERSION__';
 import './khe-cards.js?v=__KHE_CARDS_VERSION__';
 import { svg, entityIcon } from './icons.js?v=__DEMO_VERSION__';
 import { createSim } from './sim.js?v=__DEMO_VERSION__';
+import { play } from './scenario.js?v=__DEMO_VERSION__';
 import { renderSections, renderPanel, runAction, formatState, stateColor, ago } from './cards.js?v=__DEMO_VERSION__';
 import { lang, locale, t } from './strings.js?v=__DEMO_VERSION__';
 
@@ -22,11 +24,16 @@ const viewsEl = document.querySelector('.views');
 const drawer = document.querySelector('dialog.drawer');
 const dialog = document.querySelector('dialog.info');
 const confirmDlg = document.querySelector('dialog.confirm');
+const sceneDlg = document.querySelector('dialog.scenarios');
+const sceneBtn = document.querySelector('[data-act="scenarios"]');
+const sceneBar = document.querySelector('.scene');
 const nf1 = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
 const domainOf = entity => entity.split('.')[0];
 
 menuBtn.innerHTML = svg('menu');
+sceneBtn.innerHTML = svg('playlist-play');
+sceneBar.querySelector('.s-icon').outerHTML = svg('robot');
 backBtn.innerHTML = svg('arrow-left');
 document.querySelectorAll('[data-act="close"].icon-button').forEach(b => { b.innerHTML = svg('close'); });
 document.querySelector('.d-icon').outerHTML = svg('home');
@@ -36,9 +43,9 @@ document.querySelectorAll('[data-t-aria]').forEach(el => { el.setAttribute('aria
 
 const load = name => fetch(`./${name}?v=__DEMO_VERSION__`).then(r => { if (!r.ok) throw new Error(name); return r.json(); });
 const suffix = lang === 'en' ? '.en.json' : '.json';
-let model, dashboard, data, series;
+let model, dashboard, data, series, scenarios;
 try {
-  [model, dashboard, data, series] = await Promise.all(['model', 'dashboard', 'states', 'series'].map(n => load(n + suffix)));
+  [model, dashboard, data, series, scenarios] = await Promise.all(['model', 'dashboard', 'states', 'series', 'scenarios'].map(n => load(n + suffix)));
 } catch (e) {
   viewsEl.innerHTML = `<div class="fallback">${esc(t.loadFailed)}</div>`;
   throw e;
@@ -187,6 +194,8 @@ tabs.addEventListener('keydown', ev => {
 sim.subscribe(() => {
   const h = hass();
   if (current && current.rendered) current.rendered.update(h);
+  // the 3D card follows every change, also while another view is current, so it sees each arrival
+  if (card3d && !(current && isHouse3d(current.view))) card3d.hass = h;
   if (dialog.open && sim.states[openEntity] !== shownState) renderInfo();
 });
 
@@ -195,6 +204,11 @@ sim.subscribe(() => {
 // puts it off to the next show; driving it from its dialog first cancels it.
 let carDone = !carEntity;
 let carTimer = null;
+// a tap on the car's dialog or a scenario takes the car over: the first show's drive-in is off
+function takeCar() {
+  carDone = true;
+  clearTimeout(carTimer);
+}
 function carOnFirstShow(visible) {
   clearTimeout(carTimer);
   if (carDone || !visible) return;
@@ -294,10 +308,9 @@ function act(e, what) {
   if (what === 'install') return call('update', 'install');
   if (what === 'press') return call('button', 'press');
   if (what === 'flip') return sim.set(e, st.state === 'on' ? 'off' : 'on');
-  if (what === 'pulse') { sim.set(e, 'on'); return setTimeout(() => sim.set(e, 'off'), 4000); }
+  if (what === 'pulse') return sim.pulse(e, 4000);
   if (what === 'arrive' || what === 'leave') {
-    carDone = true;
-    clearTimeout(carTimer);
+    takeCar();
     return sim.set(e, what === 'arrive' ? 'home' : 'not_home', { arrived_at: what === 'arrive' ? new Date().toISOString() : null });
   }
 }
@@ -403,6 +416,94 @@ dialog.addEventListener('close', () => { dragging = false; });
 menuBtn.addEventListener('click', () => drawer.showModal());
 drawer.addEventListener('click', ev => {
   if (outside(drawer, ev) || ev.target.closest('[data-act="close"]')) drawer.close();
+});
+
+/* ---------- scenarios: a story played on the simulated house (scenario.js) ---------- */
+
+let stopScene = null;
+const sceneBody = sceneBar.querySelector('.s-body');
+const sceneButton = what => sceneBar.querySelector(`[data-scene="${what}"]`);
+
+sceneDlg.querySelector('.sc-list').innerHTML = scenarios.map((s, i) => `<button type="button" data-scenario="${i}">
+  <span class="sc-title">${esc(s.title)}</span><span class="sc-line">${esc(s.summary)}</span></button>`).join('');
+
+// the bar pushes the views down; the 3D card measures its height from its top, which just moved.
+// Within a scenario the bar only grows, so a shorter beat does not move the 3D view back up.
+const fitScene = () => {
+  if (!sceneBar.hidden && sceneBar.offsetHeight > (parseFloat(sceneBar.style.minHeight) || 0)) sceneBar.style.minHeight = `${sceneBar.offsetHeight}px`;
+  document.documentElement.style.setProperty('--scene-h', sceneBar.hidden ? '0px' : `${sceneBar.offsetHeight}px`);
+  if (card3d && card3d.hasAttribute('panel')) card3d.isPanel = true;
+};
+new ResizeObserver(fitScene).observe(sceneBar);
+
+function beat(head, alias, text) {
+  sceneBody.classList.toggle('auto', !!alias);
+  sceneBody.querySelector('.s-label').textContent = alias ? t.automation : head;
+  sceneBody.querySelector('.s-alias').textContent = alias || '';
+  sceneBody.querySelector('.s-caption').textContent = text;
+  sceneBody.classList.remove('fresh');
+  void sceneBody.offsetWidth;
+  sceneBody.classList.add('fresh');
+}
+
+function sceneDone(done) {
+  sceneButton('stop').hidden = done;
+  sceneButton('restart').hidden = !done;
+  sceneButton('close').hidden = !done;
+}
+
+function startScenario(s) {
+  haltScene();
+  takeCar();
+  const pane = panes.find(p => p.view.path === s.view) || panes[0];
+  show(pane);
+  if (location.hash.slice(1) !== pane.view.path) location.hash = pane.view.path;
+  // play() checks the scenario before anything changes, so one it rejects leaves no bar or scene
+  stopScene = play(s, sim, {
+    car: carEntity,
+    onStep: st => { if (st.caption) beat(s.title, st.automation, st.caption); },
+    onTime: at => { if (card3d) card3d.setScene({ time: at }); },
+    onEnd: () => sceneDone(true)
+  });
+  if (card3d) {
+    if (s.time) card3d.setScene({ style: 'real', time: s.time });
+    else card3d.clearScene();
+  }
+  sceneBar.style.minHeight = '';
+  beat(s.title, null, s.summary);
+  sceneDone(false);
+  sceneBar.hidden = false;
+}
+
+function haltScene() {
+  if (stopScene) stopScene();
+  stopScene = null;
+}
+
+function endScenario(restart) {
+  haltScene();
+  sceneBar.hidden = true;
+  if (!restart) return;
+  sim.reset();
+  if (card3d) card3d.clearScene();
+}
+
+sceneBtn.addEventListener('click', () => sceneDlg.showModal());
+sceneDlg.addEventListener('click', ev => {
+  if (outside(sceneDlg, ev) || ev.target.closest('[data-act="close"]')) return sceneDlg.close();
+  const b = ev.target.closest('[data-scenario]');
+  if (!b) return;
+  sceneDlg.close();
+  startScenario(scenarios[Number(b.dataset.scenario)]);
+});
+// stop keeps what has happened so far and offers the same two ways out as the end
+sceneBar.addEventListener('click', ev => {
+  const b = ev.target.closest('[data-scene]');
+  if (!b) return;
+  if (b.dataset.scene !== 'stop') return endScenario(b.dataset.scene === 'restart');
+  haltScene();
+  sceneDone(true);
+  sceneButton('restart').focus();
 });
 
 // what HA's frontend does with the cards' taps: more-info from the 3D card, hass-action from

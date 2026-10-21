@@ -15,7 +15,7 @@ const mod = f => import(new URL(`demo/${f}`, `file://${ROOT}`));
 const { CARD_TYPES, FEATURE_TYPES, ACTIONS, visible, actionFor, runAction, markdown, gridSize, columnsFor, formatState } = await mod('cards.js');
 const { CHARTS, points } = await mod('charts.js');
 const { hasIcon, iconFor, GENERIC } = await mod('icons.js');
-const { createSim } = await mod('sim.js');
+const { createSim, SERVICES } = await mod('sim.js');
 const { tileAction, modeAction } = await import(new URL('cards/khe-cards.js', `file://${ROOT}`));
 
 const out = mkdtempSync(join(tmpdir(), 'house3d-demo-'));
@@ -116,6 +116,36 @@ test('the simulation: toggles, mirrors and unknown services', () => {
   const num = Object.keys(sim.states).find(e => e.startsWith('number.'));
   sim.callService('number', 'set_value', { value: 1e6 }, { entity_id: num });
   assert.equal(Number(sim.states[num].state), sim.states[num].attributes.max);
+});
+
+test('the simulation resets to its start, a moving cover and a pulse included', () => {
+  const due = [];
+  const at = Date.parse('2026-11-14T12:00:00Z');
+  const sim = createSim(data, { now: () => new Date(at), schedule: fn => { due.push(fn); return due.length - 1; }, cancel: id => { due[id] = null; } });
+  const initial = sim.states;
+  const cover = Object.keys(sim.states).find(e => e.startsWith('cover.') && sim.states[e].state === 'closed');
+  const motion = Object.keys(sim.states).find(e => sim.states[e].attributes.device_class === 'motion' && sim.states[e].state === 'off');
+  const sw = Object.keys(sim.states).find(e => e.startsWith('switch.'));
+  sim.toggle(sw);
+  sim.callService('cover', 'open_cover', {}, { entity_id: cover });
+  sim.pulse(motion, 4000);
+  assert.equal(sim.states[motion].state, 'on');
+  let seen = null;
+  sim.subscribe(st => { seen = st; });
+  sim.reset();
+  assert.equal(seen, sim.states);
+  assert.deepEqual(sim.states, initial);
+  due.forEach(fn => fn && fn());
+  assert.deepEqual(sim.states, initial, 'no timer lands after a reset');
+  sim.reset({ [sw]: { state: 'on', ago: 30, attributes: { icon: 'mdi:x' } } });
+  assert.equal(sim.states[sw].state, 'on');
+  assert.equal(sim.states[sw].attributes.icon, 'mdi:x');
+  assert.equal(sim.states[sw].attributes.friendly_name, initial[sw].attributes.friendly_name);
+  assert.equal(at - Date.parse(sim.states[sw].last_changed), 30 * 60000);
+  const dt = Object.keys(sim.states).find(e => e.startsWith('input_datetime.') && sim.states[e].attributes.has_date);
+  sim.callService('input_datetime', 'set_datetime', { datetime: '2026-11-14 14:20:00' }, { entity_id: dt });
+  assert.equal(sim.states[dt].state, '2026-11-14 14:20:00');
+  assert.ok(SERVICES.has('input_datetime.set_datetime') && !SERVICES.has('light.explode'));
 });
 
 test('visibility: state and state_not single and listed, numeric_state, or, and', () => {

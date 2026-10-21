@@ -430,6 +430,8 @@ class Demo(unittest.TestCase):
         "states.en.json",
         "series.en.json",
         "model.en.json",
+        "scenarios.json",
+        "scenarios.en.json",
     )
 
     def build(self, tmp, env=None):

@@ -10,7 +10,9 @@ YAML packages, a generator for the dashboard, small tools for HA's API, and a
 made by the same generator, on a made-up test house with simulated devices
 and made-up charts. The 3D view comes first, then home, energy, heat pump,
 ventilation, pergola, alarm, cameras and TV; tap a tile to control it as in
-Home Assistant, and watch the car drive in through the gate.
+Home Assistant, and watch the car drive in through the gate. The toolbar's
+scenarios play short stories on it, such as coming home, a break-in at night
+or rain on the pergola, and mark what the house's real automations do.
 
 ## What is interesting here
 

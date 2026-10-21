@@ -327,6 +327,101 @@ EN = {
     "Koormuse juhtimine peakaitsme järgi": "Load management by the main fuse",
     "12 kWh, seinale kinnitatud": "12 kWh, wall-mounted",
     "Hind umbes 6 000 €": "About €6,000",
+    # the scenarios (dashboard_scenarios.py): titles, summaries, captions, automation aliases
+    "Koju jõudmine": "Coming home",
+    "Auto jõuab õhtul koju ja inimene läheb majja.": (
+        "The car comes home in the evening and someone goes inside."
+    ),
+    "Auto jõuab koju, värav avaneb ja sulgub auto järel.": (
+        "The car comes home; the gate opens and closes behind it."
+    ),
+    "Varjualuse liikumisandur näeb inimest.": "The carport motion sensor sees someone.",
+    "Välisuks avaneb.": "The front door opens.",
+    "Eeskojas on liikumine.": "Motion in the hall.",
+    "Valve võetakse maha.": "The alarm is disarmed.",
+    "Välisuks sulgub.": "The front door closes.",
+    "Köök-elutoas on liikumine.": "Motion in the kitchen and living room.",
+    "Elutoa lamp süttib: selle lülitab sisse inimene, mitte automaatika.": (
+        "The living room lamp comes on: a person switches it on, not an automation."
+    ),
+    "Liikumisandurite rada näitab, kust inimene läbi läks.": (
+        "The trail of motion sensors shows the way the person went."
+    ),
+    "Hommik": "Morning",
+    "Inimene ärkab ja liigub magamistoast kööki.": (
+        "Someone wakes up and walks from the bedroom to the kitchen."
+    ),
+    "Magamistoas on liikumine.": "Motion in the bedroom.",
+    "Magamistoa lamp süttib: selle lülitab sisse inimene.": (
+        "The bedroom lamp comes on: a person switches it on."
+    ),
+    "Vannitoas on liikumine.": "Motion in the bathroom.",
+    "Elutoa lamp süttib.": "The living room lamp comes on.",
+    "Magamistoa lamp kustutatakse.": "The bedroom lamp is switched off.",
+    "Rada näitab hommikust teekonda magamistoast kööki.": (
+        "The trail shows the morning's way from the bedroom to the kitchen."
+    ),
+    "Öine sissetung": "Break-in at night",
+    "Öösel, kui valve on peal, avaneb terrassi uks.": (
+        "At night, with the alarm armed, the terrace door opens."
+    ),
+    "Valve on peal ja terrassi uks avaneb.": "The alarm is armed and the terrace door opens.",
+    "Valvepaneel läheb häiresse.": "The alarm panel is triggered.",
+    "Välissireen hakkab tööle.": "The outdoor siren starts.",
+    "Telefonidesse tuleb kriitiline teavitus, kus on kirjas avatud uksed ja aktiivsed andurid.": (
+        "A critical notification reaches the phones, listing the open doors and active sensors."
+    ),
+    "Sireen vaikib.": "The siren stops.",
+    "Õhtul tunneb eeskoja suitsuandur suitsu.": (
+        "In the evening the hall smoke detector senses smoke."
+    ),
+    "Eeskoja suitsuandur tunneb suitsu.": "The hall smoke detector senses smoke.",
+    "Suitsuandurite tsoon läheb valvepaneelis tööle.": (
+        "The smoke detector zone goes off on the alarm panel."
+    ),
+    "Telefonidesse tuleb kriitiline teavitus koos maja ja garaaži valve olekuga.": (
+        "A critical notification reaches the phones, with the alarm state of the house and "
+        "the garage."
+    ),
+    "Keegi läheb eeskotta vaatama.": "Someone goes to the hall to look.",
+    "Suitsu enam pole ja andurid on jälle korras.": (
+        "The smoke is gone and the detectors are clear again."
+    ),
+    "Vihm": "Rain",
+    "Pergola on lahti, kui hakkab sadama.": "The pergola is open when it starts to rain.",
+    "Pergola on lahti ja katuse automaatika on sees.": (
+        "The pergola is open and the roof automation is on."
+    ),
+    "Hakkab sadama, 1,2 mm tunnis.": "It starts to rain, 1.2 mm an hour.",
+    "Katus sulgub.": "The roof closes.",
+    "Telefoni tuleb teavitus, et sajab ja katus suleti.": (
+        "A notification reaches the phone: it is raining and the roof was closed."
+    ),
+    "Teavituse aeg jääb meelde, et järgmine tuleks alles vaikuse järel.": (
+        "The notification's time is kept, so the next one waits out the quiet time."
+    ),
+    "Loojang": "Sunset",
+    "Pool tundi enne loojangut süttivad pergola tuled õhtuse tooniga.": (
+        "Half an hour before sunset the pergola lights come on in the evening tone."
+    ),
+    "Kell on 14.55, päike loojub kell 15.54. Pergola tuled on külma valge tooniga.": (
+        "It is 14:55 and the sun sets at 15:54. The pergola lights are cool white."
+    ),
+    "Kell on 15.10.": "It is 15:10.",
+    "Kell on 15.25, loojanguni on vähem kui pool tundi.": (
+        "It is 15:25, less than half an hour to sunset."
+    ),
+    "Tuled saavad õhtuse tooni.": "The lights take the evening tone.",
+    "Pergola tuled süttivad seatud heledusega.": "The pergola lights come on at the set brightness.",
+    "Kell on 15.40.": "It is 15:40.",
+    "Kell on 15.54, päike loojub.": "It is 15:54, the sun sets.",
+    "Kell on 16.10, taevas tumeneb ja pergola tuled paistavad.": (
+        "It is 16:10, the sky darkens and the pergola lights show."
+    ),
+    "Pergola: vihm sulgeb katuse": "Pergola: rain closes the roof",
+    "Pergola: valgustus loojangul": "Pergola: lights at sunset",
+    "Valve: häire": "Alarm: triggered",
+    "Valve: tulekahju": "Alarm: fire",
 }
 
 WORDS = {

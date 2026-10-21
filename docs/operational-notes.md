@@ -434,7 +434,12 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   Its bars and views start below `--host-h`, 0 here, where khe-sites puts the
   khe.ee site header. Every `demo/` file and the
   generated JSON are versioned by one hash (`__DEMO_VERSION__`), the card and
-  engine by `HOUSE3D_VERSION`. The generator names the real house's devices,
+  engine by `HOUSE3D_VERSION`. The toolbar's scenarios (`scenarios.json` from
+  `scripts/dashboard_scenarios.py`, played by `demo/scenario.js`) reset the
+  simulated hass to their start and apply their steps on time; a 3D one shows
+  the card's real style at a fixed November instant through the card's
+  `setScene()`, which stores nothing, and `clearScene()` returns to the
+  visitor's own style and live time. The generator names the real house's devices,
   so `check.sh` scans the whole demo build and the test house with the real
   model when it is at hand.
 - **Tests:** `scripts/house3d-test.sh` runs the model and build tests
@@ -445,7 +450,9 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   style's materials and shadow flags, the scene import rule), the demo
   dashboard's tests (`tests/house3d/demo.test.mjs`: every card type, feature
   and icon drawn, every perform-action through the simulation, visibility
-  conditions, no fixture name in `demo/`) and a syntax
+  conditions, no fixture name in `demo/`), the scenario player's tests
+  (`tests/house3d/scenario.test.mjs`: every built scenario plays to its end in
+  both languages, the scene times' sun) and a syntax
   check of every engine module, all on a made-up house,
   `tests/house3d/fixture-model.md`. `scripts/check.sh` runs it, so CI and
   the workspace commit gate do too. A deliberate change to the simple

@@ -85,7 +85,15 @@ export const STRINGS = {
     about: 'See on väljamõeldud maja Home Assistanti töölaual. Seadmete olekud on simuleeritud ja lähtestuvad, kui lehe uuesti laadid; päris majas tulevad need Home Assistantist.',
     source: 'Lähtekood GitHubis',
     cancel: 'Loobu',
-    confirm: 'Kinnita'
+    confirm: 'Kinnita',
+    // the scenarios
+    scenarios: 'Stsenaariumid',
+    scenariosIntro: 'Vali lugu ja vaata, mida maja teeb. Automaatikana on märgitud ainult see, mida teeb ka päris maja automaatika.',
+    scenario: 'Stsenaarium',
+    automation: 'Automaatika',
+    stopScene: 'Lõpeta',
+    restart: 'Algusesse',
+    closeScene: 'Sulge'
   },
   en: {
     state: {
@@ -162,7 +170,14 @@ export const STRINGS = {
     about: 'This is a made-up house on a Home Assistant dashboard. The device states are simulated and start over when you reload the page; in the real house they come from Home Assistant.',
     source: 'Source code on GitHub',
     cancel: 'Cancel',
-    confirm: 'Confirm'
+    confirm: 'Confirm',
+    scenarios: 'Scenarios',
+    scenariosIntro: 'Pick a story and see what the house does. Only what the real house’s automations also do is marked as automation.',
+    scenario: 'Scenario',
+    automation: 'Automation',
+    stopScene: 'Stop',
+    restart: 'Back to start',
+    closeScene: 'Close'
   }
 };
 

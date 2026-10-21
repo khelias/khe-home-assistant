@@ -101,6 +101,8 @@ const P = {
   'chevron-down': '<path d="m6 9 6 6 6-6"/>',
   plus: '<path d="M6 12h12M12 6v12"/>',
   minus: '<path d="M6 12h12"/>',
+  'playlist-play': '<path d="M3 6h14M3 11h14M3 16h7"/><path d="m14 14.5 6 3.5-6 3.5z"/>',
+  robot: '<rect x="5" y="8" width="14" height="11" rx="2"/><path d="M12 4.5V8M9.5 12.5v1M14.5 12.5v1M9.5 16h5M3 12.5v3M21 12.5v3"/><circle cx="12" cy="3.5" r="1"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7M12 16.5v.01"/>'
 };
 

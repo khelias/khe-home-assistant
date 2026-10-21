@@ -7,18 +7,72 @@ const TOGGLES = new Set(['light', 'switch', 'fan', 'input_boolean', 'cover', 'me
 
 export const canToggle = entity => TOGGLES.has(domainOf(entity));
 
+const clamp = (st, v) => {
+  const a = st.attributes, step = a.step || 1;
+  const n = Math.round(Math.min(a.max ?? Infinity, Math.max(a.min ?? -Infinity, v)) / step) * step;
+  return String(Number(n.toFixed(4)));
+};
+
+// the services the dashboard, the dialogs and the scenarios use, each acting on one entity through
+// the sim's own set, toggle and cover; anything else is an error, as HA's would be
+const TURN = {
+  toggle: ({ e, toggle }) => toggle(e),
+  turn_on: ({ e, st, d, data, set, toggle }) => {
+    if (d === 'light' && data.brightness_pct !== undefined) set(e, 'on', { brightness: Math.round(data.brightness_pct * 2.55) });
+    else if (d === 'fan' && data.percentage !== undefined) set(e, 'on', { percentage: data.percentage });
+    else if (st.state === 'off' || st.state === 'idle') toggle(e);
+  },
+  turn_off: ({ e, st, set }) => { if (st.state !== 'off') set(e, 'off'); }
+};
+const option = ({ e, st, data, set }) => {
+  if (!(st.attributes.options || []).includes(data.option)) throw new Error(`${e}: no option ${data.option}`);
+  set(e, data.option);
+};
+const value = ({ e, st, data, set }) => set(e, clamp(st, Number(data.value)));
+const temperature = ({ e, st, data, set }) => set(e, st.state, { temperature: Math.min(st.attributes.max_temp, Math.max(st.attributes.min_temp, Number(data.temperature))) });
+const to = state => ({ e, set }) => set(e, state);
+const HANDLERS = {
+  ...Object.fromEntries(['homeassistant', ...[...TOGGLES].filter(d => d !== 'script')].flatMap(d => Object.entries(TURN).map(([s, fn]) => [`${d}.${s}`, fn]))),
+  'fan.set_percentage': ({ e, data, set }) => set(e, data.percentage > 0 ? 'on' : 'off', { percentage: data.percentage }),
+  'cover.open_cover': ({ e, cover }) => cover(e, 'open'),
+  'cover.close_cover': ({ e, cover }) => cover(e, 'close'),
+  'cover.stop_cover': ({ e, cover }) => cover(e, 'stop'),
+  'select.select_option': option,
+  'input_select.select_option': option,
+  'number.set_value': value,
+  'input_number.set_value': value,
+  'input_datetime.set_datetime': ({ e, data, set }) => set(e, data.datetime),
+  'water_heater.set_operation_mode': ({ e, data, set }) => set(e, data.operation_mode),
+  'water_heater.set_temperature': temperature,
+  'climate.set_temperature': temperature,
+  'climate.set_hvac_mode': ({ e, data, set }) => set(e, data.hvac_mode),
+  'alarm_control_panel.alarm_arm_away': to('armed_away'),
+  'alarm_control_panel.alarm_arm_home': to('armed_home'),
+  'alarm_control_panel.alarm_arm_night': to('armed_night'),
+  'alarm_control_panel.alarm_disarm': to('disarmed'),
+  'alarm_control_panel.alarm_trigger': to('triggered'),
+  'button.press': ({ e, set, iso }) => set(e, iso()),
+  'update.install': ({ e, st, set }) => set(e, 'off', { installed_version: st.attributes.latest_version }),
+  'device_tracker.see': ({ e, data, set }) => set(e, data.location_name, data.attributes || {})
+};
+
+// every domain.service callService accepts; a script runs by any name
+export const SERVICES = new Set(Object.keys(HANDLERS));
+
 // data: { states: { entity: { state, attributes, ago? } }, mirrors: { target: { from, map } } }
 export function createSim(data, { now = () => new Date(), schedule = setTimeout, cancel = clearTimeout } = {}) {
   const iso = (d = now()) => d.toISOString();
-  const states = {};
-  for (const [e, s] of Object.entries(data.states || {})) {
+  // the starting states, each override's state, attributes and ago laid over its entity's
+  const initial = (start = {}) => Object.fromEntries(Object.entries(data.states || {}).map(([e, s0]) => {
+    const o = start[e] || {};
+    const s = { ...s0, ...o, attributes: { ...s0.attributes, ...o.attributes } };
     const at = iso(new Date(now().getTime() - (s.ago || 0) * 60000));
-    states[e] = { entity_id: e, state: s.state, attributes: { ...s.attributes }, last_changed: at, last_updated: at };
-  }
+    return [e, { entity_id: e, state: s.state, attributes: s.attributes, last_changed: at, last_updated: at }];
+  }));
   const mirrors = data.mirrors || {};
   const listeners = new Set();
   const timers = new Map();
-  const api = { states, set, callService, toggle, subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn); } };
+  const api = { states: initial(), set, callService, toggle, reset, pulse, subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn); } };
 
   // HA-shaped: a change makes a new state object and a new states map, so cards compare by
   // identity; last_changed moves only when the state does
@@ -38,6 +92,21 @@ export function createSim(data, { now = () => new Date(), schedule = setTimeout,
   function later(entity, ms, fn) {
     cancel(timers.get(entity));
     timers.set(entity, schedule(fn, ms));
+  }
+
+  // back to the starting states with start's overrides; a cover or script still moving and a
+  // pending pulse stop where they are
+  function reset(start = {}) {
+    timers.forEach(id => cancel(id));
+    timers.clear();
+    api.states = initial(start);
+    listeners.forEach(fn => fn(api.states));
+  }
+
+  // a motion sensor sees something for ms
+  function pulse(e, ms) {
+    set(e, 'on');
+    later(e, ms, () => set(e, 'off'));
   }
 
   function cover(e, what) {
@@ -66,13 +135,6 @@ export function createSim(data, { now = () => new Date(), schedule = setTimeout,
     return set(e, on ? 'on' : 'off');
   }
 
-  const clamp = (st, v) => {
-    const a = st.attributes, step = a.step || 1;
-    const n = Math.round(Math.min(a.max ?? Infinity, Math.max(a.min ?? -Infinity, v)) / step) * step;
-    return String(Number(n.toFixed(4)));
-  };
-
-  // the services the dashboard and the dialogs use; anything else is an error, as HA's would be
   function callService(domain, service, data = {}, target = {}) {
     let ids = target.entity_id ?? data.entity_id ?? [];
     ids = Array.isArray(ids) ? ids : [ids];
@@ -83,44 +145,15 @@ export function createSim(data, { now = () => new Date(), schedule = setTimeout,
       later(e, 1500, () => set(e, 'off'));
       return;
     }
+    const handler = HANDLERS[`${domain}.${service}`];
+    if (!handler) throw new Error(`no service ${domain}.${service}`);
     for (const e of ids) {
       const st = api.states[e];
       if (!st) throw new Error(`no entity ${e}`);
       const d = domainOf(e);
-      switch (`${domain}.${service}`) {
-        case 'homeassistant.toggle': case `${d}.toggle`: toggle(e); break;
-        case 'homeassistant.turn_on': case `${d}.turn_on`:
-          if (d === 'light' && data.brightness_pct !== undefined) set(e, 'on', { brightness: Math.round(data.brightness_pct * 2.55) });
-          else if (d === 'fan' && data.percentage !== undefined) set(e, 'on', { percentage: data.percentage });
-          else if (st.state === 'off' || st.state === 'idle') toggle(e);
-          break;
-        case 'homeassistant.turn_off': case `${d}.turn_off`:
-          if (st.state !== 'off') set(e, 'off');
-          break;
-        case 'fan.set_percentage': set(e, data.percentage > 0 ? 'on' : 'off', { percentage: data.percentage }); break;
-        case 'cover.open_cover': cover(e, 'open'); break;
-        case 'cover.close_cover': cover(e, 'close'); break;
-        case 'cover.stop_cover': cover(e, 'stop'); break;
-        case 'select.select_option': case 'input_select.select_option':
-          if (!(st.attributes.options || []).includes(data.option)) throw new Error(`${e}: no option ${data.option}`);
-          set(e, data.option);
-          break;
-        case 'number.set_value': case 'input_number.set_value': set(e, clamp(st, Number(data.value))); break;
-        case 'water_heater.set_operation_mode': set(e, data.operation_mode); break;
-        case 'water_heater.set_temperature': case 'climate.set_temperature':
-          set(e, st.state, { temperature: Math.min(st.attributes.max_temp, Math.max(st.attributes.min_temp, Number(data.temperature))) });
-          break;
-        case 'climate.set_hvac_mode': set(e, data.hvac_mode); break;
-        case 'alarm_control_panel.alarm_arm_away': set(e, 'armed_away'); break;
-        case 'alarm_control_panel.alarm_arm_home': set(e, 'armed_home'); break;
-        case 'alarm_control_panel.alarm_arm_night': set(e, 'armed_night'); break;
-        case 'alarm_control_panel.alarm_disarm': set(e, 'disarmed'); break;
-        case 'alarm_control_panel.alarm_trigger': set(e, 'triggered'); break;
-        case 'button.press': set(e, iso()); break;
-        case 'update.install': set(e, 'off', { installed_version: st.attributes.latest_version }); break;
-        case 'device_tracker.see': set(e, data.location_name, data.attributes || {}); break;
-        default: throw new Error(`no service ${domain}.${service}`);
-      }
+      // a domain's own toggle or turn_on reaches only that domain's entities
+      if (domain !== 'homeassistant' && service in TURN && domain !== d) throw new Error(`no service ${domain}.${service} for ${e}`);
+      handler({ e, st, d, data, set, toggle, cover, iso });
     }
   }
 

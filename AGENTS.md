@@ -35,7 +35,8 @@ demo/              the public demo: the real dashboard's views on made-up
                    data, 3D first, on a simulated hass (sim.js); the sections
                    view and its cards in cards.js, charts.js, icons.js, the
                    page in demo.js and index.html, its UI strings in both
-                   languages in strings.js; not deployed to HA
+                   languages in strings.js, its scenarios' player in
+                   scenario.js; not deployed to HA
 docs/              operational notes and the README screenshot
   decisions/       ADRs: NNN-slug.md, numbered from 001
 house3d/           3D house view: engine (core house3d.js, scene/ layer
@@ -45,7 +46,8 @@ scripts/           dashboard_config.py (the HA Overview as data, no I/O),
                    ha-dashboard.py (reads the private inputs, saves it),
                    dashboard_demo.py (the demo's made-up entities, texts and
                    series for the same config), dashboard_demo_en.py (its
-                   English, ADR-003),
+                   English, ADR-003), dashboard_scenarios.py (the demo's
+                   scenarios),
                    ha-ws.py (HA WebSocket commands from the CLI),
                    house3d-* and house3d_model.py (3D view build, vendoring,
                    device and tree placement, ETAK surroundings, model),
@@ -53,9 +55,10 @@ scripts/           dashboard_config.py (the HA Overview as data, no I/O),
                    pv-sim.py (rooftop PV, battery and EV simulation against
                    the Estfeed hourly load), check.sh, install-hooks.sh
 tests/house3d/     3D view tests on a made-up fixture house: model and build
-                   (Python unittest), engine, simple-style snapshot and demo
-                   dashboard (node:test)
-tests/dashboard/   dashboard config and demo catalogue tests (Python unittest)
+                   (Python unittest), engine, simple-style snapshot, demo
+                   dashboard and scenario player (node:test)
+tests/dashboard/   dashboard config, demo catalogue and scenario tests
+                   (Python unittest)
 tests/cards/       the dashboard cards' pure helpers (node:test)
 ```
 
@@ -97,7 +100,8 @@ tests/cards/       the dashboard cards' pure helpers (node:test)
    `house/house-model.md`. Run `scripts/house3d-build.py --scan <model>
    house3d/` with the real model before every commit that touches
    `house3d/`, and before publishing anything built from the model.
-   `check.sh` scans `house3d/`, `cards/`, `demo/`, `scripts/dashboard_demo.py`, the
+   `check.sh` scans `house3d/`, `cards/`, `demo/`, `scripts/dashboard_demo.py`,
+   its English and `scripts/dashboard_scenarios.py`, the
    test house and the whole fresh demo build with `--count` whenever the
    model is at hand (the main checkout's khe-meta or `HOUSE3D_MODEL`), so the
    commit gate covers the demo; CI has no model. What the test house may
@@ -179,6 +183,13 @@ the operator first; an approval covers that task only.
   too, so a new visible string needs its English line in
   `scripts/dashboard_demo_en.py` (`EN`, a state word in `WORDS`, a sample
   text in `TEXTS_EN`); the demo build's `KeyError` names it.
+- **A demo scenario labels a step as an automation only for what a real
+  automation does.** `scripts/dashboard_scenarios.py` may tell any story with
+  the demo's devices, but a step that carries an alias touches only entities
+  that automation's `actions:` in `config/packages/` name, and a step with no
+  action follows one that set its trigger; `tests/dashboard/test_dashboard_scenarios.py`
+  enforces it, so a renamed alias or changed actions fail it too. A new
+  caption needs its English in `dashboard_demo_en.EN`.
 - **A redesigned view uses the repo's own cards**
   ([ADR-002](docs/decisions/002-own-dashboard-cards.md)), `cards/khe-cards.js`;
   no view does today, Kodu went back to stock cards on 2026-10-18. A change

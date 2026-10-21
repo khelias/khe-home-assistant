@@ -16,9 +16,10 @@ The demo build reads only the made-up test house (tests/house3d/fixture-model.md
 model argument or HOUSE3D_MODEL, and writes every .html, .js, .css and .svg of demo/, the HA
 card, the engine, the dashboard cards (cards/khe-cards.js), model.json with every layer the card
 gets in HA, and the dashboard: the real generator's views on made-up data
-(scripts/dashboard_demo.py) as dashboard.json, their starting states as states.json and their
-chart data as series.json, and the same in English with the test house's model as
-dashboard.en.json, states.en.json, series.en.json and model.en.json. In the demo's files __HOUSE3D_VERSION__ becomes the card's version,
+(scripts/dashboard_demo.py) as dashboard.json, their starting states as states.json, their
+chart data as series.json and the scenarios a visitor plays (scripts/dashboard_scenarios.py) as
+scenarios.json, and the same in English with the test house's model as dashboard.en.json,
+states.en.json, series.en.json, scenarios.en.json and model.en.json. In the demo's files __HOUSE3D_VERSION__ becomes the card's version,
 __KHE_CARDS_VERSION__ the dashboard cards' version and __DEMO_VERSION__ a hash of the demo's
 files, the generated JSON files and those two versions. khe-sites publishes it at khe.ee/house3d/. The fixture is
 public; the dashboard comes from the generator, which names the real house's devices, so
@@ -53,6 +54,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dashboard_demo
+import dashboard_scenarios
 import house3d_model
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -254,8 +256,8 @@ def demo_model():
 
 
 def demo_data(model):
-    """The demo dashboard's generated files, name -> text: the config, states and series, and
-    the same in English with the test house's model (ADR-003)."""
+    """The demo dashboard's generated files, name -> text: the config, states, series and
+    scenarios, and the same in English with the test house's model (ADR-003)."""
     dump = lambda o: json.dumps(o, ensure_ascii=False, separators=(",", ":"))
     return {
         "dashboard.json": dump(dashboard_demo.demo_config(model)),
@@ -265,6 +267,8 @@ def demo_data(model):
         "states.en.json": dump(dashboard_demo.demo_states_en(model)),
         "series.en.json": dump(dashboard_demo.demo_series_en()),
         "model.en.json": dump(dashboard_demo.demo_model_en(model)),
+        "scenarios.json": dump(dashboard_scenarios.demo_scenarios(model)),
+        "scenarios.en.json": dump(dashboard_scenarios.demo_scenarios_en(model)),
     }
 
 
