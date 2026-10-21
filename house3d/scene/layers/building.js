@@ -6,14 +6,15 @@
 // with a room's markers in state 'on'. The real style draws them as lit surfaces: exterior walls
 // boarded outside and plain inside, interior walls plain with white doors and frames, framed
 // openings (a door with finish 'cladding' gets a leaf of plain cladding), floors in the room's
-// finish (oak planks, the wet rooms' tiles, the carport's paving stones, all on world (x, z))
-// that tint from their own colour, and the lift on materials of its own, so its fade never
-// reaches the lower walls. Its exterior walls also carry anthracite opening trims with lined
-// reveals and sill flashings, and corner boards on every outer and inner corner; the roofs have
-// an anthracite edge, the carport roof an anthracite fascia and soffit. At night
-// (ctx.state.night) a room with a light on, or with a marker carrying glow (recent motion),
-// glows: its floor and its windows, each pane tagged with its room at build, take a warm
-// emissive scaled by the light's level or the glow; there are no real-time lights.
+// finish (oak planks, the wet rooms' tiles, the carport's paving stones, all on world (x, z)) that
+// tint from their own colour, a house room's floor reaching the faces of the walls it runs along,
+// and the lift on materials of its own, so its fade never reaches the lower walls. Its exterior
+// walls also carry anthracite opening trims with lined reveals and sill flashings, and corner
+// boards on every outer and inner corner; the roofs have an anthracite edge, the carport roof an
+// anthracite fascia and soffit. At night (ctx.state.night) a room with a light on, or with a marker
+// carrying glow (recent motion), glows: its floor and its windows, each pane tagged with its room
+// at build, take a warm emissive scaled by the light's level or the glow; there are no real-time
+// lights.
 const FRAME = 0.06, FRAME_D = 0.1; // real style: an opening's frame width and depth
 const BASE_H = 0.12; // real style: the dark strip along an exterior wall's foot
 // real style, read off photos: an opening's trim and a corner board, both standing PROUD off the
@@ -22,6 +23,8 @@ const TRIM = 0.1, CORNER = 0.12, PROUD = 0.025, REVEAL = 0.015;
 const FLASH_T = 0.03, FLASH_OUT = 0.06, FLASH_PAST = 0.03;
 // a glass door narrower than this is one leaf, without the centre mullion
 const MULLION_MIN = 1.2;
+// real style: the farthest a house room's floor edge moves out to meet the wall face it runs along
+const SNAP = 0.2;
 // real style at night: the warm glow of a lit room's floor and windows, and how opaque a lit pane gets
 const GLOW = '#ffb45a', FLOOR_GLOW = 0.55, GLASS_GLOW = 1.4, LIT_GLASS = 0.8;
 
@@ -373,15 +376,46 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     });
   });
 
+  // real style: the axis-aligned walls as [axis, centre, half thickness, lo, hi], for a wall along
+  // x = centre (axis 0) or z = centre (axis 1) spanning lo..hi on the other axis. A house room's
+  // rect edge in front of one it runs along, up to SNAP short of its near face, moves out to that
+  // face, since rooms are drawn to centrelines and drawings round, and the ground would show
+  // between the floor and the wall; an edge already under a wall stays, and so does one whose
+  // strip would cover another room's rect (an open plan beside a short wall)
+  const wallLines = (model.walls || []).filter(w => w.finish !== 'panel').flatMap(w => {
+    const axis = Math.abs(w.a[0] - w.b[0]) < 1e-6 ? 0 : Math.abs(w.a[1] - w.b[1]) < 1e-6 ? 1 : -1, o = 1 - axis;
+    return axis < 0 ? [] : [[axis, w.a[axis], w.t / 2, Math.min(w.a[o], w.b[o]), Math.max(w.a[o], w.b[o])]];
+  });
+  const houseRects = rooms.filter(r => r.floor !== 'paving').flatMap(r => r.rects);
+  const overlaps = ([a0, b0, a1, b1]) => houseRects.some(([x0, z0, x1, z1]) => Math.min(a1, x1) - Math.max(a0, x0) > 1e-6 && Math.min(b1, z1) - Math.max(b0, z0) > 1e-6);
+  function snapRect(rect) {
+    // each edge: its axis, its index in the rect and which way is out
+    return [[0, 0, -1], [1, 1, -1], [0, 2, 1], [1, 3, 1]].reduce((out, [axis, k, dir]) => {
+      const [lo, hi] = axis === 0 ? [rect[1], rect[3]] : [rect[0], rect[2]];
+      let gap = Infinity;
+      wallLines.forEach(([wa, c, h, wlo, whi]) => {
+        const d = (c - rect[k]) * dir - h;
+        if (wa === axis && d > 0.001 && d <= SNAP && d < gap && Math.min(hi, whi) - Math.max(lo, wlo) > 0.01) gap = d;
+      });
+      if (gap === Infinity) return out;
+      const to = rect[k] + dir * gap, strip = [...rect];
+      strip[k] = to;
+      strip[k ^ 2] = rect[k];
+      if (!overlaps(strip)) out[k] = to;
+      return out;
+    }, [...rect]);
+  }
+
   // a room can be several rectangles
   const floorMeshes = [];
   rooms.forEach(r => {
-    r.rects.forEach(([x0, z0, x1, z1]) => {
+    r.rects.map(rc => (real && r.floor !== 'paving' ? snapRect(rc) : rc)).forEach(([x0, z0, x1, z1]) => {
       const stones = real && r.floor === 'paving';
       const map = !real ? null : stones ? kit.pavers() : r.floor === 'tile' ? kit.tiles() : kit.planks();
       // the night glow lights the planks, tiles or stones, not a flat sheet over them
       const mat = real ? kit.surface(r.floor || 'floor', { map, emissiveMap: map }) : basic({ color: C.floor.clone(), opacity: 0.85, side: THREE.DoubleSide });
-      const inset = 0.05, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      // the real style's floors run to the rect's edge, so a room in several rects is one floor
+      const inset = real ? 0 : 0.05, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
       const geo = new THREE.PlaneGeometry(x1 - x0 - inset * 2, z1 - z0 - inset * 2);
       // stones, planks and tiles on world (x, z), so they run on across rooms and from the paving
       // round the carport; the plane's y turns to -z

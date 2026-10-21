@@ -414,6 +414,42 @@ test('real style: every house room floor carries planks or tiles by its floor, o
   assert.ok(house.some(f => f.material.map === ctx.kit.tiles()) && house.some(f => f.material.map === ctx.kit.planks()));
 });
 
+test('real style: a house room\'s floor meets every wall face it lies along, without a gap', () => {
+  const { byId } = buildAll({ ...options, style: 'real' });
+  const floors = byId.building.group.children.filter(o => o.userData.room && o.userData.room !== 'carport').map(f => {
+    const { width: w, height: h } = f.geometry.parameters;
+    return [f.position.x - w / 2, f.position.z - h / 2, f.position.x + w / 2, f.position.z + h / 2];
+  });
+  const onFloor = (x, z) => floors.some(([x0, z0, x1, z1]) => x >= x0 - 1e-4 && x <= x1 + 1e-4 && z >= z0 - 1e-4 && z <= z1 + 1e-4);
+  // along each face with a house room 0.3 m in front, the floor reaches to within 1 cm of the face;
+  // the test house's study stops 13 cm short of its inner wall
+  let probed = 0;
+  model.walls.filter(w => w.finish !== 'panel').forEach((w, i) => {
+    const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), u = [(w.b[0] - w.a[0]) / L, (w.b[1] - w.a[1]) / L];
+    [1, -1].forEach(s => {
+      for (let k = 1; k < L * 10; k++) {
+        const at = o => [w.a[0] + u[0] * k / 10 - u[1] * s * (w.t / 2 + o), w.a[1] + u[1] * k / 10 + u[0] * s * (w.t / 2 + o)];
+        const [px, pz] = at(0.3);
+        if (!inHouseRoom([px, 0, pz])) continue;
+        probed++;
+        assert.ok(onFloor(...at(0.01)), `wall ${i}: floor at the face`);
+      }
+    });
+  });
+  assert.ok(probed > 200);
+  // and no further: no two floors overlap, under a wall or in a doorway
+  floors.forEach((p, i) => floors.slice(i + 1).forEach(q => {
+    const w = Math.min(p[2], q[2]) - Math.max(p[0], q[0]), h = Math.min(p[3], q[3]) - Math.max(p[1], q[1]);
+    assert.ok(w < 1e-4 || h < 1e-4, `floors [${p}] and [${q}] overlap`);
+  }));
+  // a short wall 1 cm past the kitchen-living room's inner seam does not pull one rect over the other
+  const m = structuredClone(model);
+  m.walls.push({ a: [31.085, 16.2], b: [31.085, 17.2], t: 0.15, top: 2.7 });
+  const { ctx } = makeCtx({ ...options, style: 'real' }, m);
+  const seam = BUILDERS[LAYERS.indexOf('building')].default(ctx).group.children.filter(o => o.userData.room === 'r1');
+  assert.ok(Math.abs(Math.min(...seam.map(f => f.position.x + f.geometry.parameters.width / 2)) - 31) < 1e-9);
+});
+
 test('real style: the building draws no furniture, the interior layer does', () => {
   const { byId } = buildAll({ ...options, style: 'real' });
   // its own meshes are the floors; walls, frames and corners sit in wall groups
@@ -827,7 +863,8 @@ test('real style: paving and the carport floor carry the stones on world (x, z)'
   const pos = floor.geometry.attributes.position, uv = floor.geometry.attributes.uv, v = new THREE.Vector3();
   for (let k = 0; k < pos.count; k++) {
     v.fromBufferAttribute(pos, k).applyMatrix4(floor.matrixWorld);
-    assert.ok(Math.abs(uv.getX(k) - v.x) < 1e-6 && Math.abs(uv.getY(k) - v.z) < 1e-6, 'carport floor uv is world (x, z)');
+    // float32 attributes: a few 1e-6 at 37 m
+    assert.ok(Math.abs(uv.getX(k) - v.x) < 1e-4 && Math.abs(uv.getY(k) - v.z) < 1e-4, 'carport floor uv is world (x, z)');
   }
 });
 
