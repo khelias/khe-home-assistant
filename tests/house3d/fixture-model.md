@@ -106,14 +106,14 @@ model, never this file.
   { "a": [33.4, -2.8], "b": [33.4, -0.6], "t": 0.04, "top": 2.5, "finish": "panel" }
  ],
  "furniture": [
-  { "what": "kitchen counter", "rect": [36.15, 16.4, 36.75, 21.6], "y": [0, 0.9] },
-  { "what": "kitchen island", "rect": [33.8, 17.6, 34.8, 20], "y": [0, 0.9] },
-  { "what": "dining table", "circle": [32.2, 19.2, 0.6], "y": [0, 0.75] },
-  { "what": "sofa", "rect": [27.2, 20.7, 30, 21.6], "y": [0, 0.8] },
-  { "what": "bed", "rect": [34.9, 12, 36.7, 14], "y": [0, 0.5] },
-  { "what": "child's bed", "rect": [22.4, 2.4, 24.4, 3.3], "y": [0, 0.45] },
-  { "what": "desk", "rect": [29.6, 2.35, 30.75, 3], "y": [0, 0.75] },
-  { "what": "wardrobe", "rect": [31.25, 5, 31.85, 6.4], "y": [0, 2.1] },
+  { "what": "kitchen counter", "kind": "counter", "rect": [36.15, 16.4, 36.75, 21.6], "y": [0, 0.9] },
+  { "what": "kitchen island", "kind": "counter", "rect": [33.8, 17.6, 34.8, 20], "y": [0, 0.9] },
+  { "what": "dining table", "kind": "table", "circle": [32.2, 19.2, 0.6], "y": [0, 0.75] },
+  { "what": "sofa", "kind": "sofa", "rect": [27.2, 20.7, 30, 21.6], "y": [0, 0.8] },
+  { "what": "bed", "kind": "bed", "rect": [34.9, 12, 36.7, 14], "y": [0, 0.5] },
+  { "what": "child's bed", "kind": "bed", "rect": [22.4, 2.4, 24.4, 3.3], "y": [0, 0.45] },
+  { "what": "desk", "kind": "desk", "rect": [29.6, 2.35, 30.75, 3], "y": [0, 0.75] },
+  { "what": "wardrobe", "kind": "wardrobe", "rect": [31.25, 5, 31.85, 6.4], "y": [0, 2.1] },
   { "what": "bench", "rect": [31.3, 13.6, 31.75, 15.4], "y": [0, 0.45] }
  ],
  "site": {

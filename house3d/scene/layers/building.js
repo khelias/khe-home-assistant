@@ -1,17 +1,19 @@
-// The buildings: walls, room floors, furniture, roofs and roof steps, and the garage roof.
+// The buildings: walls, room floors, the simple style's furniture, roofs and roof steps, and the
+// garage roof. The real style's furniture, skirting and the walls' cut tops are the interior
+// layer's, which reads inRoom and cutOf through this layer's api.
 // Walls that run up to a roof are cut at the ceiling, and the part above goes in lift with the
 // roofs, which rises and fades with the roof mode. The floors are the room tap targets and warm
 // with a room's markers in state 'on'. The real style draws them as lit surfaces: exterior walls
 // boarded outside and plain inside, interior walls plain with white doors and frames, framed
 // openings (a door with finish 'cladding' gets a leaf of plain cladding), floors in the room's
-// finish that tint from their own colour, and the lift on materials of its own, so its fade never
+// finish (oak planks, the wet rooms' tiles, the carport's paving stones, all on world (x, z))
+// that tint from their own colour, and the lift on materials of its own, so its fade never
 // reaches the lower walls. Its exterior walls also carry anthracite opening trims with lined
-// reveals and sill flashings, and corner boards on every outer and inner corner; the roofs have an
-// anthracite edge, the carport roof an anthracite fascia and soffit. A paved room's floor (the
-// carport) carries the paving's stones. At night (ctx.state.night) a room with a light on, or
-// with a marker carrying glow (recent motion), glows: its floor and its windows, each pane tagged
-// with its room at build, take a warm emissive scaled by the light's level or the glow; there are
-// no real-time lights.
+// reveals and sill flashings, and corner boards on every outer and inner corner; the roofs have
+// an anthracite edge, the carport roof an anthracite fascia and soffit. At night
+// (ctx.state.night) a room with a light on, or with a marker carrying glow (recent motion),
+// glows: its floor and its windows, each pane tagged with its room at build, take a warm
+// emissive scaled by the light's level or the glow; there are no real-time lights.
 const FRAME = 0.06, FRAME_D = 0.1; // real style: an opening's frame width and depth
 const BASE_H = 0.12; // real style: the dark strip along an exterior wall's foot
 // real style, read off photos: an opening's trim and a corner board, both standing PROUD off the
@@ -94,7 +96,6 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     const frame = kit.surface('frame'), panel = kit.surface('frame', two), door = kit.surface('door');
     cladLeaf = kit.surface('cladding');
     const boarded = { ...clad(two), inner };
-    mH = { furn: kit.surface('interior') };
     // the lift's inner faces are never seen, so they keep the cladding's colour without boards
     const lifted = clad(fades);
     mR = { boarded: { ...lifted, inner: lifted.edge }, roof: kit.surface('roof', fades), panel: kit.surface('frame', fades), frame: kit.surface('frame', fades) };
@@ -176,11 +177,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     // reaches the ground, and meets the opening's trims
     const pad = trims ? TRIM : 0, [lo, hi] = w.strip || [0, L];
     const gaps = ops.filter(o => (o.sill || 0) < BASE_H).map(o => [o.c - o.w / 2 - pad, o.c + o.w / 2 + pad]).sort((p, q) => p[0] - q[0]);
-    let from = lo;
-    [...gaps, [hi, hi]].forEach(([a, b]) => {
-      if (a - from > 0.01) bar(from, a, 0, BASE_H, d).position.z = zc;
-      from = Math.max(from, b);
-    });
+    kit.spans(lo, hi, gaps, 0.01).forEach(([a, b]) => { bar(a, b, 0, BASE_H, d).position.z = zc; });
   }
 
   // the room a pane at c along wall w looks into: a point just inside the wall from the pane's
@@ -381,12 +378,14 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   rooms.forEach(r => {
     r.rects.forEach(([x0, z0, x1, z1]) => {
       const stones = real && r.floor === 'paving';
-      const mat = real ? kit.surface(r.floor || 'floor', stones ? { map: kit.pavers() } : {}) : basic({ color: C.floor.clone(), opacity: 0.85, side: THREE.DoubleSide });
+      const map = !real ? null : stones ? kit.pavers() : r.floor === 'tile' ? kit.tiles() : kit.planks();
+      // the night glow lights the planks, tiles or stones, not a flat sheet over them
+      const mat = real ? kit.surface(r.floor || 'floor', { map, emissiveMap: map }) : basic({ color: C.floor.clone(), opacity: 0.85, side: THREE.DoubleSide });
       const inset = 0.05, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
       const geo = new THREE.PlaneGeometry(x1 - x0 - inset * 2, z1 - z0 - inset * 2);
-      // paving stones on world (x, z), so they run on from the paving round the room; the plane's
-      // y turns to -z
-      if (stones) {
+      // stones, planks and tiles on world (x, z), so they run on across rooms and from the paving
+      // round the carport; the plane's y turns to -z
+      if (real) {
         const pos = geo.attributes.position, uv = geo.attributes.uv;
         for (let k = 0; k < pos.count; k++) uv.setXY(k, cx + pos.getX(k), cz - pos.getY(k));
       }
@@ -402,22 +401,18 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     });
   });
 
-  // the real style's furniture casts and takes shadows like the walls, seen with the roof off
-  (model.furniture || []).forEach(f => {
-    if (f.rect) {
-      if (!real) return box(group, mH.furn, mH.furnEdge, f.rect, f.y);
-      const s = kit.solid(group, mH.furn, f.rect, f.y);
-      s.castShadow = s.receiveShadow = true;
-      return;
-    }
-    const [x, z, r] = f.circle;
-    const cg = new THREE.CylinderGeometry(r, r, f.y[1] - f.y[0], 18);
-    const c = new THREE.Mesh(cg, mH.furn);
-    c.position.set(x, (f.y[0] + f.y[1]) / 2, z);
-    if (!real) c.add(edges(cg, mH.furnEdge, 30));
-    else c.castShadow = c.receiveShadow = true;
-    group.add(c);
-  });
+  // the simple style's furniture; the real style's is the interior layer's
+  if (!real) {
+    (model.furniture || []).forEach(f => {
+      if (f.rect) return box(group, mH.furn, mH.furnEdge, f.rect, f.y);
+      const [x, z, r] = f.circle;
+      const cg = new THREE.CylinderGeometry(r, r, f.y[1] - f.y[0], 18);
+      const c = new THREE.Mesh(cg, mH.furn);
+      c.position.set(x, (f.y[0] + f.y[1]) / 2, z);
+      c.add(edges(cg, mH.furnEdge, 30));
+      group.add(c);
+    });
+  }
 
   function shedRoof(points, h, thick) {
     const shape = new THREE.Shape(points.map(([x, z]) => new THREE.Vector2(x, z)));
@@ -445,7 +440,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   });
 
   // the real style's light floors tint lighter, towards amber
-  const TINT = real ? [[C.amber, 0.5], [C.line, 0.3], [C.sel, 0.45]] : [[C.warm, 0.85], [C.hover, 0.6], [C.sel, 0.7]];
+  const TINT = real ? [[C.amber, 0.5], [C.line, 0.3], [C.sel, 0.25]] : [[C.warm, 0.85], [C.hover, 0.6], [C.sel, 0.7]];
   let warm = new Set(), lit = new Map();
   const glowColor = new THREE.Color(GLOW);
   if (real) {
@@ -456,6 +451,8 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     id: 'building',
     group,
     lift,
+    // for the interior layer, which dresses the real style's walls
+    api: { inRoom, cutOf },
     markers(list) {
       const on = list.filter(m => m.state === 'on' && m.warm !== false && roomIds.has(m.room));
       warm = new Set(on.map(m => m.room));

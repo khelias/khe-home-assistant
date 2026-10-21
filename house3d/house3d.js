@@ -13,7 +13,8 @@
 // Styles: 'simple' (default) is the unlit neon wireframe; 'real' draws lit surfaces in the
 // house's own colours (kit.surface, from photos) under a sun with shadows. A layer branches on
 // ctx.style === 'real' and leaves its simple path as it is; tests/house3d/simple-snapshot.json
-// pins the simple style's objects and materials.
+// pins the simple style's objects and materials. The interior layer is the real style's alone (it
+// builds null in the simple one) and reads the building layer's api, so it comes after it.
 //
 // One layer cannot take the view down: a layer module that fails to load is left out,
 // buildLayer() leaves out a layer whose build throws, and guardLayer() switches off for good a
@@ -60,7 +61,7 @@ import { RenderPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/R
 import { UnrealBloomPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/OutputPass.js';
 
-const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'lights', 'car', 'future', 'fans'];
+const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'interior', 'lights', 'car', 'future', 'fans'];
 const QUERY = new URL(import.meta.url).search;
 // a layer module that fails to load drops its layer, not the engine; the kit and the sun are required
 const [KIT, SUN, ...LOADED] = await Promise.allSettled(['kit', 'sun', ...LAYERS.map(id => `layers/${id}`)].map(p => import(`./scene/${p}.js${QUERY}`)));

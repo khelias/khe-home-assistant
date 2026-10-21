@@ -263,6 +263,10 @@ def _future_name(L):
     _future(L, "tub")["name"] = ""
 
 
+def _furniture_kind(L):
+    L["geometry"]["furniture"][0]["kind"] = "sink"
+
+
 MUTATIONS = [
     ("window without sill", _no_sill, "a window needs a sill"),
     ("unknown opening kind", _bad_kind, "is not window, door or glassdoor"),
@@ -309,6 +313,7 @@ MUTATIONS = [
     ("a fact of 81 characters", _future_fact_long, "future item pv: every fact must be a line of 1 to 80 characters"),
     ("as_of not ISO", _future_as_of, "future: as_of '15.01.2026' is not a date YYYY-MM-DD"),
     ("future name empty", _future_name, "future item tub: name missing"),
+    ("unknown furniture kind", _furniture_kind, "furniture[0]: kind 'sink' is not one of bed, headboard"),
 ]
 
 
@@ -321,6 +326,14 @@ class Mutations(unittest.TestCase):
                 mutate(L)
                 problems = hm.validate(L)
                 self.assertTrue(any(problem in p for p in problems), f"{problem!r} not in {problems}")
+
+
+class FurnitureKind(unittest.TestCase):
+    def test_kind_is_optional(self):
+        L = layers()
+        for f in L["geometry"]["furniture"]:
+            f.pop("kind", None)
+        self.assertEqual(hm.validate(L), [])
 
 
 class FuturePanels(unittest.TestCase):

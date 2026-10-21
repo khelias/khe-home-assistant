@@ -217,9 +217,13 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   the marker overlay, roof mode, taps, the frame loop, the layer registry) and
   builds no geometry. `scene/kit.js` makes each mount's colours, materials and
   geometry helpers, and `scene/layers/` holds one module per scene layer
-  (ground, site, trees, gates, surroundings, pergola, building, outdoor
-  lights, car, future, camera view fans); `scene/sun.js` holds the sun's position and direction, pure
-  functions loaded like the kit. A new scene layer is a module there plus its
+  (ground, site, trees, gates, surroundings, pergola, building, interior,
+  outdoor lights, car, future, camera view fans); `scene/sun.js` holds the
+  sun's position and direction, pure functions loaded like the kit. The
+  interior layer is the real style's only and reads the building layer's
+  room probe and wall cut (`inRoom`, `cutOf`) through its `api`
+  (`ctx.layer('building')`), so it comes after
+  it in `LAYERS` and builds nothing without it. A new scene layer is a module there plus its
   line in the engine's `LAYERS` list; the contract (`build(ctx)` and its
   hooks) is in the engine's header. Modules under `scene/` load nothing
   themselves, no `import` of any kind and no `export ... from`: they get
@@ -241,8 +245,11 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   fences, the sun in the sky, the real sun and shadows; interior walls'
   doors and frames white, exterior ones anthracite, a door with
   `"finish": "cladding"` on its opening in the walls' colour, and a glass
-  door under 1.2 m wide in one leaf, without the centre mullion),
-  chosen per browser in the Kihid sheet and kept in `localStorage` under
+  door under 1.2 m wide in one leaf, without the centre mullion; inside,
+  an architectural model: oak planks and the wet rooms' wood-look tile on
+  the floors, near-black section caps on the walls' cut tops, white skirting
+  and a soft shade on the floor along the walls, and the furniture shaped by
+  its `kind`), chosen per browser in the Kihid sheet and kept in `localStorage` under
   `house3d-style`. Switching remounts the engine with the roof mode, camera
   and fog kept. The real style has no bloom; its shadow map is 2048 px, 1024
   below 720 px width, and the roof and the car cast only while fully shown,
@@ -359,6 +366,16 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   `scripts/ha-dashboard.py` reads it (`HOUSE3D_MODEL`, else the sibling
   khe-meta checkout) and writes everything but the showcase layer into the
   card config, which lives only in HA's `.storage`.
+- **Furniture** is `furniture` in the geometry layer: each item a `rect`
+  `[x0, z0, x1, z1]` or a `circle` `[x, z, r]`, its `y` `[y0, y1]` and an
+  optional `kind`, one of `FURNITURE_KINDS` in `scripts/house3d_model.py`
+  (bed, headboard, wardrobe, sofa, table, desk, counter, cabinet, bath,
+  bench, appliance). The real style draws an item by its kind inside its
+  footprint and heights (a table's or desk's legs alone reach down to the
+  floor), turning it to the nearest wall face and a bed's head to its
+  headboard; an item without a kind is a plain warm grey block. The simple
+  style draws every item as its outlined see-through box, kind or not. The
+  validator rejects any other kind.
 - **The future (Tulevik):** the optional `future` block of the private layer
   holds things the house does not have yet: rooftop PV, an EV charger, a home
   battery, a greenhouse and a hot tub (`kind`), each with a centre `pos`, a

@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const E = new URL('../../house3d/', import.meta.url);
 const SNAPSHOT = new URL('./simple-snapshot.json', import.meta.url);
-const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'lights', 'car', 'future', 'fans'];
+const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'interior', 'lights', 'car', 'future', 'fans'];
 
 // kit.canvasTexture is the only thing under scene/ that touches the DOM
 globalThis.document = {
@@ -98,12 +98,14 @@ function describe(L) {
 }
 
 test('every layer builds and returns id and group', () => {
-  const { built } = buildAll();
-  const ids = built.map(b => b.L.id);
-  assert.deepEqual(ids, LAYERS, 'the fixture has something for every layer');
-  built.forEach(({ want, L }) => {
-    assert.equal(L.id, want);
-    assert.ok(L.group && L.group.isObject3D, `${want} has a group`);
+  // the interior is the real style's alone
+  [[{}, LAYERS.filter(id => id !== 'interior')], [{ style: 'real' }, LAYERS]].forEach(([o, want]) => {
+    const { built } = buildAll({ ...options, ...o });
+    assert.deepEqual(built.map(b => b.L.id), want, 'the fixture has something for every layer');
+    built.forEach(({ want, L }) => {
+      assert.equal(L.id, want);
+      assert.ok(L.group && L.group.isObject3D, `${want} has a group`);
+    });
   });
 });
 
@@ -392,6 +394,233 @@ test('real style: every floor has its own material', () => {
   assert.equal(new Set(floors).size, floors.length);
 });
 
+test('real style: every house room floor carries planks or tiles by its floor, on world (x, z)', () => {
+  const { ctx, byId } = buildAll({ ...options, style: 'real' });
+  const floors = byId.building.group.children.filter(o => o.isMesh && o.userData.room);
+  const house = floors.filter(f => model.rooms.find(r => r.id === f.userData.room).floor !== 'paving');
+  assert.ok(house.length >= 8);
+  const v = new THREE.Vector3();
+  house.forEach(f => {
+    const floor = model.rooms.find(r => r.id === f.userData.room).floor;
+    assert.equal(f.material.map, floor === 'tile' ? ctx.kit.tiles() : ctx.kit.planks(), f.userData.room);
+    f.updateMatrixWorld(true);
+    const pos = f.geometry.attributes.position, uv = f.geometry.attributes.uv;
+    for (let k = 0; k < pos.count; k++) {
+      v.fromBufferAttribute(pos, k).applyMatrix4(f.matrixWorld);
+      // float32 attributes: a few 1e-6 at 30 m
+      assert.ok(Math.abs(uv.getX(k) - v.x) < 1e-4 && Math.abs(uv.getY(k) - v.z) < 1e-4, `${f.userData.room}: uv is world (x, z)`);
+    }
+  });
+  assert.ok(house.some(f => f.material.map === ctx.kit.tiles()) && house.some(f => f.material.map === ctx.kit.planks()));
+});
+
+test('real style: the building draws no furniture, the interior layer does', () => {
+  const { byId } = buildAll({ ...options, style: 'real' });
+  // its own meshes are the floors; walls, frames and corners sit in wall groups
+  byId.building.group.children.filter(o => o.isMesh).forEach(o => assert.ok(o.userData.room, 'only floors'));
+  byId.building.group.traverse(o => assert.notEqual(o.geometry && o.geometry.type, 'CylinderGeometry'));
+  // the simple style still draws every item itself
+  const simple = buildAll().byId.building;
+  const boxes = simple.group.children.filter(o => o.isMesh && !o.userData.room);
+  assert.equal(boxes.length, model.furniture.length);
+});
+
+// the building and interior layers of a real-style build of model m
+function interiorOf(m = model) {
+  const { ctx, byId } = makeCtx({ ...options, style: 'real' }, m);
+  ['building', 'interior'].forEach(id => { byId[id] = BUILDERS[LAYERS.indexOf(id)].default(ctx); });
+  return { ctx, L: byId.interior };
+}
+// the world box of every instance of an InstancedMesh, hidden ones too, or of a plain mesh
+function boxesOf(o) {
+  o.geometry.computeBoundingBox();
+  const b = o.geometry.boundingBox, at = new THREE.Matrix4();
+  if (!o.isInstancedMesh) return [b.clone().applyMatrix4((o.updateMatrix(), o.matrix))];
+  return Array.from({ length: o.instanceMatrix.count }, (_, i) => (o.getMatrixAt(i, at), b.clone().applyMatrix4(at)));
+}
+const centre = b => b.getCenter(new THREE.Vector3());
+const size = b => b.getSize(new THREE.Vector3());
+// the wall a skirting box lies along and the side of it: its centre is on that wall's face
+function faceOf(b) {
+  const c = centre(b);
+  for (const [i, w] of model.walls.entries()) {
+    const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), u = [(w.b[0] - w.a[0]) / L, (w.b[1] - w.a[1]) / L];
+    const along = (c.x - w.a[0]) * u[0] + (c.z - w.a[1]) * u[1], off = -(c.x - w.a[0]) * u[1] + (c.z - w.a[1]) * u[0];
+    if (along > -0.01 && along < L + 0.01 && Math.abs(Math.abs(off) - (w.t / 2 + 0.006)) < 1e-3) return { i, w, u, along, side: Math.sign(off) };
+  }
+  return null;
+}
+
+test('interior: nothing in the simple style or without the building', () => {
+  const { ctx } = makeCtx(options);
+  assert.equal(BUILDERS[LAYERS.indexOf('interior')].default(ctx), null);
+  const real = makeCtx({ ...options, style: 'real' });
+  assert.equal(BUILDERS[LAYERS.indexOf('interior')].default(real.ctx), null, 'no building layer');
+});
+
+test('interior: a cap on every non-panel wall\'s flat top, narrower than the wall, split at an opening up to the top', () => {
+  const { ctx, L } = interiorOf();
+  const [caps] = partsOf(L, 'cap'), boxes = boxesOf(caps), walls = caps.userData.walls;
+  model.walls.forEach((w, i) => {
+    const mine = boxes.filter((_, k) => walls[k] === i);
+    if (w.finish === 'panel') return assert.equal(mine.length, 0, `wall ${i} is a panel`);
+    const top = w.cut ?? (typeof w.top === 'string' ? model.ceiling : w.top);
+    assert.ok(mine.length >= 1, `wall ${i} has a cap`);
+    const across = Math.abs(w.b[0] - w.a[0]) > Math.abs(w.b[1] - w.a[1]) ? 'z' : 'x';
+    mine.forEach(b => {
+      assert.ok(Math.abs(b.min.y - top - 0.002) < 1e-6 && Math.abs(size(b).y - 0.01) < 1e-6, `wall ${i}: at its top`);
+      assert.ok(size(b)[across] < w.t - 0.005, `wall ${i}: narrower than the wall`);
+    });
+  });
+  // two walls in a straight line meet with no gap between their caps
+  const run = [2, 3].map(i => boxesOf(caps).filter((_, k) => walls[k] === i));
+  assert.ok(run[0].some(b => Math.abs(b.min.x - 31) < 1e-6) && run[1].some(b => Math.abs(b.max.x - 31) < 1e-6), 'caps meet at x 31');
+  assert.equal(caps.material.color.getHexString(), hexOf(ctx.kit, 'cut'));
+  assert.deepEqual([caps.castShadow, caps.receiveShadow], [false, true]);
+  // an interior door up to the wall's top splits that wall's cap round it
+  const m = structuredClone(model), w = m.walls[INNER], door = w.openings[0];
+  door.h = w.top - 0.005;
+  const split = partsOf(interiorOf(m).L, 'cap')[0], sb = boxesOf(split).filter((_, k) => split.userData.walls[k] === INNER);
+  assert.equal(sb.length, boxesOf(caps).filter((_, k) => walls[k] === INNER).length + 1);
+  const u = [(w.b[0] - w.a[0]) / 4, (w.b[1] - w.a[1]) / 4].map(v => Math.sign(v));
+  const axis = u[0] ? 'x' : 'z', a = axis === 'x' ? w.a[0] : w.a[1], s = u[0] || u[1];
+  const [d0, d1] = [a + s * (door.c - door.w / 2), a + s * (door.c + door.w / 2)].sort((p, q) => p - q);
+  sb.forEach(b => assert.ok(b.max[axis] <= d0 + 1e-6 || b.min[axis] >= d1 - 1e-6, 'no cap over the door'));
+  // a roof-topped wall left uncut slopes with its roof: no cap
+  const sloped = structuredClone(model);
+  sloped.walls.forEach(x => { if (typeof x.top === 'string') x.cut = 0; });
+  const { roof } = modelFrame(sloped), sc = partsOf(interiorOf(sloped).L, 'cap')[0].userData.walls;
+  const slopes = sloped.walls.map((x, i) => [x, i]).filter(([x]) => typeof x.top === 'string' && Math.abs(roof.topFn(x.top)(...x.a) - roof.topFn(x.top)(...x.b)) >= 0.005);
+  assert.ok(slopes.length > 0, 'the test house has a sloped wall');
+  slopes.forEach(([, i]) => assert.ok(!sc.includes(i), `sloped wall ${i}`));
+});
+
+test('interior: the cut walls\' caps hide with the roof fully on', () => {
+  const { ctx, L } = interiorOf();
+  const [caps] = partsOf(L, 'cap'), all = caps.instanceMatrix.count, walls = caps.userData.walls;
+  const cut = i => { const w = model.walls[i]; return !!(w.cut ?? (typeof w.top === 'string' ? model.ceiling : 0)); };
+  ctx.state.roofFade = 1;
+  assert.equal(L.update(0.016, 0.5), false);
+  assert.ok(caps.count < all);
+  walls.forEach((i, k) => assert.equal(k < caps.count, !cut(i), `cap ${k} of wall ${i}`));
+  ctx.state.roofFade = 0;
+  L.update(0.016, 0.5);
+  assert.equal(caps.count, all);
+});
+
+test('interior: skirting along the room side of every face, broken at doors, and a floor shade along it', () => {
+  const { ctx, L } = interiorOf();
+  const [skirt] = partsOf(L, 'skirting'), [shade] = partsOf(L, 'shade');
+  const sk = boxesOf(skirt), sh = boxesOf(shade);
+  assert.ok(sk.length > 20);
+  sk.forEach(b => {
+    const f = faceOf(b);
+    assert.ok(f, 'on a wall face');
+    const n = [-f.u[1] * f.side, f.u[0] * f.side], at = [f.w.a[0] + f.u[0] * f.along, f.w.a[1] + f.u[1] * f.along];
+    assert.ok(inHouseRoom([at[0] + n[0] * (f.w.t / 2 + 0.3), 0, at[1] + n[1] * (f.w.t / 2 + 0.3)]), `wall ${f.i}: a house room in front`);
+    assert.ok(Math.abs(b.min.y - 0.02) < 1e-6 && Math.abs(size(b).y - 0.07) < 1e-6);
+  });
+  // both faces of an interior wall, the inner face only of an exterior one
+  const sides = i => new Set(sk.map(faceOf).filter(f => f.i === i).map(f => f.side));
+  assert.equal(sides(INNER).size, 2);
+  assert.equal(sides(1).size, 1);
+  // none across a door, a glass door or a window down to the floor, on any wall
+  sk.forEach(b => {
+    const { w } = faceOf(b), axis = Math.abs(w.b[0] - w.a[0]) > 1e-9 ? 'x' : 'z';
+    const a = axis === 'x' ? w.a[0] : w.a[1], s = Math.sign((axis === 'x' ? w.b[0] : w.b[1]) - a);
+    (w.openings || []).filter(o => o.kind !== 'window' || o.sill < 0.07).forEach(o => {
+      const [d0, d1] = [a + s * (o.c - o.w / 2), a + s * (o.c + o.w / 2)].sort((p, q) => p - q);
+      // float32 instance matrices: a few 1e-6 at 35 m
+      assert.ok(b.max[axis] <= d0 + 1e-4 || b.min[axis] >= d1 - 1e-4, `no skirting across wall ${model.walls.indexOf(w)}'s ${o.kind} at ${o.c}`);
+    });
+  });
+  assert.ok(model.walls.filter(w => typeof w.top === 'number' && (w.openings || []).some(o => o.kind === 'door')).length >= 4, 'the test house has interior doors on several walls');
+  // the shade runs with the skirting, a strip on the floor
+  assert.equal(sh.length, sk.length);
+  sk.forEach((b, k) => {
+    const axis = size(b).x > size(b).z ? 'x' : 'z';
+    assert.ok(Math.abs(sh[k].min[axis] - b.min[axis]) < 1e-6 && Math.abs(sh[k].max[axis] - b.max[axis]) < 1e-6, 'same run');
+    assert.ok(Math.abs(size(sh[k])[axis === 'x' ? 'z' : 'x'] - 0.3) < 1e-6 && Math.abs(centre(sh[k]).y - 0.024) < 1e-6);
+  });
+  assert.equal(skirt.material.color.getHexString(), hexOf(ctx.kit, 'skirting'));
+  assert.deepEqual([skirt.castShadow, skirt.receiveShadow], [false, true]);
+  const sm = shade.material;
+  assert.ok(sm.isMeshBasicMaterial && sm.transparent && !sm.depthWrite && sm.polygonOffset && sm.polygonOffsetFactor < 0 && sm.polygonOffsetUnits < 0);
+  assert.deepEqual([shade.castShadow, shade.receiveShadow], [false, false]);
+});
+
+// every furniture part: [item index, world box, surface name]
+function furnitureOf(L, kit) {
+  const names = new Map(Object.keys(kit.REAL).map(n => [hexOf(kit, n), n]));
+  return partsOf(L, 'furniture').flatMap(o => boxesOf(o).map((b, k) => [o.userData.items[k], b, names.get(o.material.color.getHexString())]));
+}
+
+test('interior: furniture by kind, every part inside its item, fewer meshes than parts', () => {
+  // the test house, and the kinds it lacks on a copy of it, in the galerii
+  const extra = structuredClone(model);
+  extra.furniture.push(
+    { what: 'cabinet', kind: 'cabinet', rect: [31.3, 8.2, 31.8, 9.6], y: [0, 0.6] },
+    { what: 'bath', kind: 'bath', rect: [32.3, 8.2, 33.0, 9.9], y: [0, 0.55] },
+    { what: 'bench', kind: 'bench', rect: [31.3, 10.2, 32.4, 11.0], y: [0, 0.9] },
+    { what: 'upper bench', kind: 'bench', rect: [31.3, 10.6, 32.4, 11.0], y: [0.9, 1.3] },
+    { what: 'appliance', kind: 'appliance', rect: [32.5, 10.2, 33.0, 10.8], y: [0, 1.7] },
+    { what: 'tank', kind: 'appliance', circle: [32.7, 11.4, 0.3], y: [0, 1.8] },
+    { what: 'headboard', kind: 'headboard', rect: [31.3, 12.0, 31.4, 13.0], y: [0, 1] },
+    { what: 'floating table', kind: 'table', rect: [31.4, 13.2, 32.4, 14.2], y: [0.72, 0.78] }
+  );
+  [model, extra].forEach(m => {
+    const { ctx, L } = interiorOf(m);
+    const parts = furnitureOf(L, ctx.kit);
+    m.furniture.forEach((f, i) => {
+      const mine = parts.filter(p => p[0] === i);
+      const [x0, z0, x1, z1] = f.rect || [f.circle[0] - f.circle[2], f.circle[1] - f.circle[2], f.circle[0] + f.circle[2], f.circle[1] + f.circle[2]];
+      // a table's or desk's legs may reach the floor
+      const floor = ['table', 'desk'].includes(f.kind) ? 0 : f.y[0];
+      mine.forEach(([, b]) => {
+        assert.ok(b.min.x >= x0 - 0.005 && b.max.x <= x1 + 0.005 && b.min.z >= z0 - 0.005 && b.max.z <= z1 + 0.005, `${f.what}: inside its footprint`);
+        assert.ok(b.min.y >= floor - 0.005 && b.max.y <= f.y[1] + 0.005, `${f.what}: inside its height`);
+      });
+      if (!f.kind) assert.deepEqual(mine.map(p => p[2]), ['furniture'], `${f.what}: one plain block`);
+      else assert.ok(mine.length >= (['headboard', 'appliance'].includes(f.kind) ? 1 : 2), `${f.what}: shaped`);
+    });
+    const meshes = partsOf(L, 'furniture');
+    assert.ok(meshes.length < parts.length);
+    meshes.forEach(o => assert.deepEqual([o.castShadow, o.receiveShadow], [true, true]));
+  });
+  const kinds = new Set(extra.furniture.map(f => f.kind).filter(Boolean));
+  assert.equal(kinds.size, 11, 'every kind drawn');
+});
+
+// a bed's pillows: its linen parts shorter than half a metre along the bed
+const pillowsOf = (parts, i, axis) => parts.filter(p => p[0] === i && p[2] === 'linen' && size(p[1])[axis] < 0.5).map(p => p[1]);
+
+test('interior: a bed\'s pillows lie across its head, at a headboard or the short end nearer a wall', () => {
+  const { ctx, L } = interiorOf();
+  const parts = furnitureOf(L, ctx.kit), idx = what => model.furniture.findIndex(f => f.what === what);
+  // the bed runs along z; both short ends are 1 m from the outer wall, so the lower z end wins
+  const bed = pillowsOf(parts, idx('bed'), 'z');
+  assert.equal(bed.length, 2, 'one pillow per 0.9 m of width');
+  bed.forEach(b => assert.ok(b.min.z < 12.5, 'at z 12'));
+  assert.ok(Math.abs(centre(bed[0]).x - centre(bed[1]).x) > 0.5, 'side by side across the bed');
+  // the child's bed runs along x, its x 22.4 end 0.2 m from the outer wall
+  pillowsOf(parts, idx("child's bed"), 'x').forEach(b => assert.ok(b.min.x < 22.9));
+  // a headboard at the far end turns it round
+  const m = structuredClone(model);
+  m.furniture.push({ what: 'headboard', kind: 'headboard', rect: [34.9, 14, 36.7, 14.08], y: [0, 1] });
+  const turned = interiorOf(m), tb = pillowsOf(furnitureOf(turned.L, turned.ctx.kit), idx('bed'), 'z');
+  assert.equal(tb.length, 2);
+  tb.forEach(b => assert.ok(b.max.z > 13.5, 'at the headboard'));
+});
+
+test('interior: the wardrobe\'s door grooves face away from the wall', () => {
+  const { ctx, L } = interiorOf();
+  const i = model.furniture.findIndex(f => f.kind === 'wardrobe'), [x0, , x1] = model.furniture[i].rect;
+  // its back is at x 31.25, against the wall at x 31
+  const grooves = furnitureOf(L, ctx.kit).filter(p => p[0] === i && p[2] === 'worktop' && size(p[1]).z < 0.02).map(p => p[1]);
+  assert.equal(grooves.length, 2, 'three doors');
+  grooves.forEach(b => assert.ok(b.min.x > (x0 + x1) / 2, 'on the front'));
+});
+
 test('real style: the lift fades out and back on its own materials', () => {
   const { ctx, byId } = buildAll({ ...options, style: 'real' });
   const lift = byId.building.lift, mats = new Set();
@@ -510,6 +739,10 @@ test('real style: a corner board stops at an opening next to the corner', () => 
   assert.ok(w < 0.12);
 });
 
+const hexOf = (kit, n) => new THREE.Color(kit.REAL[n]).getHexString();
+// a layer's meshes tagged userData.part, in traversal order
+const partsOf = (L, part) => { const out = []; L.group.traverse(o => { if (o.userData.part === part) out.push(o); }); return out; };
+
 test('kit: every real-style colour is distinct', () => {
   const { REAL } = createKit(THREE, 'real');
   const hexes = Object.values(REAL).map(v => new THREE.Color(v).getHexString());
@@ -527,6 +760,28 @@ test('kit: pavers() is one texture per mount on a metre tile', () => {
   const vals = new Set();
   for (let i = 0; i < t.image.data.length; i += 4) vals.add(t.image.data[i]);
   assert.ok(vals.has(255) && Math.min(...vals) >= Math.round(0.88 * 0.96 * 255) - 1 && vals.size > 3);
+});
+
+test('kit: planks() and tiles() are one texture per mount on a 2.4 m tile, near white', () => {
+  ['planks', 'tiles'].forEach(name => {
+    const kit = createKit(THREE, 'real'), t = kit[name]();
+    assert.equal(kit[name](), t, name);
+    assert.notEqual(createKit(THREE, 'real')[name](), t, `${name}: a mount of its own`);
+    assert.equal(t.wrapS, THREE.RepeatWrapping);
+    assert.ok(Math.abs(t.repeat.x - 1 / 2.4) < 1e-9 && Math.abs(t.repeat.y - 1 / 2.4) < 1e-9);
+    // the material's colour sets the tone: pieces near white, shades varying, a joint apart
+    const vals = new Set();
+    for (let i = 0; i < t.image.data.length; i += 4) vals.add(t.image.data[i]);
+    assert.ok(vals.size > 4 && Math.min(...vals) >= 150, name);
+  });
+  const kit = createKit(THREE, 'real');
+  assert.notEqual(kit.planks(), kit.tiles());
+});
+
+test('kit: the section cap is not the frame, the plain furniture not the walls', () => {
+  const kit = createKit(THREE, 'real');
+  assert.notEqual(hexOf(kit, 'cut'), hexOf(kit, 'frame'));
+  assert.notEqual(hexOf(kit, 'furniture'), hexOf(kit, 'interior'));
 });
 
 test('kit: bars() has two rails and a bar every 0.12 m, ends included, casting only', () => {
@@ -548,8 +803,6 @@ test('kit: wireMesh() alpha is a wire or the veil, nothing between', () => {
   assert.ok(Math.abs(t.repeat.x - 5) < 1e-9);
 });
 
-const hexOf = (kit, n) => new THREE.Color(kit.REAL[n]).getHexString();
-const siteParts = (L, part) => { const out = []; L.group.traverse(o => { if (o.userData.part === part) out.push(o); }); return out; };
 
 test('real style: paving and the carport floor carry the stones on world (x, z)', () => {
   const { ctx, byId } = buildAll({ ...options, style: 'real' });
@@ -580,7 +833,7 @@ test('real style: paving and the carport floor carry the stones on world (x, z)'
 
 test('real style: bar fences on the street, mesh fences on the sides, no post at a gate post', () => {
   const { ctx, byId } = buildAll({ ...options, style: 'real' });
-  const spans = siteParts(byId.site, 'bars');
+  const spans = partsOf(byId.site, 'bars');
   assert.ok(spans.length >= 2);
   let total = 0;
   spans.forEach(g => {
@@ -594,10 +847,10 @@ test('real style: bar fences on the street, mesh fences on the sides, no post at
   const want = model.site.bar_fences.reduce((a, [p, q]) => a + Math.hypot(q[0] - p[0], q[1] - p[1]), 0);
   assert.ok(Math.abs(total - want) < 1e-6, 'the spans cover the bar fences');
   const gatePosts = model.site.gates.flatMap(g => [g.a, g.b]);
-  const posts = siteParts(byId.site, 'post');
+  const posts = partsOf(byId.site, 'post');
   assert.ok(posts.length > 6);
   posts.forEach(p => gatePosts.forEach(([x, z]) => assert.ok(Math.hypot(p.position.x - x, p.position.z - z) >= 0.05, `a post at ${x}, ${z}`)));
-  const planes = siteParts(byId.site, 'mesh');
+  const planes = partsOf(byId.site, 'mesh');
   assert.equal(planes.length, model.site.fences.length);
   planes.forEach(m => {
     assert.equal(m.material.map, ctx.kit.wireMesh());
@@ -610,7 +863,7 @@ test('real style: the step, the planters and their plants', () => {
   const steps = byId.site.group.children.filter(o => o.isMesh && o.material.color.getHexString() === hexOf(ctx.kit, 'stone'));
   assert.equal(steps.length, 1);
   assert.ok(Math.abs(steps[0].position.y + steps[0].geometry.parameters.height / 2 - 0.115) < 1e-9);
-  const planters = siteParts(byId.site, 'planter');
+  const planters = partsOf(byId.site, 'planter');
   assert.equal(planters.length, 3);
   planters.forEach(p => assert.equal(p.castShadow, true));
   assert.deepEqual(planters.map(p => p.material.color.getHexString()), [hexOf(ctx.kit, 'frame'), hexOf(ctx.kit, 'cladding'), hexOf(ctx.kit, 'frame')]);
@@ -620,23 +873,23 @@ test('real style: the swing, its tower and slide, the sandpit and the trampoline
   const { byId } = buildAll({ ...options, style: 'real' });
   const sw = model.site.swing, L = byId.site;
   L.group.updateMatrixWorld(true);
-  const legs = siteParts(L, 'leg');
+  const legs = partsOf(L, 'leg');
   assert.equal(legs.length, 4 + 4 + 6, 'two A-frames, the tower and the trampoline');
   legs.forEach(l => assert.equal(Math.min(l.userData.ends[0][1], l.userData.ends[1][1]), 0));
-  const [beam] = siteParts(L, 'beam');
+  const [beam] = partsOf(L, 'beam');
   assert.ok(Math.abs(new THREE.Box3().setFromObject(beam).max.y - sw.height) < 1e-6, 'the beam top at height');
-  const [chute] = siteParts(L, 'chute'), foot = chute.userData.ends[1];
+  const [chute] = partsOf(L, 'chute'), foot = chute.userData.ends[1];
   assert.ok(Math.hypot(foot[0] - sw.slide[0], foot[2] - sw.slide[1]) <= 0.15);
   // the chute lies flat across its slope
   const across = new THREE.Vector3(1, 0, 0).applyQuaternion(chute.quaternion);
   assert.ok(Math.abs(across.y) < 1e-6);
   // the tower is at the beam end nearer to the slide
-  const [platform] = siteParts(L, 'platform');
+  const [platform] = partsOf(L, 'platform');
   assert.ok(platform.position.z > sw.rect[3], 'past the end at z1');
-  const [sand] = siteParts(L, 'sand'), ledges = siteParts(L, 'ledge');
+  const [sand] = partsOf(L, 'sand'), ledges = partsOf(L, 'ledge');
   const topOf = o => new THREE.Box3().setFromObject(o).max.y;
   assert.ok(topOf(sand) < Math.min(...ledges.map(topOf)) - 0.05);
-  const [net] = siteParts(L, 'net');
+  const [net] = partsOf(L, 'net');
   assert.ok(net.material.transparent && net.material.opacity < 1 && !net.material.depthWrite);
   const b = new THREE.Box3().setFromObject(net), [x0, z0, x1, z1] = model.site.trampoline.rect;
   assert.ok(b.min.x >= x0 - 1e-6 && b.max.x <= x1 + 1e-6 && b.min.z >= z0 - 1e-6 && b.max.z <= z1 + 1e-6, 'the net inside the rect');
@@ -649,16 +902,16 @@ test('real style: a swing without slide along x, and a site without the new keys
   const { ctx } = makeCtx({ ...options, style: 'real' }, m);
   const L = buildLayer(BUILDERS[LAYERS.indexOf('site')], 'site', ctx);
   assert.ok(L);
-  assert.equal(siteParts(L, 'chute').length, 0);
-  assert.equal(siteParts(L, 'leg').length, 4);
-  assert.equal(siteParts(L, 'bars').length, 0);
-  assert.equal(siteParts(L, 'mesh').length, m.site.fences.length);
-  const [beam] = siteParts(L, 'beam');
+  assert.equal(partsOf(L, 'chute').length, 0);
+  assert.equal(partsOf(L, 'leg').length, 4);
+  assert.equal(partsOf(L, 'bars').length, 0);
+  assert.equal(partsOf(L, 'mesh').length, m.site.fences.length);
+  const [beam] = partsOf(L, 'beam');
   assert.ok(Math.abs(beam.userData.ends[0][2] - beam.userData.ends[1][2]) < 1e-9, 'the beam runs along x');
   // with a slide on an x-axis swing, the climbing wall's width lies across the beam
   m.site.swing.slide = [10.5, -3];
   const L2 = buildLayer(BUILDERS[LAYERS.indexOf('site')], 'site', makeCtx({ ...options, style: 'real' }, m).ctx);
-  const [wall] = siteParts(L2, 'wall');
+  const [wall] = partsOf(L2, 'wall');
   assert.ok(Math.abs(new THREE.Vector3(1, 0, 0).applyQuaternion(wall.quaternion).z) > 0.99);
 });
 

@@ -49,6 +49,20 @@ SLIDE_OFFSET = (
 )
 CAR_CLEARANCE = 0.3  # between the car and a gate leaf's sweep
 FUTURE_KINDS = ("pv", "charger", "battery", "greenhouse", "tub")
+# furniture: what the real style draws an item as; without a kind it is a plain block
+FURNITURE_KINDS = (
+    "bed",
+    "headboard",
+    "wardrobe",
+    "sofa",
+    "table",
+    "desk",
+    "counter",
+    "cabinet",
+    "bath",
+    "bench",
+    "appliance",
+)
 FUTURE_ROT = (0, 90, 180, 270)
 PANEL = (1.72, 1.13)  # a PV panel's long and short side; the engine lays them out the same way
 PANEL_GAP = 0.02
@@ -314,6 +328,8 @@ def validate(layers):
             bad(f"{where}: needs rect [x0, z0, x1, z1] or circle [x, z, r]")
         if not (_point(f.get("y")) and f["y"][0] < f["y"][1]):
             bad(f"{where}: y must be [y0, y1] with y0 < y1")
+        if "kind" in f and f["kind"] not in FURNITURE_KINDS:
+            bad(f"{where}: kind {f['kind']!r} is not one of {', '.join(FURNITURE_KINDS)}")
 
     site = model.get("site", {})
     lot = _lot(model)

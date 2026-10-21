@@ -15,9 +15,13 @@ const COLORS = {
 // (its boards come from boards()), roofs and flashing a mid grey standing seam, and every frame,
 // door, trim, corner board, roof edge, the wall's base strip, the carport's panels and the
 // pergola one anthracite, about RAL 7016 (the drawings' RR25 yellow frames were not built).
-// Inside, the walls are light grey, the doors and their frames white, the living floors oak and the wet rooms a dark wood-look
-// tile. The deck is dark composite, the paving light grey-beige concrete pavers with sandy
-// joints (their stones come from pavers()), the entrance step dark grey, the outdoor units white.
+// Inside, the walls are light grey, the doors and their frames white, the living floors oak planks
+// (planks()) and the wet rooms a dark wood-look tile (tiles()). The interior is drawn as an
+// architectural model: the walls' cut tops near black (cut), white skirting, and the furniture in
+// white linen, a blue-grey fabric, light oak, a dark worktop and white-grey cabinets; an item of no
+// known kind is a warm grey block (furniture), apart from the walls. The deck is dark composite,
+// the paving light grey-beige concrete pavers with sandy joints (their stones come from pavers()),
+// the entrance step dark grey, the outdoor units white.
 // The bar fence and the gates are black bars (bars()), the other fences a dark wire mesh
 // (wireMesh()). The play area is stained timber with a sand box, a mint slide and a dark nest
 // seat; the trampoline a green edge pad on a black mat with a black net.
@@ -28,7 +32,9 @@ const REAL = {
   lawn: '#5f7f45', outside: '#8e9088', hedge: '#355a32', crown: '#4f7a3a', trunk: '#5b4636',
   fence: '#4a4d50', car: '#2f3336', neighbour: '#b9b6ae', road: '#6b6b68',
   timber: '#8a6a4c', sand: '#d6c6a0', slide: '#9ed8c2', nest: '#3d4a5c', pad: '#3f8a4b', mat: '#202325',
-  net: '#151719', mesh: '#2c2f31', stone: '#56595b'
+  net: '#151719', mesh: '#2c2f31', stone: '#56595b',
+  cut: '#2a2d30', skirting: '#efeeea', linen: '#ecebe6', fabric: '#7d8792', oak: '#d6c2a2', worktop: '#3b3b3b',
+  cabinet: '#e6e5e0', furniture: '#a59f95'
 };
 // the cladding's boards: about 12 cm wide, rising to the right at 45 degrees, only their grooves
 // drawn, on a 2 m tile of the walls' metre UVs
@@ -41,6 +47,12 @@ const PAVER_TILE = 0.9, STONE = 0.225, ROW = 0.1125, WAVE = 0.012, JOINT = 0.005
 // tile; a faint veil between them so the mipmapped fence still reads from far off
 const MESH_TILE = 0.2, MESH_X = 0.05, WIRE = 0.004, MESH_PX = 256, MESH_VEIL = 26;
 const BAR_STEP = 0.12, BAR = 0.02, RAIL = 0.04;
+// the oak floor: rows of planks about PLANK wide along world x, each row of planks one of
+// PLANK_LENS long from a staggered start, all dividing the FLOOR_TILE m tile; a plank's shade
+// varies PLANK_VAR either way, the joint between them darker
+const FLOOR_TILE = 2.4, PLANK = 0.18, PLANK_LENS = [0.8, 1.2, 2.4], PLANK_VAR = 0.06, PLANK_PX = 1024, PLANK_JOINT = 0.003;
+// the wet rooms' wood-look tile: TILE_W by TILE_L, half-bond, a lighter grout joint
+const TILE_W = 0.2, TILE_L = 1.2, GROUT = 0.004, TILE_PX = 512;
 
 export function createKit(THREE, style = 'simple') {
   const C = Object.fromEntries(Object.entries(COLORS).map(([k, v]) => [k, new THREE.Color(v)]));
@@ -135,24 +147,62 @@ export function createKit(THREE, style = 'simple') {
     return tex;
   }
 
+  // a stable pseudo-random 0..1 from two whole numbers, the same on every tile
+  const hash = (a, b) => {
+    const h = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453;
+    return h - Math.floor(h);
+  };
+  const inJoint = (t, step, joint) => Math.min(t % step, step - (t % step)) < joint / 2;
+
   // real style: the paving's stones, one texture per mount
   let paverTex;
   function pavers() {
     if (paverTex) return paverTex;
     const S = PAVER_PX, m = PAVER_TILE / S, rows = Math.round(PAVER_TILE / ROW), cols = Math.round(PAVER_TILE / STONE);
-    const inJoint = (t, step) => Math.min(t % step, step - (t % step)) < JOINT / 2;
     paverTex = tileTexture(S, PAVER_TILE, (i, j) => {
       const u = i * m, v = j * m;
       // the wave runs ROW long along u, so the tile's edges meet
       const rv = (v + WAVE * Math.sin((2 * Math.PI * u) / ROW) + PAVER_TILE) % PAVER_TILE, r = Math.floor(rv / ROW);
       const ou = (u + (r % 2) * (STONE / 2)) % PAVER_TILE, c = Math.floor(ou / STONE) % cols;
-      if (inJoint(rv, ROW) || inJoint(ou, STONE)) return [255, 255, 255, 255];
+      if (inJoint(rv, ROW, JOINT) || inJoint(ou, STONE, JOINT)) return [255, 255, 255, 255];
       // a stone's shade from its row and column, the same on every tile
-      const h = Math.sin((r % rows) * 12.9898 + c * 78.233) * 43758.5453, k = 0.88 * (1 + 0.08 * (h - Math.floor(h) - 0.5));
-      const g = Math.round(k * 255);
+      const g = Math.round(0.88 * (1 + 0.08 * (hash(r % rows, c) - 0.5)) * 255);
       return [g, g, g, 255];
     });
     return paverTex;
+  }
+
+  // real style: the oak floor's planks, one texture per mount
+  let plankTex;
+  function planks() {
+    if (plankTex) return plankTex;
+    const S = PLANK_PX, m = FLOOR_TILE / S, rows = Math.round(FLOOR_TILE / PLANK), w = FLOOR_TILE / rows;
+    // each row's plank length and where its planks start, once per row, not per pixel
+    const lens = Array.from({ length: rows }, (_, r) => PLANK_LENS[Math.floor(hash(r, 1) * PLANK_LENS.length)]);
+    const starts = lens.map((len, r) => hash(r, 2) * len);
+    plankTex = tileTexture(S, FLOOR_TILE, (i, j) => {
+      const u = (i + 0.5) * m, v = (j + 0.5) * m, r = Math.floor(v / w), len = lens[r];
+      const ou = (u + starts[r]) % FLOOR_TILE, c = Math.floor(ou / len);
+      if (inJoint(v, w, PLANK_JOINT) || inJoint(ou, len, PLANK_JOINT)) return [178, 178, 178, 255];
+      const g = Math.round(0.93 * (1 + 2 * PLANK_VAR * (hash(r, c + 3) - 0.5)) * 255);
+      return [g, g, g, 255];
+    });
+    return plankTex;
+  }
+
+  // real style: the wet rooms' tiles, one texture per mount
+  let wetTex;
+  function tiles() {
+    if (wetTex) return wetTex;
+    const S = TILE_PX, m = FLOOR_TILE / S;
+    wetTex = tileTexture(S, FLOOR_TILE, (i, j) => {
+      const u = (i + 0.5) * m, v = (j + 0.5) * m, r = Math.floor(v / TILE_W);
+      const ou = (u + (r % 2) * (TILE_L / 2)) % FLOOR_TILE, c = Math.floor(ou / TILE_L);
+      if (inJoint(v, TILE_W, GROUT) || inJoint(ou, TILE_L, GROUT)) return [255, 255, 255, 255];
+      const g = Math.round(0.86 * (1 + 0.08 * (hash(r, c + 7) - 0.5)) * 255);
+      return [g, g, g, 255];
+    });
+    return wetTex;
   }
 
   // real style: the mesh fence's wires, white where a wire is, alpha MESH_VEIL between
@@ -216,5 +266,17 @@ export function createKit(THREE, style = 'simple') {
 
   const near = (a, b) => Math.abs(a - b) < 0.002;
 
-  return { C, style, REAL, disposables, keep, basic, lineMat, mats, edges, box, prism, canvasTexture, applyFade, near, surface, solid, flatShape, boards, pavers, wireMesh, bars };
+  // the stretches of [lo, hi] longer than min that no gap [a, b] covers; gaps sorted by a
+  function spans(lo, hi, gaps, min) {
+    const out = [];
+    let from = lo;
+    [...gaps, [hi, hi]].forEach(([a, b]) => {
+      a = Math.min(a, hi);
+      if (a - from > min) out.push([from, a]);
+      from = Math.max(from, b);
+    });
+    return out;
+  }
+
+  return { C, style, REAL, disposables, keep, basic, lineMat, mats, edges, box, prism, canvasTexture, applyFade, near, spans, surface, solid, flatShape, boards, pavers, planks, tiles, wireMesh, bars };
 }
