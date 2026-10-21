@@ -185,7 +185,7 @@ the operator first; an approval covers that task only.
   to the cards bumps `KHE_CARDS_VERSION` and the resource's `?v=`
   ([notes](docs/operational-notes.md#dashboard-cards-cards)).
 - **The house is the House room of the KHE family**
-  ([estate ADR-015](https://github.com/khelias/khe-architecture/blob/main/decisions/015-family-design-layer.md)):
+  ([estate ADR-018](https://github.com/khelias/khe-architecture/blob/main/decisions/018-rooms-menu-in-the-shared-header.md)):
   its accent (`house`) and its ground (`house-ground`) are in khe-sites'
   `DESIGN.md`. The dashboard and the 3D view are application content with
   their own visual language; only the chrome around them is the family's.
