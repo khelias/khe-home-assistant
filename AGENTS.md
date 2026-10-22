@@ -114,7 +114,7 @@ tests/cards/       the dashboard cards' pure helpers (node:test)
 4. **Fork PRs can reach the homelab runner.** Fork PR approval stays at
    `all_external_contributors`, and a fork run is approved only after
    reading its `.github/workflows/` diff ([estate
-   ADR-006](https://github.com/khelias/khe-architecture/blob/main/decisions/006-branch-protection.md)).
+   ADR-020](https://github.com/khelias/khe-architecture/blob/main/decisions/020-agent-work-through-pull-requests.md)).
 
 ## Deploy
 
