@@ -241,7 +241,8 @@ class Build(unittest.TestCase):
         src = (ROOT / "scripts/dashboard_a3.py").read_text()
         code = src.split('"""', 2)[2]
         quoted = set(re.findall(r'"([^"\s]+)"', code))
-        self.assertEqual(quoted & (kodu_entities(KODU) | kodu_entities(VIEW)), set())
+        spelled = kodu_entities(KODU) | kodu_entities(VIEW) | kodu_entities(SOOJUSPUMP)
+        self.assertEqual(quoted & spelled, set())
 
 
 OVERVIEW = a3.overview(HOUSE, PEOPLE, MODEL)
