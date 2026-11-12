@@ -1,5 +1,8 @@
 # khe-home-assistant
 
+Workspace-wide rules (push, review, docs, estate ADRs) are in [khe-workspace
+`AGENTS.md`](https://github.com/khelias/khe-workspace/blob/main/AGENTS.md).
+
 The Home Assistant configuration of one house, public as a reference: the
 YAML packages, the dashboard generator, the CLI tools around HA's API and the
 3D house view. The container, its image pin, the Renovate hold on HA bumps
@@ -111,10 +114,10 @@ tests/cards/       the dashboard cards' pure helpers (node:test)
 3. **Modules under `house3d/scene/` import nothing**
    ([notes](docs/operational-notes.md#the-3d-house-view-house3d)); the engine
    tests enforce it.
-4. **Fork PRs can reach the homelab runner.** Fork PR approval stays at
-   `all_external_contributors`, and a fork run is approved only after
-   reading its `.github/workflows/` diff ([estate
-   ADR-023](https://github.com/khelias/khe-architecture/blob/main/decisions/023-agent-pushes-where-its-session-allows.md)).
+4. **Fork PRs can reach the homelab runner**, since the deploy runs there:
+   approve a fork run as the workspace `AGENTS.md` says ([estate
+   ADR-023](https://github.com/khelias/khe-architecture/blob/main/decisions/023-agent-pushes-where-its-session-allows.md)
+   point 5).
 
 ## Deploy
 
@@ -139,8 +142,7 @@ automerges GitHub Actions minor and patch updates, digests and pins
 `house3d/` or `cards/` deploys the config. The way back is to revert the commit on
 `main` and push: the revert is a new config deploy, and HA keeps running
 what it loaded last until a restart or reload, so restart or reload it
-after the revert lands. A new automated writer joins the estate's writer
-register in khe-meta in the same change.
+after the revert lands.
 
 ## Working on Home Assistant
 
