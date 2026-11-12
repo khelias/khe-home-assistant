@@ -102,9 +102,9 @@ test("the prices cover today and tomorrow, and the level reads the hour's price"
     const prices = s[ids.FORECAST].attributes.prices;
     assert.equal(prices[0].s * 1000, dayStart(p.y, p.m, p.d, TZ));
     assert.equal(prices.at(-1).s * 1000 + 3600e3, dayStart(p.y, p.m, p.d + 2, TZ));
+    // the bars split days in the browser's zone, so only the hour now is compared
     const bars = cards.priceBars(prices, new Date(now));
-    assert.equal(bars.bars.length, prices.length);
-    assert.ok(bars.current >= 0);
+    assert.equal(bars.bars[bars.current].s, Math.floor(now / 3600e3) * 3600e3);
     const level = s[ids.PRICE_LEVEL];
     assert.equal(level.attributes.arvel, Number((bars.bars[bars.current].t * 100).toFixed(1)));
     assert.ok(et.some(([, w]) => w === level.state));
