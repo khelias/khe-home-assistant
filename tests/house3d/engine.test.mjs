@@ -977,6 +977,8 @@ test('realLight: the sun by day, the moon at night, dark at the horizon where th
   const day = realLight(30), low = realLight(10), dusk = realLight(2), noon = realLight(0), night = realLight(-20);
   assert.equal(day.key.dir, null);
   assert.equal(low.key.intensity, day.key.intensity, 'a low winter sun is not dimmed twice');
+  assert.equal(realLight(3).key.intensity, day.key.intensity, 'full from 3 degrees');
+  assert.equal(realLight(-6).key.intensity, night.key.intensity, 'the moon full from 6 degrees under');
   assert.ok(lum(low.key.color) < lum(day.key.color), 'a low sun is warm');
   assert.ok(dusk.key.intensity > 0 && dusk.key.intensity < day.key.intensity);
   assert.equal(noon.key.intensity, 0);
@@ -995,7 +997,7 @@ test('real style: the land beyond the lot darkens with the night', () => {
   assert.ok(out.material.color.equals(day));
   ctx.state.night = 1;
   L.update(0, 1);
-  assert.ok(out.material.color.r < day.r * 0.5);
+  assert.ok(Math.abs(out.material.color.r - day.r * 0.35) < 1e-9);
 });
 
 // OrbitControls on a stub canvas: listeners and a style are all it touches outside a gesture
