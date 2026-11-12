@@ -1,6 +1,8 @@
 // The surroundings (private, HA only): the neighbours' buildings and the street, fainter than
-// the lot and outside every tap test.
-export default function build({ THREE, kit, C, options, style }) {
+// the lot and outside every tap test. In the real style they darken to SUR_NIGHT of their colour
+// at night, so moonlit neighbours do not outshine the house.
+const SUR_NIGHT = 0.45;
+export default function build({ THREE, kit, C, options, style, state }) {
   const sur = options.surroundings;
   if (!sur) return null;
   const group = new THREE.Group();
@@ -18,7 +20,8 @@ export default function build({ THREE, kit, C, options, style }) {
       m.receiveShadow = true;
       group.add(m);
     });
-    return { id: 'surroundings', group, toggle: true };
+    const tint = kit.nightTint([bldM, roadM], SUR_NIGHT);
+    return { id: 'surroundings', group, toggle: true, update() { tint(state.night); } };
   }
   const bldM = kit.basic({ color: C.wall, opacity: 0.05, side: THREE.DoubleSide });
   const bldE = kit.lineMat({ color: C.lineSoft, opacity: 0.3 });

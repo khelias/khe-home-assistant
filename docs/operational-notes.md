@@ -234,9 +234,9 @@ behind every value and device. It replaced the Bubble Card trial of
   a panel view and its grid rows; with it, a vertical swipe on the house
   scrolls the page, a horizontal drag turns the house and the mouse wheel
   scrolls instead of zooming. A hero is always the real style with the live
-  sun and never draws the surroundings, so it shows no ETAK credit; its layer
-  switches are its own and are not stored, and its layers sheet has no style
-  row and no surroundings switch. Without `height` the card is as before.
+  sun; it draws the surroundings with their ETAK credit (ADR-009), its layer
+  switches are its own and are not stored, and its sheet has no style row.
+  Without `height` the card is as before.
 - **The sheet's data:** `recorder/statistics_during_period` for entities with
   long-term statistics (5-minute, hourly and daily means for 24 h, 7 and
   30 days; hourly and daily `change` for the Estfeed counters, which arrive
@@ -341,10 +341,14 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   sky, half desaturated, as the environment the surfaces reflect (rebuilt
   only when its colours change); the sun at full strength from 3 degrees
   up and warm below about 22, since the beam's own angle already dims a low
-  sun. Below the horizon the same shadow-casting light is the moon, which
+  sun. By day a shadowless warm fill from the home view's side lifts the
+  front, which the winter sun lights from behind, and the lot sits on a
+  light base like an architectural model's. Below the horizon the same
+  shadow-casting light is the moon, which
   is invented: it shines from the home view's side so the walls the camera
   sees read at night. The fog starts at the lot's farthest corner, so the
-  lot is always clear, and the land beyond darkens at night. A room glows while a
+  lot is always clear, and the land beyond and the neighbours darken at
+  night. A room glows while a
   light there is on or its motion sensor is on or went off less than 15
   minutes ago: its floor and its windows take a warm emissive scaled by the
   light's level, or 0.8 for motion. The card owns the 15 minutes (it sets
@@ -576,8 +580,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   street runs along the lot's front. The licence (Maa- ja Ruumiamet open
   data, 01.01.2025) asks for the licensor, the dataset and its date, which
   the card shows top left, only for a layer whose source starts with `ETAK,`
-  (the test fixture's made-up layer gets no credit line), and never in a hero,
-  which does not draw the layer.
+  (the test fixture's made-up layer gets no credit line), a hero included.
 
 ## HVAC integrations
 

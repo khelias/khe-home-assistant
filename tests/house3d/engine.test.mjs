@@ -986,7 +986,11 @@ test('realLight: the sun by day, the moon at night, dark at the horizon where th
   assert.ok(night.key.intensity > 0 && realLight(-3).key.intensity < night.key.intensity);
   assert.ok(lum(night.zenith) < lum(night.horizon) && lum(night.horizon) < lum(day.horizon));
   assert.deepEqual([day.night, noon.night, night.night], [0, 1, 1]);
-  assert.ok(night.env.intensity < day.env.intensity);
+  assert.ok(night.env.intensity <= day.env.intensity);
+  assert.equal(night.fill.intensity, 0);
+  assert.equal(noon.fill.intensity, 0);
+  assert.equal(realLight(3).fill.intensity, day.fill.intensity);
+  assert.ok(day.fill.intensity > 0 && day.fill.dir[0] < 0 && day.fill.dir[2] < 0, 'the fill comes from the home view\'s side');
 });
 
 test('real style: the land beyond the lot darkens with the night', () => {
@@ -997,7 +1001,20 @@ test('real style: the land beyond the lot darkens with the night', () => {
   assert.ok(out.material.color.equals(day));
   ctx.state.night = 1;
   L.update(0, 1);
-  assert.ok(Math.abs(out.material.color.r - day.r * 0.35) < 1e-9);
+  assert.ok(Math.abs(out.material.color.r - day.r * 0.22) < 1e-9);
+});
+
+test('real style: the neighbours darken with the night, and the simple style has no update', () => {
+  const { ctx } = makeCtx({ ...options, style: 'real' });
+  const L = buildLayer(BUILDERS[LAYERS.indexOf('surroundings')], 'surroundings', ctx);
+  const m = L.group.children[0].material, day = m.color.clone();
+  assert.ok(!L.update(0, 1));
+  assert.ok(m.color.equals(day));
+  ctx.state.night = 1;
+  L.update(0, 1);
+  assert.ok(Math.abs(m.color.r - day.r * 0.45) < 1e-9);
+  const simple = buildLayer(BUILDERS[LAYERS.indexOf('surroundings')], 'surroundings', makeCtx(options).ctx);
+  assert.equal(simple.update, undefined);
 });
 
 // OrbitControls on a stub canvas: listeners and a style are all it touches outside a gesture
@@ -1524,11 +1541,10 @@ test('card: heroSize keeps the default without a height and sizes the rows for o
   assert.deepEqual(card.heroSize({ height: 249.6 }), { height: 250, rows: 5 });
 });
 
-test('card: heroMount puts a hero in the real style without the surroundings, and leaves any other card as stored', () => {
+test('card: heroMount puts a hero in the real style with its layers as given, and leaves any other card as stored', () => {
   const stored = { surroundings: true, garden: false };
-  assert.equal(card.HERO_HIDDEN, 'surroundings');
   assert.deepEqual(card.heroMount(true, 'simple', stored),
-    { style: 'real', layers: { future: false, surroundings: false, garden: false } });
+    { style: 'real', layers: { future: false, surroundings: true, garden: false } });
   assert.deepEqual(card.heroMount(false, 'simple', stored),
     { style: 'simple', layers: { future: false, surroundings: true, garden: false } });
   assert.deepEqual(card.heroMount(false, 'real', undefined), { style: 'real', layers: { future: false } });

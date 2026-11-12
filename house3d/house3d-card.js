@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 43;
+const HOUSE3D_VERSION = 44;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -314,13 +314,12 @@ export function heroSize(config) {
 }
 
 // heroMount(hero, style, layers) -> { style, layers }: what the engine mounts with. A hero (a card
-// with `height`, a dashboard's top) is always the real style with the live sun and never draws
-// HERO_HIDDEN, so it owes no ETAK credit; it keeps its layer switches to itself, not in the stored
-// ones of the full 3D view. Any other card is as the visitor left it.
-export const HERO_HIDDEN = 'surroundings';
+// with `height`, a dashboard's top) is always the real style with the live sun; it keeps its layer
+// switches to itself, not in the stored ones of the full 3D view (ADR-006, ADR-009). Any other
+// card is as the visitor left it.
 export function heroMount(hero, style, layers) {
   const all = { ...LAYERS_OFF, ...(layers || {}) };
-  return hero ? { style: 'real', layers: { ...all, [HERO_HIDDEN]: false } } : { style, layers: all };
+  return { style: hero ? 'real' : style, layers: all };
 }
 
 const STYLE = `
@@ -375,10 +374,11 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .msg { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 16px; color: var(--muted); text-align: center; background: var(--bg); }
 .msg small { font-size: 12px; opacity: .8; }
 .msg .now { justify-self: center; }
-.credit { position: absolute; top: 10px; left: 12px; max-width: calc(100% - 24px); font-size: 11px; line-height: 1.3; color: var(--muted); opacity: .8; pointer-events: none; }
+.credit { position: absolute; top: 10px; left: 12px; max-width: calc(100% - 24px); font-size: 11px; line-height: 1.3; color: var(--ink); opacity: .85; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); pointer-events: none; }
 /* narrow follows the card's own width: a panel view on a wide screen can still be narrow */
 .narrow .bar { top: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: 50%; transform: translateX(50%); }
 /* a hero keeps its one button in the corner and drops its sheet from it */
+:host([hero]) .credit { max-width: calc(100% - 76px); }
 :host([hero]) .narrow .bar { top: 12px; bottom: auto; right: 12px; transform: none; }
 :host([hero]) .narrow .sheet { top: 60px; bottom: 8px; max-height: none; }
 /* the sheet ends above the bar, so its buttons stay in reach */
@@ -491,7 +491,7 @@ export class House3dCard extends Base {
       <div class="bar">${this._isHero ? '' : `${this._modeSeg('roof')}
         <button type="button" class="icon-btn" data-act="reset" aria-label="${t.resetView}" title="${t.resetView}"></button>`}
         <button type="button" class="icon-btn" data-act="layers" aria-label="${this._isHero ? t.view : t.layersTitle}" title="${this._isHero ? t.view : t.layersTitle}" aria-expanded="false"></button></div>
-      <aside class="sheet" hidden aria-live="polite"></aside>${this._isHero ? '' : this._credit()}</ha-card>`;
+      <aside class="sheet" hidden aria-live="polite"></aside>${this._credit()}</ha-card>`;
     this._sheet = null;
     const wrap = sr.querySelector('.wrap');
     // a hero lets the wheel scroll the page, where OrbitControls on the canvas would zoom the house
@@ -839,8 +839,7 @@ export class House3dCard extends Base {
     const list = this.shadowRoot.querySelector('.sheet .switches');
     if (!list || !this._view) return;
     const rank = id => (LAYER_ORDER.includes(id) ? LAYER_ORDER.indexOf(id) : LAYER_ORDER.length);
-    // a hero never draws the surroundings, so it offers no switch for them
-    const layers = this._view.layers.filter(l => !this._isHero || l.id !== HERO_HIDDEN).sort((a, b) => rank(a.id) - rank(b.id));
+    const layers = [...this._view.layers].sort((a, b) => rank(a.id) - rank(b.id));
     const ids = layers.map(l => l.id).join(' ');
     if (list.dataset.ids !== ids || !layers.length) {
       list.dataset.ids = ids;

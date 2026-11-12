@@ -19,8 +19,9 @@ This file holds rules and pointers; the reference lives in:
   a community card trial, since dropped ([ADR-004](docs/decisions/004-bubble-card-trial.md)),
   the A3 dashboard ([ADR-005](docs/decisions/005-a3-glass-cards-history-sheet.md)),
   A3 as the front page with its live-sun hero ([ADR-006](docs/decisions/006-a3-front-page-live-hero.md)),
-  A3 in the Overview with the other views to follow ([ADR-007](docs/decisions/007-a3-in-the-overview.md))
-  and page cards reading daily statistics ([ADR-008](docs/decisions/008-a3-page-cards-read-statistics.md))
+  A3 in the Overview with the other views to follow ([ADR-007](docs/decisions/007-a3-in-the-overview.md)),
+  page cards reading daily statistics ([ADR-008](docs/decisions/008-a3-page-cards-read-statistics.md))
+  and the hero with its surroundings ([ADR-009](docs/decisions/009-hero-shows-the-surroundings.md))
 - [ROADMAP.md](ROADMAP.md) - house automation, near-term and the long form
 
 House documentation (HA rollout, dashboard layout, HVAC protocols, energy)

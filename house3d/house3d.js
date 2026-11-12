@@ -685,7 +685,7 @@ export function mount(element, model, options = {}) {
 
   /* ---------- the real style's sun, sky and shadows ---------- */
   // sun is the one shadow-casting light: the sun while it is up, the moon below the horizon
-  let sun = null, hemi = null, glow = null, sunPlace = null, sunTime = null, sunTimer = 0, liftCasts = true;
+  let sun = null, fill = null, hemi = null, glow = null, sunPlace = null, sunTime = null, sunTimer = 0, liftCasts = true;
   // the sky behind the scene, and the same sky as the environment the surfaces reflect, both
   // redrawn only when their colours move by a 40th (skyKey), not on every minute or slider step
   let skyTex = null, pmrem = null, envScene = null, envMat = null, envTarget = null, skyKey = '';
@@ -713,7 +713,8 @@ export function mount(element, model, options = {}) {
     sun.shadow.radius = 3;
     sun.shadow.bias = -0.0005;
     sun.shadow.normalBias = 0.02; // the walls are DoubleSide, both faces go into the map
-    scene.add(hemi, sun, sun.target);
+    fill = new THREE.DirectionalLight('#ffffff', 0);
+    scene.add(hemi, sun, sun.target, fill);
     pmrem = new THREE.PMREMGenerator(renderer);
     envMat = kit.keep(new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false,
@@ -799,6 +800,10 @@ export function mount(element, model, options = {}) {
     sun.visible = L.key.intensity > 0;
     sun.intensity = L.key.intensity;
     sun.color.setRGB(...L.key.color);
+    fill.visible = L.fill.intensity > 0;
+    fill.intensity = L.fill.intensity;
+    fill.color.setRGB(...L.fill.color);
+    fill.position.set(...L.fill.dir);
     hemi.intensity = L.hemi.intensity;
     hemi.color.setRGB(...L.hemi.sky);
     hemi.groundColor.setRGB(...L.hemi.ground);

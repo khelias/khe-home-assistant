@@ -25,11 +25,12 @@ const COLORS = {
 // The bar fence and the gates are black bars (bars()), the other fences a dark wire mesh
 // (wireMesh()). The play area is stained timber with a sand box, a mint slide and a dark nest
 // seat; the trampoline a green edge pad on a black mat with a black net.
-// The car and surroundings are plain stand-ins; outside is the neutral ground beyond the lot.
+// The car and surroundings are plain stand-ins; outside the lot is a light base, like an
+// architectural model's.
 const REAL = {
   cladding: '#bebeb8', roof: '#7b8083', frame: '#383e42', unit: '#e4e4e0',
   glass: '#9fb8c4', interior: '#dddcd8', door: '#f2f1ed', floor: '#c39566', tile: '#5e4a3c', deck: '#4d4540', paving: '#b8b1a3',
-  lawn: '#5f7f45', outside: '#8e9088', hedge: '#355a32', crown: '#4f7a3a', trunk: '#5b4636',
+  lawn: '#64904a', outside: '#d8d6cc', hedge: '#355a32', crown: '#4f7a3a', trunk: '#5b4636',
   fence: '#4a4d50', car: '#2f3336', neighbour: '#b9b6ae', road: '#6b6b68',
   timber: '#8a6a4c', sand: '#d6c6a0', slide: '#9ed8c2', nest: '#3d4a5c', pad: '#3f8a4b', mat: '#202325',
   net: '#151719', mesh: '#2c2f31', stone: '#56595b',
@@ -254,6 +255,13 @@ export function createKit(THREE, style = 'simple') {
     return geo;
   }
 
+  // real style: (night) -> sets each material's colour from its colour now towards low of it at
+  // night 1, for the land and neighbours beyond the lot
+  function nightTint(materials, low) {
+    const day = materials.map(m => m.color.clone());
+    return night => materials.forEach((m, i) => m.color.copy(day[i]).multiplyScalar(1 - (1 - low) * night));
+  }
+
   // scales every material's opacity under group from its first-seen value; sprites are left out
   function applyFade(group, f) {
     group.traverse(o => {
@@ -280,5 +288,5 @@ export function createKit(THREE, style = 'simple') {
     return out;
   }
 
-  return { C, style, REAL, disposables, keep, basic, lineMat, mats, edges, box, prism, canvasTexture, applyFade, near, spans, surface, solid, flatShape, boards, pavers, planks, tiles, wireMesh, bars };
+  return { C, style, REAL, disposables, keep, basic, lineMat, mats, edges, box, prism, canvasTexture, applyFade, nightTint, near, spans, surface, solid, flatShape, boards, pavers, planks, tiles, wireMesh, bars };
 }
