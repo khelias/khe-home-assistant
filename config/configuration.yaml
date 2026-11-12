@@ -5,3 +5,8 @@ homeassistant:
 
 recorder:
   purge_keep_days: 30
+  # Gateway CPU and memory gauges: noise nothing reads, most of the recorder's rows.
+  exclude:
+    entities:
+      - sensor.unifi_gateway_protsessori_kasutus
+      - sensor.unifi_gateway_malu_kasutamine
