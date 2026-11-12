@@ -6,7 +6,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 7;
+export const KHE_CARDS_VERSION = 8;
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
 
@@ -1032,7 +1032,8 @@ class HeadingCard extends KheCard {
   }
 }
 
-// the page's title, the outdoor temperature with its sheet, then people, alarms and live faults
+// the page's title, the outdoor temperature with its sheet, then people, alarms and live faults;
+// `part` 'title' or 'chips' draws one of the two, for a layout that puts the hero between them
 class ChipsCard extends KheCard {
   static a3only = true;
   static css = `
@@ -1047,6 +1048,9 @@ h1{margin:0;font-size:34px;line-height:1.05;font-weight:700;letter-spacing:-0.02
 .chip.bad i{background:var(--highBar);color:#fff}
 .chip.bad{color:var(--high)}
 .chip b{font-weight:600}
+/* a heading card's 14 + 44 px, so the title's baseline meets the section headings' beside it */
+.title{padding:0}
+.title .head{margin-top:14px;height:44px}
 `;
   _watched() {
     const c = this._config;
@@ -1076,7 +1080,9 @@ h1{margin:0;font-size:34px;line-height:1.05;font-weight:700;letter-spacing:-0.02
       this._sheets.set('out', { title: c.outdoor.name || 'Õues', entity: c.outdoor.entity, more: c.outdoor.entity, decimals: c.outdoor.decimals ?? 1, unit: '°C', color: 'teal', history: { entity: c.outdoor.entity, ...c.outdoor.history } });
       if (v) out = `<button type="button" class="out" data-k="out">${v}° õues</button>`;
     }
-    return `<div class="wrap"><div class="head"><h1>${esc(c.title || 'Kodu')}</h1>${out}</div><div class="row">${list.join('')}</div></div>`;
+    const head = `<div class="head"><h1>${esc(c.title || 'Kodu')}</h1>${out}</div>`, row = `<div class="row">${list.join('')}</div>`;
+    const body = { title: head, chips: row }[c.part] ?? head + row;
+    return `<div class="wrap${c.part === 'title' ? ' title' : ''}">${body}</div>`;
   }
 }
 

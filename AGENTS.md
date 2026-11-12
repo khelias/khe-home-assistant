@@ -21,7 +21,8 @@ This file holds rules and pointers; the reference lives in:
   A3 as the front page with its live-sun hero ([ADR-006](docs/decisions/006-a3-front-page-live-hero.md)),
   A3 in the Overview with the other views to follow ([ADR-007](docs/decisions/007-a3-in-the-overview.md)),
   page cards reading daily statistics ([ADR-008](docs/decisions/008-a3-page-cards-read-statistics.md))
-  and the hero with its surroundings ([ADR-009](docs/decisions/009-hero-shows-the-surroundings.md))
+  and the hero with its surroundings ([ADR-009](docs/decisions/009-hero-shows-the-surroundings.md)),
+  and the hero beside the cards on wide screens ([ADR-010](docs/decisions/010-a3-landscape-hero-beside-the-cards.md))
 - [ROADMAP.md](ROADMAP.md) - house automation, near-term and the long form
 
 House documentation (HA rollout, dashboard layout, HVAC protocols, energy)
@@ -235,9 +236,10 @@ the operator first; an approval covers that task only.
   they control. The front page holds what is done daily; per-side controls,
   rare settings and diagnostics go on a `subview` behind a "Seaded" badge. A
   `note()` truncates to one line, so longer text needs a markdown card.
-  A3 is the exception: one page of glass cards under the 3D house,
-  with a history sheet per value instead of views
-  ([ADR-005](docs/decisions/005-a3-glass-cards-history-sheet.md)).
+  A3 is the exception: one page of glass cards under the 3D house, beside
+  it on wide screens, with a history sheet per value instead of views
+  ([ADR-005](docs/decisions/005-a3-glass-cards-history-sheet.md),
+  [ADR-010](docs/decisions/010-a3-landscape-hero-beside-the-cards.md)).
 - Read the integration's section in `docs/operational-notes.md` before
   touching it.
 

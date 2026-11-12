@@ -199,13 +199,36 @@ class Build(unittest.TestCase):
         types = [c["type"] for s in view["sections"] for c in s["cards"]]
         self.assertNotIn("custom:house3d-card", types)
         self.assertIn("custom:khe-chips-card", types)
+        self.assertEqual(view["sections"][0]["column_span"], view["max_columns"])
+        self.assertTrue(all("row_span" not in sec for sec in view["sections"]))
 
-    def test_the_hero_spans_the_view(self):
-        hero = VIEW["sections"][0]
-        self.assertEqual(hero["column_span"], VIEW["max_columns"])
-        self.assertEqual(hero["cards"][0]["height"], a3.HERO_HEIGHT)
-        self.assertEqual(hero["cards"][0]["model"], MODEL)
+    def test_the_hero_sits_left_two_rows_high_beside_elekter(self):
+        first, elekter, controls, climate = VIEW["sections"]
+        self.assertEqual(VIEW["max_columns"], 4)
+        self.assertEqual((first["column_span"], first["row_span"]), (1, 2))
+        _title, hero, _chips, _narrow = first["cards"]
+        self.assertEqual(hero["type"], "custom:house3d-card")
+        self.assertTrue(hero["stretch"])
+        self.assertEqual(hero["height"], a3.HERO_HEIGHT)
+        self.assertEqual(hero["model"], MODEL)
+        self.assertEqual(elekter["row_span"], 2)
+        self.assertEqual(elekter["cards"][0]["heading"], "Elekter")
+        self.assertNotIn("row_span", controls)
+        self.assertNotIn("row_span", climate)
         self.assertIn("var(--primary-background-color)", VIEW["background"])
+
+    def test_wide_puts_the_title_over_the_hero_and_narrow_keeps_it_under(self):
+        title, hero, chips, narrow = VIEW["sections"][0]["cards"]
+        screen = lambda c: [v["media_query"] for v in c.get("visibility", []) if v["condition"] == "screen"]
+        self.assertEqual((title["part"], chips["part"]), ("title", "chips"))
+        self.assertNotIn("part", narrow)
+        self.assertEqual(screen(title), [a3.WIDE])
+        self.assertEqual(screen(chips), [a3.WIDE])
+        self.assertEqual(screen(narrow), [a3.NARROW])
+        self.assertEqual(screen(hero), [])
+        strip = lambda c: {k: v for k, v in c.items() if k not in ("part", "visibility")}
+        self.assertEqual(strip(title), strip(narrow))
+        self.assertEqual(strip(chips), strip(narrow))
 
     def test_a_fresh_copy_every_call(self):
         first = a3.build(HOUSE, PEOPLE, MODEL)

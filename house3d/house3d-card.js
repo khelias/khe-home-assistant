@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 44;
+const HOUSE3D_VERSION = 45;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -313,6 +313,24 @@ export function heroSize(config) {
   return { height: Math.round(h), rows: Math.ceil((Math.round(h) + 8) / 64) };
 }
 
+const viewHeight = () => (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+
+// stretchBox(config) -> px or null: the height of a hero with `stretch`, before it measures its row:
+// the box its rows gave it, so a phone's sections stay where they were with the grid's rows at auto.
+export function stretchBox(config) {
+  const hero = heroSize(config);
+  return config && config.stretch && hero.height ? hero.rows * 64 - 8 : null;
+}
+
+// stretchHeight({ min, top, rest, beside, bottom }) -> px: in HA's sections view a hero with
+// `stretch` grows until its section ends where the tallest section starting on its row ends
+// (`beside`, page coordinates), never past `bottom` and never under `min`; `rest` is what its
+// section holds besides it. With nothing beside it, one column, it stays `min`.
+export function stretchHeight({ min, top, rest, beside, bottom }) {
+  if (!beside.length) return min;
+  return Math.max(min, Math.round(Math.min(bottom, Math.max(...beside)) - top - rest));
+}
+
 // heroMount(hero, style, layers) -> { style, layers }: what the engine mounts with. A hero (a card
 // with `height`, a dashboard's top) is always the real style with the live sun; it keeps its layer
 // switches to itself, not in the stored ones of the full 3D view (ADR-006, ADR-009). Any other
@@ -410,7 +428,10 @@ export class House3dCard extends Base {
     this._t = TEXT[this._lang];
     // a custom property, not the inline height _fit() clears outside a panel view
     this._hero = heroSize(config);
-    if (this._hero.height) this.style.setProperty('--house3d-height', `${this._hero.height}px`);
+    // a stretched hero keeps its height through a config update with the same box
+    const box = stretchBox(config);
+    if (box !== this._box) { this._box = box; this._stretched = null; }
+    if (this._hero.height) this.style.setProperty('--house3d-height', `${this._stretched || this._box || this._hero.height}px`);
     else this.style.removeProperty('--house3d-height');
     this.toggleAttribute('hero', !!this._hero.height);
     this._isHero = hero;
@@ -420,6 +441,7 @@ export class House3dCard extends Base {
     // another model starts from its own home view; another language or a hero redraws the card
     if (changed) { this._unmount(); this._states.clear(); this._keep = null; }
     this._render();
+    this._queueStretch();
   }
 
   set hass(hass) {
@@ -444,15 +466,50 @@ export class House3dCard extends Base {
   set isPanel(v) { this.toggleAttribute('panel', !!v); this._fit(); }
   _fit() {
     if (!this.hasAttribute('panel') || !this.isConnected) { this.style.height = ''; return; }
-    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    const vh = viewHeight();
     const top = Math.max(0, this.getBoundingClientRect().top);
     this.style.height = `${Math.max(320, Math.floor(vh - top))}px`;
   }
   getCardSize() { return (this._hero || heroSize(this._config)).rows; }
-  getGridOptions() { return { columns: 'full', rows: (this._hero || heroSize(this._config)).rows }; }
+  // a stretching hero sets its own height, so the grid must not fix it
+  getGridOptions() {
+    return { columns: 'full', rows: stretchBox(this._config) ? 'auto' : (this._hero || heroSize(this._config)).rows };
+  }
+
+  // the hero's `.section` in hui-sections-view's `.content` (HA 2026.11), or null
+  _section() {
+    for (let n = this.parentNode || this.host; n; n = n.parentNode || n.host) {
+      if (n.classList && n.classList.contains('section') && n.parentElement && n.parentElement.classList.contains('content')) return n;
+    }
+    return null;
+  }
+  _queueStretch() {
+    if (this._box && !this._stretchFrame) this._stretchFrame = requestAnimationFrame(() => this._stretch());
+  }
+  _stretch() {
+    this._stretchFrame = 0;
+    if (!this._box || !this.isConnected) return;
+    const sec = this._section();
+    let h = this._box;
+    if (sec) {
+      const others = [...sec.parentElement.children].filter(s => s !== sec && s.classList.contains('section'));
+      if (sec !== this._stretchSec && typeof ResizeObserver === 'function') {
+        if (this._stretchRo) this._stretchRo.disconnect();
+        this._stretchRo = new ResizeObserver(() => this._queueStretch());
+        [sec, ...others].forEach(s => this._stretchRo.observe(s));
+        this._stretchSec = sec;
+      }
+      const y = window.scrollY, own = sec.getBoundingClientRect(), top = own.top + y;
+      const beside = others.map(s => s.getBoundingClientRect())
+        .filter(r => r.height > 0 && Math.abs(r.top + y - top) <= 2).map(r => r.bottom + y);
+      // 24 px: the view's own bottom padding
+      h = stretchHeight({ min: this._box, top, rest: own.height - this.getBoundingClientRect().height, beside, bottom: viewHeight() - 24 });
+    }
+    if (h !== this._stretched) { this._stretched = h; this.style.setProperty('--house3d-height', `${h}px`); }
+  }
 
   connectedCallback() {
-    this._onResize = this._onResize || (() => this._fit());
+    this._onResize = this._onResize || (() => { this._fit(); this._queueStretch(); });
     // only an Escape from the card or the bare page: one in HA's more-info dialog closes the dialog alone
     this._onKey = this._onKey || (ev => {
       const from = ev.composedPath()[0];
@@ -469,6 +526,8 @@ export class House3dCard extends Base {
     window.removeEventListener('resize', this._onResize);
     window.removeEventListener('keydown', this._onKey);
     if (window.visualViewport) window.visualViewport.removeEventListener('resize', this._onResize);
+    if (this._stretchRo) { this._stretchRo.disconnect(); this._stretchRo = null; this._stretchSec = null; }
+    if (this._stretchFrame) { cancelAnimationFrame(this._stretchFrame); this._stretchFrame = 0; }
     if (this._view && !this._view.failed) this._keep = { mode: this._view.mode, view: this._view.view };
     this._unmount();
   }

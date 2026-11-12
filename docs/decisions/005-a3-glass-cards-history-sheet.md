@@ -1,6 +1,6 @@
 # ADR-005: Kodu A3 is drawn by our own glass cards, with a view background and a history sheet
 
-- **Status:** Accepted (2026-11-12); front page: [ADR-006](006-a3-front-page-live-hero.md); decision 1 superseded by [ADR-007](007-a3-in-the-overview.md); decision 5 extended to page cards by [ADR-008](008-a3-page-cards-read-statistics.md). Narrows [ADR-002](002-own-dashboard-cards.md) for the A3 dashboard; replaces the trial of [ADR-004](004-bubble-card-trial.md).
+- **Status:** Accepted (2026-11-12); front page: [ADR-006](006-a3-front-page-live-hero.md); decision 1 superseded by [ADR-007](007-a3-in-the-overview.md); decision 4's full-width hero superseded from two columns up by [ADR-010](010-a3-landscape-hero-beside-the-cards.md); decision 5 extended to page cards by [ADR-008](008-a3-page-cards-read-statistics.md). Narrows [ADR-002](002-own-dashboard-cards.md) for the A3 dashboard; replaces the trial of [ADR-004](004-bubble-card-trial.md).
 - **Related:** [ADR-001](001-own-3d-engine.md), [ADR-002](002-own-dashboard-cards.md), [ADR-004](004-bubble-card-trial.md), [estate ADR-025](https://github.com/khelias/khe-architecture/blob/main/decisions/025-the-house-dashboard-keeps-its-own-look.md)
 
 ## Context

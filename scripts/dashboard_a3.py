@@ -1,4 +1,4 @@
-"""A3, the house's Overview in A3's look, as data (ADR-005 to ADR-008).
+"""A3, the house's Overview in A3's look, as data (ADR-005 to ADR-008, ADR-010).
 
 overview(house, people, model) is the Overview the house saves: dashboard_config.build()'s views
 with A3's views in place of Kodu's at the same paths (`kodu`, `energia`) and the 3D view moved
@@ -9,7 +9,13 @@ build(house, people, model) returns A3 as a one-view Lovelace config: the 3D hou
 the hero, then the page's title with the outdoor temperature, people, alarms and live faults as
 chips, and Elekter, Juhtimine, Kliima and Süsteem as glass cards from cards/khe-cards.js. Every
 entity, action and confirmation of Kodu's first page stays on this page; a tap on a value or a
-device opens its history sheet. Entity ids, names and confirmation texts come from
+device opens its history sheet.
+
+The layout follows HA's column count (ADR-010): one column stacks the hero with the title, Elekter,
+Juhtimine and Kliima; from two columns the hero and the title sit on the left, two rows high, and
+the hero stretches to the tallest section beside it. Two columns: Elekter beside the hero,
+Juhtimine and Kliima under them. Three: Elekter and Juhtimine beside it, Kliima under Juhtimine.
+Four: all three beside it. Entity ids, names and confirmation texts come from
 dashboard_config (its constants, or Kodu's own first page as dashboard_config.home() builds it);
 nothing here spells one, and nothing here changes what dashboard_config builds.
 
@@ -49,7 +55,12 @@ BACKGROUND = ", ".join(
     + ["var(--primary-background-color)"]
 )
 HERO_HEIGHT = 300
-COLUMNS = 3
+COLUMNS = 4
+# HA's sections view gets a second column at 736 px of content: two 320 px columns, a 32 px gap
+# and 32 px of padding each side. HA's open sidebar narrows the content, so between 870 and 990 px
+# the wide order can show in one column.
+WIDE = "(min-width: 736px)"
+NARROW = "not all and (min-width: 736px)"
 
 MEAN = {"source": "statistics", "type": "mean"}
 ONOFF = {"source": "history"}
@@ -248,8 +259,28 @@ def cover_button(name, state, service):
     return {"name": name, "state": state, "tap_action": act}
 
 
-def section(cards, span=1):
-    return {"type": "grid", "column_span": span, "cards": cards}
+def section(cards, span=1, rows=1):
+    s = {"type": "grid", "column_span": span, "cards": cards}
+    if rows > 1:
+        s["row_span"] = rows
+    return s
+
+
+def first(hero, title_chips):
+    """The first section: the title and chips under the hero in one column; from two columns
+    (WIDE, the hero beside the cards) the title over the hero and the chips under it."""
+    if not hero:
+        return [title_chips]
+
+    def shown(c, query, **kw):
+        return {**c, **kw, "visibility": [{"condition": "screen", "media_query": query}]}
+
+    return [
+        shown(title_chips, WIDE, part="title"),
+        *hero,
+        shown(title_chips, WIDE, part="chips"),
+        shown(title_chips, NARROW),
+    ]
 
 
 def build(house, people, model):
@@ -261,6 +292,7 @@ def build(house, people, model):
                 "type": "custom:house3d-card",
                 "model": model,
                 "height": HERO_HEIGHT,
+                "stretch": True,
                 "grid_options": {"columns": "full"},
             }
         ]
@@ -332,16 +364,19 @@ def build(house, people, model):
         value(dc.EXTRACT, "Väljatõmme", "extract", "teal", "toast väljuv õhk", MEAN, decimals=1),
         system(h),
     ]
+    # with a hero, the first section and Elekter are two rows high beside the other two; without
+    # one, three columns hold the three sections under the title
+    columns, span, rows = (COLUMNS, 1, 2) if hero else (3, 3, 1)
     view = {
         "title": "Kodu",
         "path": "kodu",
         "icon": "mdi:home-heart",
         "type": "sections",
-        "max_columns": COLUMNS,
+        "max_columns": columns,
         "background": BACKGROUND,
         "sections": [
-            section([*hero, chips(h)], COLUMNS),
-            section([heading("Elekter", "/lovelace/energia"), price()]),
+            section(first(hero, chips(h)), span, rows),
+            section([heading("Elekter", "/lovelace/energia"), price()], rows=rows),
             section(controls),
             section(climate),
         ],

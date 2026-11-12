@@ -87,8 +87,8 @@ class Overview(unittest.TestCase):
     def test_the_hero_and_the_3d_view_both_carry_the_car_entity(self):
         self.ha.house3d_card_model = model_without_car_entity
         config = self.ha.local_config()
-        hero = config["views"][0]["sections"][0]["cards"][0]
-        self.assertEqual(hero["type"], "custom:house3d-card")
+        cards = config["views"][0]["sections"][0]["cards"]
+        (hero,) = [c for c in cards if c["type"] == "custom:house3d-card"]
         self.assertEqual(hero["model"]["car"]["entity"], "switch.test_stand_in")
         self.assertEqual(card_car(config)["entity"], "switch.test_stand_in")
 

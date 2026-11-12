@@ -1541,6 +1541,30 @@ test('card: heroSize keeps the default without a height and sizes the rows for o
   assert.deepEqual(card.heroSize({ height: 249.6 }), { height: 250, rows: 5 });
 });
 
+test('card: stretchBox keeps a stretching hero in the box its rows gave it', () => {
+  assert.equal(card.stretchBox({ height: 300, stretch: true }), 312);
+  assert.equal(card.stretchBox({ height: 300 }), null);
+  assert.equal(card.stretchBox({ stretch: true }), null);
+  assert.equal(card.stretchBox(undefined), null);
+});
+
+test('card: stretchHeight follows the tallest section on its row, within the screen and over its minimum', () => {
+  const at = { min: 312, top: 80, rest: 109 };
+  assert.equal(card.stretchHeight({ ...at, beside: [], bottom: 796 }), 312);
+  assert.equal(card.stretchHeight({ ...at, beside: [686, 599], bottom: 796 }), 497);
+  assert.equal(card.stretchHeight({ ...at, beside: [1100], bottom: 796 }), 607);
+  assert.equal(card.stretchHeight({ ...at, beside: [400], bottom: 796 }), 312);
+  assert.equal(card.stretchHeight({ ...at, beside: [686], bottom: 366 }), 312);
+});
+
+test('card: a stretching hero leaves its grid rows at auto', () => {
+  const el = Object.create(card.House3dCard.prototype);
+  el._config = { height: 300, stretch: true };
+  assert.deepEqual(el.getGridOptions(), { columns: 'full', rows: 'auto' });
+  el._config = { height: 300 };
+  assert.deepEqual(el.getGridOptions(), { columns: 'full', rows: 5 });
+});
+
 test('card: heroMount puts a hero in the real style with its layers as given, and leaves any other card as stored', () => {
   const stored = { surroundings: true, garden: false };
   assert.deepEqual(card.heroMount(true, 'simple', stored),

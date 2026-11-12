@@ -230,10 +230,24 @@ behind every value and device. It replaced the Bubble Card trial of
   light and dark. `light-dark()` does not: HA leaves `color-scheme` at
   `normal`, so it follows the browser's scheme, not HA's (measured on
   2026-11-12).
+- **Layout** ([ADR-010](decisions/010-a3-landscape-hero-beside-the-cards.md)):
+  the hero and the title are one section a column wide and two rows high,
+  Elekter spans two rows, `max_columns` is 4. From 736 px (HA's screen
+  condition) the title row sits over the hero, baseline to baseline with
+  the section headings, and the chips under it; below that the whole chips
+  card is under the hero. One column (the phone)
+  stacks; two put Elekter beside the hero; three, a 1180 px tablet with
+  HA's sidebar hidden or collapsed, put Elekter and Juhtimine beside it
+  with Kliima under Juhtimine and scroll about 240 px at 820 px high; four,
+  content at least 1440 px wide, fit without scrolling. With HA's sidebar
+  open the same tablet gets two columns.
 - **The hero:** the 3D card's optional `height` (px) sets its height outside
-  a panel view and its grid rows; with it, a vertical swipe on the house
-  scrolls the page, a horizontal drag turns the house and the mouse wheel
-  scrolls instead of zooming. A hero is always the real style with the live
+  a panel view and its grid rows; with `stretch` too its grid rows are
+  auto and it grows to the tallest section starting on its row, within the
+  screen and never under the box its rows gave it (312 px for 300), found
+  through HA's `.section` element in the view's `.content`. With `height`
+  a vertical swipe on the house scrolls the page, a horizontal drag turns
+  the house and the mouse wheel scrolls instead of zooming. A hero is always the real style with the live
   sun; it draws the surroundings with their ETAK credit (ADR-009), its layer
   switches are its own and are not stored, and its sheet has no style row.
   Without `height` the card is as before.
@@ -254,6 +268,9 @@ behind every value and device. It replaced the Bubble Card trial of
   switch it to 7 and 30 days: the two WebSocket commands and the
   `background` handling (`hui-view-background.ts`) can change with the
   frontend. Open Energia too: its cards read the same statistics command.
+  On a wide screen check that the hero still stretches beside Elekter: it
+  reads `hui-sections-view`'s `.section` and `.content` and relies on
+  `row_span`.
 - **Energia** ([ADR-008](decisions/008-a3-page-cards-read-statistics.md)):
   the month card reads `maja_sel_kuul`, `maja_eelmine_kuu`, `maja_tana` and
   `maja_eile` with their `kulu` and `hind` attributes; the days cards read
