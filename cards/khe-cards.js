@@ -7,7 +7,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 9;
+export const KHE_CARDS_VERSION = 10;
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
 
@@ -1922,7 +1922,7 @@ class ReadingCard extends LoadingCard {
     this._point = null;
     const { value } = splitValue(st, c.decimals);
     const l = c.line, hours = (l && l.hours) || 48, floor = l ? l.floor : undefined;
-    const { chart, key, range } = l ? this._line(states, pal, l, hours, now) : {};
+    const { chart = '', key = '', range = null } = l ? this._line(states, pal, l, hours, now) : {};
     const n = c.note || {};
     let note = '';
     if (n.target) {
