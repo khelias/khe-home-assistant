@@ -17,8 +17,10 @@ This file holds rules and pointers; the reference lives in:
   the dashboard's own cards ([ADR-002](docs/decisions/002-own-dashboard-cards.md)),
   the demo's English ([ADR-003](docs/decisions/003-demo-in-english.md)),
   a community card trial, since dropped ([ADR-004](docs/decisions/004-bubble-card-trial.md)),
-  the A3 dashboard ([ADR-005](docs/decisions/005-a3-glass-cards-history-sheet.md))
-  and A3 as the front page with its live-sun hero ([ADR-006](docs/decisions/006-a3-front-page-live-hero.md))
+  the A3 dashboard ([ADR-005](docs/decisions/005-a3-glass-cards-history-sheet.md)),
+  A3 as the front page with its live-sun hero ([ADR-006](docs/decisions/006-a3-front-page-live-hero.md)),
+  A3 in the Overview with the other views to follow ([ADR-007](docs/decisions/007-a3-in-the-overview.md))
+  and page cards reading daily statistics ([ADR-008](docs/decisions/008-a3-page-cards-read-statistics.md))
 - [ROADMAP.md](ROADMAP.md) - house automation, near-term and the long form
 
 House documentation (HA rollout, dashboard layout, HVAC protocols, energy)
@@ -31,8 +33,9 @@ own.
 
 ```
 cards/             the dashboard's own Lovelace cards (khe-cards.js, ADR-002,
-                   ADR-005): summary, price, tile, chips, heading and status,
-                   with the history sheet; A3 draws with them; deploy
+                   ADR-005, ADR-008): summary, price, tile, chips, heading,
+                   status, and Energia's month, days and split, with the
+                   history sheet; A3 draws with them; deploy
                    copies them to www/khe-cards/
 config/            what deploy copies into HA's /config
   configuration.yaml
@@ -50,9 +53,9 @@ house3d/           3D house view: engine (core house3d.js, scene/ layer
                    modules, kit and sun), HA card, standalone viewer,
                    placement page, vendored three.js
 scripts/           dashboard_config.py (the HA Overview as data, no I/O),
-                   dashboard_a3.py (A3, the Overview's first view, from
-                   the same entities, and overview(), what the house
-                   saves, ADR-005, ADR-007),
+                   dashboard_a3.py (A3 and Energia in A3's look from the
+                   same entities, and overview(), what the house saves,
+                   ADR-005, ADR-007, ADR-008),
                    ha-dashboard.py (reads the private inputs, saves either),
                    dashboard_demo.py (the demo's made-up entities, texts and
                    series for the same config), dashboard_demo_en.py (its

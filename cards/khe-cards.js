@@ -6,7 +6,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 3;
+export const KHE_CARDS_VERSION = 4;
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
 
@@ -64,6 +64,7 @@ const ICONS = {
   sauna: '<path d="M4 20h16M6 15h12v5H6zM9 4c-1 2 1 3 0 5M12 4c-1 2 1 3 0 5M15 4c-1 2 1 3 0 5"/>',
   moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  home: '<path d="M3 11l9-7 9 7M5 10v10h14V10M10 20v-6h4v6"/>',
   chevron: '<path d="M9 6l6 6-6 6"/>'
 };
 const icon = (key, size, color) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[key] || ICONS.bolt}</svg>`;
@@ -555,7 +556,7 @@ const A3 = {
 // the tile colours by name: [disc, icon on it]
 const A3_COLORS = {
   teal: ['#30b0c7', '#fff'], yellow: ['#ffcc00', '#1c1c1e'], blue: ['#0a84ff', '#fff'], orange: ['#ff9f0a', '#fff'],
-  indigo: ['#5e5ce6', '#fff'], green: ['#34c759', '#fff'], red: ['#ff453a', '#fff'], heat: ['#ff6b35', '#fff']
+  indigo: ['#5e5ce6', '#fff'], green: ['#34c759', '#fff'], red: ['#ff453a', '#fff'], heat: ['#ff6b35', '#fff'], gray: ['#8e8e93', '#fff']
 };
 export function a3Palette(dark) {
   return { ...A3[dark ? 'dark' : 'light'], dark: !!dark };
@@ -1134,7 +1135,7 @@ function priceA3(card, states, pal) {
       return `<span><span class="lab">${esc(u.name)}</span><span class="v num">${n ? `${n} <small>${esc((st.attributes || {}).unit_of_measurement || '')}</small>` : '–'}</span><span class="sub">${esc(kulu || '')}</span></span>`;
     }).join('');
     const h = c.usage_history;
-    if (h) card._sheets.set('use', { title: 'Tarbimine', entity: c.usage[0].entity, more: c.usage[0].entity, decimals: 1, unit: 'kWh', color: 'indigo', history: h });
+    if (h) card._sheets.set('use', usageSheet(c.usage[0].entity, h));
     use = h ? `<button type="button" class="glass press use" data-k="use" aria-label="Tarbimine, ajalugu">${cells}</button>` : `<div class="glass use">${cells}</div>`;
   }
   return `<div class="stack">${main}${use}</div>`;
@@ -1262,13 +1263,386 @@ function wireSlider(card) {
   });
 }
 
+/* ---------- A3 Energia: time in HA's zone, daily statistics, the month and the split ---------- */
+
+// a number from an attribute: HA's templates write Estonian ("116,34 €", "32,1 c/kWh"), a utility
+// meter a plain one ("42.589"); null for "-", empty or missing
+export function parseEt(s) {
+  if (typeof s === 'number') return Number.isFinite(s) ? s : null;
+  const m = /-?\d+(?:[ \u00a0]\d{3})*(?:[.,]\d+)?/.exec(String(s ?? ''));
+  return m ? Number(m[0].replace(/[ \u00a0]/g, '').replace(',', '.')) : null;
+}
+
+// { y, m, d, h, min, s } of a moment in a time zone
+const ZONE_FMT = new Map();
+export function zoneParts(t, tz) {
+  let f = ZONE_FMT.get(tz);
+  if (!f) ZONE_FMT.set(tz, (f = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })));
+  const p = Object.fromEntries(f.formatToParts(new Date(t)).filter(x => x.type !== 'literal').map(x => [x.type, Number(x.value)]));
+  return { y: p.year, m: p.month, d: p.day, h: p.hour, min: p.minute, s: p.second };
+}
+const zoneOffset = (t, tz) => { const p = zoneParts(t, tz); return Date.UTC(p.y, p.m - 1, p.d, p.h, p.min, p.s) - Math.floor(t / 1000) * 1000; };
+
+// the moment a calendar day starts in a time zone; d and m may run over (d 0 is the last of the
+// month before), as Date.UTC allows
+export function dayStart(y, m, d, tz) {
+  const guess = Date.UTC(y, m - 1, d);
+  const t = guess - zoneOffset(guess, tz);
+  return guess - zoneOffset(t, tz);
+}
+
+// [start, end) of the month a moment is in, in a time zone
+export function monthSpan(t, tz) {
+  const p = zoneParts(t, tz);
+  return [dayStart(p.y, p.m, 1, tz), dayStart(p.y, p.m + 1, 1, tz)];
+}
+
+// the starts of the last `days` days to today, oldest first
+export function dayStarts(days, now, tz) {
+  const p = zoneParts(now, tz);
+  return Array.from({ length: days }, (_, i) => dayStart(p.y, p.m, p.d - (days - 1) + i, tz));
+}
+
+// the WebSocket message for daily statistics of the last `days` days in HA's time zone
+export function dailyRequest(ids, types, days, now, tz) {
+  return { type: 'recorder/statistics_during_period', start_time: new Date(dayStarts(days, now, tz)[0]).toISOString(), statistic_ids: ids, period: 'day', types };
+}
+
+// the last two days of an energy counter by the hour, for the data cutoff
+// (from a whole hour, so one hour's requests are the same message and can be shared)
+export const hourlyRequest = (id, now) => ({ type: 'recorder/statistics_during_period', start_time: new Date(Math.floor(now / HOUR) * HOUR - 48 * HOUR).toISOString(), statistic_ids: [id], period: 'hour', types: ['change'] });
+
+// where a delayed counter's data ends: the end of its last hour with a value, or null
+export function dataCutoff(resp, id) {
+  const rows = ((resp || {})[id] || []).filter(r => num(r.change) !== null);
+  return rows.length ? rows[rows.length - 1].start + HOUR : null;
+}
+
+// one point per day, oldest first: { t, label, v, max, late }; a day the response lacks is null, a
+// day that had not ended by a delayed counter's cutoff is late
+export function dailySeries(resp, id, type, days, now, tz, cutoff = Infinity) {
+  const key = t => { const p = zoneParts(t, tz); return `${p.y}-${p.m}-${p.d}`; };
+  const rows = new Map(((resp || {})[id] || []).map(r => [key(r.start), r]));
+  const starts = dayStarts(days, now, tz);
+  return starts.map((t, i) => {
+    const r = rows.get(key(t)), p = zoneParts(t, tz);
+    return { t, label: `${p.d}.${p.m}`, v: r ? num(r[type]) : null, max: r ? num(r.max) : null, late: (i + 1 < days ? starts[i + 1] : Infinity) > cutoff };
+  });
+}
+
+// { avg, big, small, peak } over the days with a value that are not late; big and small are those
+// days, peak is { v, label } of the dearest max; null when no day counts
+export function dayStats(points) {
+  const full = points.filter(p => p.v !== null && !p.late);
+  if (!full.length) return null;
+  const pick = better => full.reduce((a, p) => (better(p.v, a.v) ? p : a));
+  const withMax = full.filter(p => p.max !== null);
+  const peak = withMax.length ? withMax.reduce((a, p) => (p.max > a.max ? p : a)) : null;
+  return {
+    avg: full.reduce((a, p) => a + p.v, 0) / full.length,
+    big: pick((a, b) => a > b), small: pick((a, b) => a < b),
+    peak: peak && { v: peak.max, label: peak.label }
+  };
+}
+
+const earlyInMonth = (now, tz) => zoneParts(now, tz).d <= 2;
+
+// the month's cost at its pace: cost over the elapsed share of the month up to the data cutoff;
+// null on the first two days, before any data, or without a cost
+export function monthPace(cost, cutoff, now, tz) {
+  if (cost === null || cost === undefined || earlyInMonth(now, tz)) return null;
+  const [a, b] = monthSpan(now, tz);
+  const frac = (Math.min(cutoff ?? now, now) - a) / (b - a);
+  return frac > 0 ? cost / frac : null;
+}
+
+// "in <month>" in Estonian, by the month's number (1-12): the inessive is not one suffix for all
+const IN_MONTH = ['jaanuaris', 'veebruaris', 'märtsis', 'aprillis', 'mais', 'juunis', 'juulis', 'augustis', 'septembris', 'oktoobris', 'novembris', 'detsembris'];
+export const inLastMonth = (now, tz) => IN_MONTH[(zoneParts(now, tz).m + 10) % 12];
+
+// last month's name, Estonian ("oktoober") and as Daikin's month attributes name it ("October")
+export function lastMonthName(now, tz, lang = 'et-EE') {
+  const p = zoneParts(now, tz);
+  return new Intl.DateTimeFormat(lang, { month: 'long', timeZone: tz }).format(new Date(dayStart(p.y, p.m - 1, 15, tz)));
+}
+
+// the split card's rows: each part's kWh this month, its share and last month's, and the rest of
+// the house. Shares are of the larger of the total and the parts, so a delayed total cannot push
+// them past 100; last month is left out on the first two days, when it may still be the one before.
+export function splitRows(states, conf, now, tz) {
+  const v = e => (hasValue(states[e]) ? num(states[e].state) : null);
+  const early = earlyInMonth(now, tz), en = lastMonthName(now, tz, 'en-US');
+  const last = (p, st) => {
+    if (early || !p.last || !st) return null;
+    const a = st.attributes || {};
+    return parseEt(p.last === 'month' ? a[en] : a[p.last]);
+  };
+  const parts = (conf.parts || []).map(p => ({ ...p, kwh: v(p.entity), last: last(p, states[p.entity]) }))
+    .filter(p => p.kwh !== null && !(p.hide_zero && p.kwh <= 0));
+  const total = v(conf.total), sum = parts.reduce((a, p) => a + p.kwh, 0);
+  const rest = total === null ? null : Math.max(0, total - sum);
+  const denom = Math.max(total ?? 0, sum) || 1;
+  const rows = parts.map(p => ({ ...p, share: Math.round((p.kwh / denom) * 100) }));
+  if (rest !== null) rows.push({ name: (conf.rest || {}).name || 'Ülejäänud maja', icon: 'home', color: 'gray', kwh: rest, share: Math.round((rest / denom) * 100), last: null, rest: true });
+  return { rows, stale: !!conf.fresh && stateOf(states, conf.fresh) === 'off' };
+}
+
+// A3's usage sheet: an energy entity's value now, its consumption and cost by hour and by day
+export function usageSheet(entity, history) {
+  return { title: 'Tarbimine', entity, more: entity, decimals: 1, unit: 'kWh', color: 'indigo', history };
+}
+
+// one fetch per message and HA-zone hour, shared by the cards on a page (the month and days cards
+// both ask for the data cutoff); a daily request is the same message all day, so the hour is part
+// of the key. A failed fetch is forgotten so a later draw tries again.
+const FETCHES = new Map();
+function fetchShared(hass, msg, hour) {
+  const key = `${hour}|${JSON.stringify(msg)}`;
+  if (!FETCHES.has(key)) {
+    const p = hass.callWS(msg);
+    FETCHES.set(key, p);
+    p.catch(() => FETCHES.delete(key));
+    while (FETCHES.size > 24) FETCHES.delete(FETCHES.keys().next().value);
+  }
+  return FETCHES.get(key);
+}
+
+const tzOf = hass => (hass && hass.config && hass.config.time_zone) || Intl.DateTimeFormat().resolvedOptions().timeZone;
+const hourKeyOf = (now, tz) => { const p = zoneParts(now, tz); return `${p.y}-${p.m}-${p.d}-${p.h}`; };
+const fmtN = (v, d) => formatNumber(v.toFixed(d), d);
+const money = v => fmtN(v, 2);
+
+// a card that loads recorder data before it draws: the load runs when the HA-zone hour changes,
+// a result redraws the card, a newer load wins; after an error the next try waits a minute.
+// _requests() names its messages ({ cutoff: msg, ... }); the data has the responses by those names.
+class LoadingCard extends KheCard {
+  static a3only = true;
+  _clock() { return this._hass ? hourKeyOf(Date.now(), tzOf(this._hass)) : 0; }
+  _requests() { return {}; }
+  // another config asks for other data
+  setConfig(config) { this._loadedFor = null; this._data = null; super.setConfig(config); }
+  _draw() { this._ensure(); super._draw(); }
+  _ensure() {
+    if (!this._hass || !this._config || !this.isConnected) return;
+    const hour = this._clock(), now = Date.now();
+    if (this._loadedFor === hour || now < (this._retryAt || 0)) return;
+    this._loadedFor = hour;
+    const tz = tzOf(this._hass), token = (this._token = {});
+    const named = Object.entries(this._requests(now, tz));
+    Promise.all(named.map(([, m]) => fetchShared(this._hass, m, hour)))
+      .then(res => ({ res: Object.fromEntries(named.map(([k], i) => [k, res[i]])), now, tz }), () => ({ error: true }))
+      .then(d => {
+        if (this._token !== token) return;
+        this._data = d;
+        if (d.error) { this._loadedFor = null; this._retryAt = Date.now() + 60e3; }
+        super._draw();
+      });
+  }
+  connectedCallback() { this._draw(); }
+}
+
+// the price card's look (.main, .hd, .lab, .big, .badge, .hr), and the month's own parts
+const MONTH_CSS = `${PRICE_A3_CSS}
+.head{display:flex;flex-direction:column;gap:4px;padding:4px 4px 2px}
+h1{margin:0;font-size:34px;line-height:1.05;font-weight:700;letter-spacing:-0.022em}
+.date{font-size:15px;font-weight:600;color:var(--sub)}
+.wrap{display:flex;flex-direction:column;gap:12px}
+.main{padding:16px}
+.big .u{font-size:17px}
+.prog{display:flex;flex-direction:column;gap:6px}
+.track{position:relative;display:block;height:8px;border-radius:4px;background:var(--track);overflow:hidden}
+.track i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:#5e5ce6}
+.pl{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:600;color:var(--sub)}
+.cells{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.cells > span{display:flex;flex-direction:column;gap:1px;min-width:0}
+.cells .v{font-size:20px;font-weight:700;letter-spacing:-0.02em}
+.cells .v small{font-size:13px;font-weight:600;color:var(--sub)}
+.foot{font-size:12px;color:var(--sub)}
+`;
+
+// Energia's top: the title and date, the month's cost and pace, today, yesterday and last month
+class MonthCard extends LoadingCard {
+  static css = MONTH_CSS;
+  _check(c) { if (!c.month) throw new Error('khe-month-card: month is required'); }
+  _watched() { const c = this._config; return [c.month, c.last_month, c.today, c.yesterday].filter(Boolean); }
+  _requests(now) { return this._config.consumption ? { cutoff: hourlyRequest(this._config.consumption, now) } : {}; }
+  _html(states) {
+    const c = this._config, now = Date.now(), tz = tzOf(this._hass), p = zoneParts(now, tz);
+    const d = this._data && !this._data.error ? this._data : null;
+    const cutoff = d && d.res.cutoff ? dataCutoff(d.res.cutoff, c.consumption) : null;
+    const st = states[c.month], a = hasValue(st) ? st.attributes || {} : {};
+    const cost = parseEt(a.kulu), price = parseEt(a.hind), kwh = hasValue(st) ? formatNumber(st.state, 0) : null;
+    const lm = states[c.last_month], la = hasValue(lm) ? lm.attributes || {} : {};
+    const lastName = lastMonthName(now, tz), early = earlyInMonth(now, tz), lastPrice = early ? null : parseEt(la.hind);
+    let badge = '';
+    if (price !== null && lastPrice) {
+      const r = price / lastPrice;
+      const [tone, word] = r > 1.03 ? ['high', 'Kallim'] : r < 0.97 ? ['good', 'Odavam'] : ['mid', 'Sama hinnaga'];
+      badge = `<span class="badge ${tone}">${word} kui ${esc(lastName)}</span>`;
+    }
+    const [m0, m1] = monthSpan(now, tz), days = Math.round((m1 - m0) / (24 * HOUR));
+    const pace = monthPace(cost, cutoff, now, tz);
+    const monthName = cap(new Intl.DateTimeFormat('et-EE', { month: 'long', timeZone: tz }).format(new Date(now)));
+    this._sheets = new Map(c.usage_history ? [['m', usageSheet(c.month, c.usage_history)]] : []);
+    this._actions = new Map();
+    const cell = (name, e, dec, show = true) => {
+      const s = states[e], ok = show && hasValue(s);
+      return `<span><span class="lab">${esc(name)}</span><span class="v num">${ok ? `${formatNumber(s.state, dec)} <small>kWh</small>` : '–'}</span><span class="sub">${ok ? esc((s.attributes || {}).kulu || '') : ''}</span></span>`;
+    };
+    const top = `<span class="hd"><span class="l"><span class="lab">Sel kuul</span>${cost !== null ? `<span class="big"><span class="n num">${money(cost)}</span><span class="u">€</span></span>` : '<span class="big"><span class="u">Kulu pole teada</span></span>'}${kwh ? `<span class="sub">${kwh} kWh${price !== null ? `, keskmiselt ${fmtN(price, 1)} senti/kWh` : ''}</span>` : ''}</span>${badge}</span>`;
+    const prog = `<span class="prog"><span class="track" aria-hidden="true"><i style="width:${(((now - m0) / (m1 - m0)) * 100).toFixed(1)}%"></i></span><span class="pl"><span>${p.d} päeva ${days}-st</span>${pace !== null ? `<span>Selle tempoga umbes ${Math.round(pace)} €</span>` : ''}</span></span>`;
+    const cells = `<span class="cells">${cell('Täna', c.today, 1)}${cell('Eile', c.yesterday, 1)}${cell(cap(lastName), c.last_month, 0, !early)}</span>`;
+    const inner = `${top}${prog}<span class="hr"></span>${cells}<span class="foot">Eurod ilma kuutasudeta.</span>`;
+    const main = c.usage_history ? `<button type="button" class="glass press main" data-k="m" aria-label="Sel kuul, tarbimise ajalugu">${inner}</button>` : `<div class="glass main">${inner}</div>`;
+    return `<div class="wrap"><div class="head"><h1>${esc(c.title || 'Energia')}</h1><span class="date">${esc(monthName)}, ${p.d}. päev</span></div>${main}</div>`;
+  }
+}
+
+const DAYS_CSS = `
+.box{display:flex;flex-direction:column;gap:12px;padding:14px 16px;border-radius:24px}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px;padding:2px;border-radius:12px;background:var(--seg)}
+.seg button{height:34px;border-radius:10px;font-size:14px;font-weight:600;text-align:center;color:var(--text)}
+.seg button[aria-pressed="true"]{background:var(--segOn);box-shadow:var(--segShadow)}
+.avg{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.avg .n{font-size:28px;font-weight:700;letter-spacing:-0.025em}
+.avg .u{font-size:14px;font-weight:600;color:var(--sub)}
+svg.c{display:block;width:100%;height:120px}
+.ax{display:flex;justify-content:space-between;margin-top:4px;font-size:11px;font-weight:600;color:var(--sub)}
+.key{display:flex;gap:14px;font-size:12px;font-weight:600;color:var(--sub)}
+.key span{display:flex;align-items:center;gap:5px}
+.key i{display:inline-block}
+.hr{height:1px;background:var(--hair)}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.stats > span{display:flex;flex-direction:column;gap:1px;min-width:0}
+.stats .k{font-size:13px;font-weight:600;color:var(--sub)}
+.stats .v{font-size:17px;font-weight:700}
+.msg{display:flex;align-items:center;justify-content:center;height:120px;font-size:14px;color:var(--sub)}
+`;
+
+// daily bars of one statistic, or several behind a segmented control: the last `days` days in
+// HA's zone, the days past a delayed counter's cutoff lighter and out of the numbers
+class DaysCard extends LoadingCard {
+  static css = DAYS_CSS;
+  _check(c) { if (!(c.series || []).length) throw new Error('khe-days-card: series is required'); }
+  _watched() { return (this._config.series || []).map(s => s.today && s.today.entity).filter(Boolean); }
+  // one daily request per set of types, and the cutoff's hourly one
+  _requests(now, tz) {
+    const c = this._config, byType = new Map();
+    for (const s of c.series) {
+      const types = s.peak ? [s.type, 'max'] : [s.type];
+      const k = types.join(',');
+      if (!byType.has(k)) byType.set(k, { types, ids: [] });
+      byType.get(k).ids.push(s.statistic);
+    }
+    const reqs = Object.fromEntries([...byType].map(([k, r]) => [`daily:${k}`, dailyRequest(r.ids, r.types, c.days || 31, now, tz)]));
+    return c.cutoff ? { ...reqs, cutoff: hourlyRequest(c.cutoff, now) } : reqs;
+  }
+  _html(states, pal) {
+    const c = this._config, list = c.series;
+    const i = Math.min(this._pick || 0, list.length - 1), s = list[i];
+    this._actions = new Map();
+    this._sheets = new Map();
+    const seg = list.length > 1 ? `<span class="seg" role="group" aria-label="Ühik">${list.map((x, j) => `<button type="button" data-p="${j}" aria-pressed="${j === i}">${esc(x.name)}</button>`).join('')}</span>` : '';
+    const d = this._data;
+    const shell = body => `<div class="glass box">${seg}${body}</div>`;
+    if (!d) return shell('<div class="msg">Laen…</div>');
+    if (d.error) return shell('<div class="msg">Andmeid ei saanud lugeda</div>');
+    const daily = d.res[`daily:${s.peak ? `${s.type},max` : s.type}`];
+    // a delayed counter's days after its cutoff are late; a price is known ahead
+    // with no hour of data in two days the cutoff is today's start: only today is late
+    const cutoff = c.cutoff && s.type === 'change' ? dataCutoff(d.res.cutoff, c.cutoff) ?? dayStarts(1, d.now, d.tz)[0] : Infinity;
+    const pts = dailySeries(daily, s.statistic, s.type, c.days || 31, d.now, d.tz, cutoff);
+    const scale = s.scale || 1, dec = s.decimals ?? 1;
+    const stats = dayStats(pts);
+    if (!stats) return shell('<div class="msg">Selle aja kohta andmeid pole</div>');
+    const fmt = v => fmtN(v * scale, dec);
+    const W = 341, H = 120, TOP = 8, BOT = 2, N = pts.length, GAP = 2, bw = (W - GAP * (N - 1)) / N;
+    const hi = Math.max(...pts.map(p => Math.max(p.v ?? 0, s.peak ? p.max ?? 0 : 0))) * 1.05 || 1;
+    const y = v => H - BOT - (v / hi) * (H - TOP - BOT);
+    const col = { cheap: pal.cheap, mid: pal.midBar, high: pal.highBar };
+    const paths = new Map();
+    let peak = '';
+    pts.forEach((p, j) => {
+      if (p.v === null) return;
+      const x = j * (bw + GAP);
+      const fill = s.bands ? col[priceLevel(p.v, s.bands)] : a3Color(s.color)[0];
+      const k = `${fill}|${p.late ? 0.4 : 1}`;
+      paths.set(k, (paths.get(k) || '') + barRect(x, y(p.v), bw, Math.max(2, H - BOT - y(p.v))));
+      if (s.peak && p.max !== null) peak += `M${x.toFixed(1)} ${y(p.max).toFixed(1)}h${bw.toFixed(1)}`;
+    });
+    const bars = [...paths].map(([k, dd]) => { const [f, o] = k.split('|'); return `<path d="${dd}" fill="${f}"${o !== '1' ? ` fill-opacity="${o}"` : ''}/>`; }).join('');
+    const grid = [0.25, 0.5, 0.75].map(f => `M0 ${(TOP + (H - TOP - BOT) * f).toFixed(1)}H${W}`).join('');
+    const svg = `<svg class="c" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(s.aria || s.name)}"><path d="${grid}" stroke="${pal.hair}" fill="none" vector-effect="non-scaling-stroke"/>${bars}${peak ? `<path d="${peak}" stroke="${pal.text}" stroke-opacity="0.55" stroke-width="1.5" fill="none" vector-effect="non-scaling-stroke"/>` : ''}</svg>`;
+    const marks = [0, Math.round(N / 4), Math.round(N / 2), Math.round((3 * N) / 4)].map(j => pts[j].label).concat('täna');
+    const axis = `<div class="ax" aria-hidden="true">${marks.map(l => `<span>${esc(l)}</span>`).join('')}</div>`;
+    const key = s.peak ? `<span class="key"><span><i style="width:10px;height:10px;border-radius:3px;background:${pal.sub}"></i>päeva keskmine</span><span><i style="width:12px;height:2px;background:${pal.text};opacity:.55"></i>kalleim tund</span></span>` : '';
+    const u = s.unit ? ` ${s.unit}` : '';
+    let three;
+    if (s.peak) {
+      three = [['Odavaim päev', stats.small], ['Kalleim päev', stats.big], ['Kalleim tund', stats.peak]].map(([k, x]) => [k, x ? fmt(x.v) : '–', x ? x.label : '']);
+    } else {
+      const t = s.today && states[s.today.entity];
+      const tv = t && hasValue(t) ? (s.today.attribute ? parseEt((t.attributes || {})[s.today.attribute]) : num(t.state)) : null;
+      three = [['Suurim', `${fmt(stats.big.v)}${u}`, stats.big.label], ['Väikseim', `${fmt(stats.small.v)}${u}`, stats.small.label], ['Täna seni', tv === null ? '–' : `${fmtN(tv, dec)}${u}`, 'päev pole läbi']];
+    }
+    const cells = three.map(([k, v, l]) => `<span><span class="k">${esc(k)}</span><span class="v num">${esc(v)}</span><span class="sub">${esc(l)}</span></span>`).join('');
+    return shell(`<span class="avg"><span class="n num">${fmt(stats.avg)}</span><span class="u">${esc(s.caption || '')}</span></span><span>${svg}${axis}</span>${key}<span class="hr"></span><span class="stats">${cells}</span>`);
+  }
+  _click(ev) {
+    const b = ev.target.closest('button[data-p]');
+    if (b) { this._pick = Number(b.dataset.p); this._draw(); return; }
+    super._click(ev);
+  }
+}
+
+const SPLIT_CSS = `
+.box{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:24px}
+.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;gap:2px}
+.rows{display:flex;flex-direction:column}
+.r{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;color:var(--text)}
+.r + .r{border-top:1px solid var(--hair)}
+.r i{flex:none;width:34px;height:34px;border-radius:17px;display:flex;align-items:center;justify-content:center;color:#fff}
+.r .m{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.r .n{font-size:15px;font-weight:600}
+.r .e{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:1px}
+.r .e b{font-size:15px;font-weight:700}
+`;
+
+// who used the month's energy: a split bar and a row per sub-meter, then the rest of the house
+class SplitCard extends KheCard {
+  static a3only = true;
+  static css = SPLIT_CSS;
+  _check(c) { if (!c.total) throw new Error('khe-split-card: total is required'); }
+  _watched() { const c = this._config; return [c.total, c.fresh, ...(c.parts || []).map(p => p.entity)].filter(Boolean); }
+  _clock() { return this._hass ? zoneParts(Date.now(), tzOf(this._hass)).d : 0; }
+  _html(states) {
+    const c = this._config, { rows, stale } = splitRows(states, c, Date.now(), tzOf(this._hass));
+    this._actions = new Map();
+    this._sheets = new Map();
+    const color = r => a3Color(r.color)[0];
+    const bar = rows.filter(r => r.kwh > 0).map(r => `<span style="flex:${r.kwh.toFixed(2)};background:${color(r)}"></span>`).join('');
+    const kwh = v => fmtN(v, v < 100 ? 1 : 0);
+    const list = rows.map((r, i) => {
+      const note = r.rest ? (stale ? 'andmed hilinevad' : 'kõik, mida eraldi ei mõõdeta') : r.last !== null ? `${inLastMonth(Date.now(), tzOf(this._hass))} ${kwh(r.last)} kWh` : '';
+      const body = `<i style="background:${color(r)}">${icon(r.icon || 'bolt', 18, 'currentColor')}</i><span class="m"><span class="n">${esc(r.name)}</span><span class="sub">${esc(note)}</span></span><span class="e"><b class="num">${kwh(r.kwh)} kWh</b><span class="sub">${r.share} %</span></span>`;
+      if (r.rest) return `<div class="r">${body}</div>`;
+      this._sheets.set(`r${i}`, { title: r.name, entity: r.entity, more: r.entity, decimals: 1, unit: 'kWh', color: r.color, view: r.view, history: { source: 'statistics', type: 'change', entity: r.entity } });
+      return `<button type="button" class="r press" data-k="r${i}" aria-label="${esc(r.name)}, ${kwh(r.kwh)} kWh sel kuul, ajalugu">${body}</button>`;
+    }).join('');
+    return `<div class="glass box">${bar ? `<span class="bar" aria-hidden="true">${bar}</span>` : ''}<span class="rows">${list || '<span class="sub">Andmeid pole</span>'}</span></div>`;
+  }
+}
+
 const ELEMENTS = [
   ['khe-summary-card', SummaryCard, 'KHE summary', 'The house in one sentence, with summary chips.'],
   ['khe-price-card', PriceCard, 'KHE price', 'The electricity price now, the hourly bars and the cheapest windows.'],
   ['khe-tile-card', TileCard, 'KHE tile', 'A device tile that is lit when on, with optional mode buttons.'],
   ['khe-chips-card', ChipsCard, 'KHE chips', 'The page title, the outdoor temperature, people, alarms and faults (A3).'],
   ['khe-heading-card', HeadingCard, 'KHE heading', 'A section heading, a link when it has a tap action (A3).'],
-  ['khe-status-card', StatusCard, 'KHE status', 'System health as dots (A3).']
+  ['khe-status-card', StatusCard, 'KHE status', 'System health as dots (A3).'],
+  ['khe-month-card', MonthCard, 'KHE month', "The month's energy cost, its pace, today, yesterday and last month (A3)."],
+  ['khe-days-card', DaysCard, 'KHE days', 'Daily bars of a statistic, several behind a switch (A3).'],
+  ['khe-split-card', SplitCard, 'KHE split', "Who used the month's energy (A3)."]
 ];
 if (typeof customElements !== 'undefined') {
   window.customCards = window.customCards || [];

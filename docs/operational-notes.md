@@ -175,7 +175,9 @@ The repo's own Lovelace cards are in `cards/khe-cards.js`:
 ([ADR-002](decisions/002-own-dashboard-cards.md)), and for A3
 `custom:khe-chips-card`, `custom:khe-heading-card` and
 `custom:khe-status-card`, with `style: a3` on the first three
-([ADR-005](decisions/005-a3-glass-cards-history-sheet.md)). Kodu was drawn
+([ADR-005](decisions/005-a3-glass-cards-history-sheet.md)), and for Energia
+`custom:khe-month-card`, `custom:khe-days-card` and `custom:khe-split-card`
+([ADR-008](decisions/008-a3-page-cards-read-statistics.md)). Kodu was drawn
 with them on 2026-10-17 and went back to stock cards the next day; A3
 uses them. Deploy replaces `www/khe-cards/` in HA's config volume, so HA
 serves them as `/local/khe-cards/`, and a change arrives without a restart.
@@ -212,7 +214,8 @@ behind every value and device. It replaced the Bubble Card trial of
 [ADR-004](decisions/004-bubble-card-trial.md); Bubble Card is uninstalled.
 
 - **Saving:** `ha-dashboard.py` saves `dashboard_a3.overview()`:
-  `dashboard_config.build()`'s views with A3 in place of Kodu and the 3D view
+  `dashboard_config.build()`'s views with A3's in place of Kodu's at the same
+  paths (`kodu` and, since 2026-11-12, `energia`) and the 3D view
   (`maja-3d`) last. Kodu stays in `dashboard_config.py` for the demo and as
   A3's source of entities and confirmations.
 - **Undo:** revert the commit and run `ha-dashboard.py` for the Overview
@@ -250,7 +253,19 @@ behind every value and device. It replaced the Bubble Card trial of
 - **HA bump check:** besides the actions above, open a value's sheet and
   switch it to 7 and 30 days: the two WebSocket commands and the
   `background` handling (`hui-view-background.ts`) can change with the
-  frontend.
+  frontend. Open Energia too: its cards read the same statistics command.
+- **Energia** ([ADR-008](decisions/008-a3-page-cards-read-statistics.md)):
+  the month card reads `maja_sel_kuul`, `maja_eelmine_kuu`, `maja_tana` and
+  `maja_eile` with their `kulu` and `hind` attributes; the days cards read
+  daily statistics in HA's time zone (Estfeed consumption and cost, 31 days;
+  `estfeed:estfeed_price` mean and max, 30 days), loading again each hour.
+  Estfeed arrives hours late (about five on 2026-11-12): the end of its last
+  hour with data is the cutoff, days past it are lighter and out of the
+  numbers, and the month's pace counts to it. The split card's last month is
+  the utility meters' `last_period` and the boiler's attribute named by the
+  previous month in English (`October`); on the first two days of a month
+  it is left out, and in January the boiler's `December` has not been
+  checked yet.
 
 ## The 3D house view (`house3d`)
 

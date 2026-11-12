@@ -235,10 +235,15 @@ class Overview(unittest.TestCase):
         self.assertNotIn(dc.home(dc.House(HOUSE, PEOPLE)), OVERVIEW["views"])
 
     def test_every_other_view_is_dashboard_configs_in_its_order(self):
-        built = BUILT["views"]
-        others = [v for v in built if v["path"] not in ("kodu", "maja-3d")]
-        self.assertEqual(OVERVIEW["views"][1:-1], others)
-        self.assertEqual(sorted(paths(OVERVIEW)), sorted(v["path"] for v in built))
+        swapped = {"kodu": VIEW, "energia": a3.energia()}
+        built = [swapped.get(v["path"], v) for v in BUILT["views"] if v["path"] != "maja-3d"]
+        self.assertEqual(OVERVIEW["views"][:-1], built)
+        self.assertEqual(sorted(paths(OVERVIEW)), sorted(v["path"] for v in BUILT["views"]))
+
+    def test_energia_is_a3s_at_kodus_energia_place(self):
+        kodu = [p for p in paths(BUILT) if p != "maja-3d"]
+        self.assertEqual(paths(OVERVIEW).index("energia"), kodu.index("energia"))
+        self.assertEqual(OVERVIEW["views"][paths(OVERVIEW).index("energia")], a3.energia())
 
     def test_without_inputs_no_3d_view_and_no_hero(self):
         config = a3.overview({}, [], None)
@@ -268,6 +273,51 @@ class Overview(unittest.TestCase):
             found |= set(re.findall(r"/lovelace/([a-z0-9-]+)", f.read_text()))
         self.assertTrue(found)
         self.assertEqual(found - views, set())
+
+
+ENERGIA = a3.energia()
+KODU_ENERGIA = dc.energy
+# Kodu's price chart names the price sensor only because apexcharts needs a state; its data is the
+# price statistic, which A3's Energia reads directly.
+BORROWED = {dc.PRICE_NOW}
+
+
+class Energia(unittest.TestCase):
+    def test_every_kodu_energia_entity_is_on_the_page(self):
+        missing = kodu_entities(KODU_ENERGIA) - ids(ENERGIA) - BORROWED
+        self.assertEqual(missing, set())
+        self.assertLessEqual(BORROWED, kodu_entities(KODU_ENERGIA))
+        self.assertIn(dc.PRICE_STAT, ids(ENERGIA))
+
+    def test_every_kodu_energia_link_is_reachable(self):
+        self.assertTrue(links(KODU_ENERGIA))
+        self.assertLessEqual(links(KODU_ENERGIA), links(ENERGIA))
+
+    def test_kodus_title_icon_and_columns_with_a3s_background(self):
+        for k in ("title", "path", "icon", "max_columns"):
+            self.assertEqual(ENERGIA[k], KODU_ENERGIA[k])
+        self.assertEqual(ENERGIA["background"], VIEW["background"])
+
+    def test_cards_are_the_repos_own(self):
+        types = {c["type"] for s in ENERGIA["sections"] for c in s["cards"]}
+        self.assertTrue(all(t.startswith("custom:khe-") for t in types))
+        self.assertLessEqual(
+            {"custom:khe-month-card", "custom:khe-days-card", "custom:khe-split-card"}, types
+        )
+
+    def test_the_price_bands_are_kodus(self):
+        (price,) = [
+            c for c in walk(ENERGIA) if c.get("type") == "custom:khe-days-card" and c["days"] == 30
+        ]
+        thresholds = [t["value"] for t in dc.price_chart["series"][0]["color_threshold"]][1:]
+        self.assertEqual(price["series"][0]["bands"], thresholds)
+
+    def test_every_split_row_has_a_statistic_and_a_view(self):
+        (split,) = [c for c in walk(ENERGIA) if c.get("type") == "custom:khe-split-card"]
+        for part in split["parts"]:
+            with self.subTest(part=part["name"]):
+                self.assertIn(part["last"], ("month", "last_period"))
+                self.assertTrue(part["view"].startswith("/lovelace/"))
 
 
 if __name__ == "__main__":

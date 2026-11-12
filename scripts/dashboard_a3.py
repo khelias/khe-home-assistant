@@ -1,8 +1,9 @@
-"""A3, the first view of the house's Overview, as data (ADR-005, ADR-006, ADR-007).
+"""A3, the house's Overview in A3's look, as data (ADR-005 to ADR-008).
 
 overview(house, people, model) is the Overview the house saves: dashboard_config.build()'s views
-with A3's view in place of Kodu, at Kodu's path, and the 3D view moved last. dashboard_config.build()
-itself stays Kodu with 3D first, which the public demo builds.
+with A3's views in place of Kodu's at the same paths (`kodu`, `energia`) and the 3D view moved
+last. dashboard_config.build() itself stays Kodu with 3D first, which the public demo builds.
+energia() is Energia: the month, the days, who used what and the price, from daily statistics.
 
 build(house, people, model) returns A3 as a one-view Lovelace config: the 3D house as
 the hero, then the page's title with the outdoor temperature, people, alarms and live faults as
@@ -23,6 +24,9 @@ Where each sheet reads its history, measured on the house on 2026-11-12
     pergola light, TV             history      on/off
     ventilation mode              history      the modes but normal count as on
     pergola roof                  none         a group without position: its state is unknown
+    boiler, ventilation and       statistics   change (hour, day), Energia's split rows
+      afterheater this month
+    estfeed price                 statistics   mean, max (day), Energia's price bars
 """
 
 import copy
@@ -345,11 +349,134 @@ def build(house, people, model):
     return copy.deepcopy({"title": "Kodu", "views": [view]})
 
 
+def energia():
+    """Energia in A3's look (ADR-007, ADR-008): the month, the days, who used what and the price."""
+    thresholds = dc.price_chart["series"][0]["color_threshold"]
+    return {
+        "title": dc.energy["title"],
+        "path": dc.energy["path"],
+        "icon": dc.energy["icon"],
+        "type": "sections",
+        "max_columns": dc.energy["max_columns"],
+        "background": BACKGROUND,
+        "sections": [
+            section(
+                [
+                    card(
+                        "month-card",
+                        title="Energia",
+                        month=dc.MONTH,
+                        last_month=dc.LAST_MONTH,
+                        today=dc.TODAY,
+                        yesterday=dc.YESTERDAY,
+                        consumption=dc.CONSUMPTION,
+                        usage_history={
+                            "entity": dc.CONSUMPTION,
+                            "cost": dc.COST,
+                            "source": "statistics",
+                            "type": "change",
+                        },
+                        grid_options={"columns": "full"},
+                    ),
+                    heading("Päevad", "/energy"),
+                    card(
+                        "days-card",
+                        days=31,
+                        cutoff=dc.CONSUMPTION,
+                        series=[
+                            {
+                                "name": "kWh",
+                                "statistic": dc.CONSUMPTION,
+                                "type": "change",
+                                "unit": "kWh",
+                                "decimals": 1,
+                                "color": "indigo",
+                                "caption": "kWh päevas keskmiselt",
+                                "aria": "Tarbimine päevade kaupa",
+                                "today": {"entity": dc.TODAY},
+                            },
+                            {
+                                "name": "Eurod",
+                                "statistic": dc.COST,
+                                "type": "change",
+                                "unit": "€",
+                                "decimals": 2,
+                                "color": "teal",
+                                "caption": "€ päevas keskmiselt, ilma kuutasudeta",
+                                "aria": "Kulu päevade kaupa",
+                                "today": {"entity": dc.TODAY, "attribute": "kulu"},
+                            },
+                        ],
+                        grid_options={"columns": "full"},
+                    ),
+                ]
+            ),
+            section(
+                [
+                    heading("Kes võtab sel kuul"),
+                    card(
+                        "split-card",
+                        total=dc.MONTH,
+                        fresh=dc.STALE,
+                        parts=[
+                            {
+                                "entity": dc.BOILER_MONTH,
+                                "name": "Boiler",
+                                "icon": "flame",
+                                "color": "orange",
+                                "last": "month",
+                                "view": "/lovelace/soojuspump",
+                            },
+                            {
+                                "entity": dc.VENT_MONTH,
+                                "name": "Ventilatsioon",
+                                "icon": "vent",
+                                "color": "blue",
+                                "last": "last_period",
+                                "view": "/lovelace/ventilatsioon",
+                            },
+                            {
+                                "entity": dc.HEATER_MONTH,
+                                "name": "Järelküte",
+                                "icon": "thermometer",
+                                "color": "red",
+                                "last": "last_period",
+                                "hide_zero": True,
+                                "view": "/lovelace/ventilatsioon",
+                            },
+                        ],
+                        grid_options={"columns": "full"},
+                    ),
+                    heading("Hind 30 päeva"),
+                    card(
+                        "days-card",
+                        days=30,
+                        series=[
+                            {
+                                "name": "Hind",
+                                "statistic": dc.PRICE_STAT,
+                                "type": "mean",
+                                "peak": True,
+                                "scale": 100,
+                                "decimals": 1,
+                                "bands": [thresholds[1]["value"], thresholds[2]["value"]],
+                                "caption": "senti/kWh keskmiselt, kõigi tasudega",
+                                "aria": "Elektri hinna päeva keskmine ja kalleim tund",
+                            }
+                        ],
+                        grid_options={"columns": "full"},
+                    ),
+                ]
+            ),
+        ],
+    }
+
+
 def overview(house, people, model):
-    """The house's Overview: dashboard_config.build() with A3's view in place of the `kodu` view
-    and the 3D view (`maja-3d`) last. A fresh copy every call."""
+    """The house's Overview: dashboard_config.build() with A3's views in place of Kodu's (`kodu`,
+    `energia`) and the 3D view (`maja-3d`) last. A fresh copy every call."""
     config = dc.build(house, people, model)
-    a3 = build(house, people, model)["views"][0]
-    views = [a3 if v["path"] == "kodu" else v for v in config["views"]]
+    a3 = {"kodu": build(house, people, model)["views"][0], "energia": energia()}
+    views = [a3.get(v["path"], v) for v in config["views"]]
     config["views"] = sorted(views, key=lambda v: v["path"] == "maja-3d")
     return config

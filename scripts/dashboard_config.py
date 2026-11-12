@@ -46,10 +46,18 @@ SAUNA = "sensor.odavaim_aken_saun"
 TOMORROW = "sensor.homme_elekter"
 TOMORROW_READY = "binary_sensor.nord_pool_ee_homne_hind_on_saadaval"
 STALE = "binary_sensor.maja_andmed_varsked"
+TODAY = "sensor.maja_tana"
+YESTERDAY = "sensor.maja_eile"
+MONTH = "sensor.maja_sel_kuul"
+LAST_MONTH = "sensor.maja_eelmine_kuu"
+BOILER_MONTH = "sensor.boiler_energy_month"
+VENT_MONTH = "sensor.ventilatsioon_sel_kuul"
+HEATER_MONTH = "sensor.jarelkute_sel_kuul"
+PRICE_NOW = "sensor.elektri_hind_see_tund"
 USAGE = [
-    ("sensor.maja_tana", "Täna"),
-    ("sensor.maja_eile", "Eile"),
-    ("sensor.maja_sel_kuul", "Sel kuul"),
+    (TODAY, "Täna"),
+    (YESTERDAY, "Eile"),
+    (MONTH, "Sel kuul"),
 ]
 CONSUMPTION = "estfeed:estfeed_consumption_642b"
 COST = "estfeed:estfeed_cost_642b"
@@ -115,7 +123,7 @@ def when_on(entity, name, **kw):
 def heater_month(name, **kw):
     """Afterheater kWh this month: red only above zero. Under ECO it should stay at 0, so a
     tile that is always red cries wolf; the one that turns red is the one worth seeing."""
-    e = "sensor.jarelkute_sel_kuul"
+    e = HEATER_MONTH
     used, idle = (
         tile(e, name, color="red", vertical=True, **kw),
         tile(e, name, color="disabled", vertical=True, **kw),
@@ -932,7 +940,7 @@ price_month = {
     },
     "series": [
         {
-            "entity": "sensor.elektri_hind_see_tund",
+            "entity": PRICE_NOW,
             "name": "Keskmine",
             "type": "column",
             "float_precision": 3,
@@ -944,7 +952,7 @@ price_month = {
             ],
         },
         {
-            "entity": "sensor.elektri_hind_see_tund",
+            "entity": PRICE_NOW,
             "name": "Kõrgeim tund",
             "type": "line",
             "curve": "stepline",
@@ -971,13 +979,13 @@ energy = {
             [
                 # Horizontal and half a wide section each: three numbers side by side do not fit a vertical tile on a phone.
                 nowrite(
-                    "sensor.maja_sel_kuul",
+                    MONTH,
                     "Sel kuul",
                     state_content=["state", "kulu", "hind"],
                     grid_options={"columns": 12, "rows": 1},
                 ),
                 nowrite(
-                    "sensor.maja_eelmine_kuu",
+                    LAST_MONTH,
                     "Eelmine kuu",
                     state_content=["state", "kulu", "hind"],
                     grid_options={"columns": 12, "rows": 1},
@@ -996,13 +1004,13 @@ energy = {
                     "grid_options": {"columns": "full"},
                     "cards": [
                         tile(
-                            "sensor.boiler_energy_month",
+                            BOILER_MONTH,
                             "Boiler",
                             vertical=True,
                             **nav("/lovelace/soojuspump"),
                         ),
                         tile(
-                            "sensor.ventilatsioon_sel_kuul",
+                            VENT_MONTH,
                             "Ventilatsioon",
                             vertical=True,
                             **nav("/lovelace/ventilatsioon"),
@@ -1391,7 +1399,7 @@ soojuspump = {
                         ),
                         nowrite(DHW, "Siht", state_content=["temperature"], vertical=True),
                         nowrite("sensor.boiler_energy_today", "Täna", vertical=True),
-                        nowrite("sensor.boiler_energy_month", "Sel kuul", vertical=True),
+                        nowrite(BOILER_MONTH, "Sel kuul", vertical=True),
                     ]
                 ),
                 when_on("binary_sensor.hot_water_tank_state", "Boileri viga"),
@@ -1411,7 +1419,7 @@ soojuspump = {
                 ),
                 daikin_bars(
                     "Boiler kuus, kWh",
-                    "sensor.boiler_energy_month",
+                    BOILER_MONTH,
                     "731d",
                     "month",
                     MONTHS_JS,
@@ -1531,7 +1539,7 @@ ventilatsioon = {
                     "type": "horizontal-stack",
                     "cards": [
                         nowrite("sensor.komfovent_power_consumption", "Võimsus", vertical=True),
-                        nowrite("sensor.ventilatsioon_sel_kuul", "Kuu kokku", vertical=True),
+                        nowrite(VENT_MONTH, "Kuu kokku", vertical=True),
                         *heater_month(
                             "Kuu järelküte",
                             tap_action={"action": "none"},
