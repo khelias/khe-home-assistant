@@ -6,7 +6,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 2;
+export const KHE_CARDS_VERSION = 3;
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
 
@@ -759,7 +759,8 @@ dialog .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px
 dialog .stats > span{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:14px;background:var(--seg)}
 dialog .stats .k{font-size:12px;font-weight:600;color:var(--sub)}
 dialog .stats .v{font-size:17px;font-weight:700;letter-spacing:-0.01em}
-dialog .more{align-self:stretch;height:44px;border-radius:14px;background:var(--seg);font-size:15px;font-weight:600;text-align:center;color:var(--accent)}
+dialog .acts{display:flex;gap:8px}
+dialog .more{flex:1;height:44px;border-radius:14px;background:var(--seg);font-size:15px;font-weight:600;text-align:center;color:var(--accent)}
 @keyframes rise{from{transform:translateY(60px);opacity:0}to{transform:none;opacity:1}}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 @media (prefers-reduced-motion: reduce){dialog{animation:fade 200ms ease-out}}
@@ -784,6 +785,7 @@ class Sheet {
       const s = b.dataset.s;
       if (s === 'close') d.close();
       else if (s === 'more') { d.close(); this.card._fire(actionDetail(this.spec.more || this.spec.entity, { action: 'more-info' })); }
+      else if (s === 'view') { d.close(); this.card._fire(navigate(this.spec.view)); }
       else if (RANGES[s]) { this.range = s; this.load(); }
     });
     d.addEventListener('close', () => { this.token = null; });
@@ -840,7 +842,7 @@ class Sheet {
     this.body.innerHTML = `<span class="grab" aria-hidden="true"></span>
       <div class="top"><div><div class="title">${esc(sp.title)}</div><div class="now">${this.nowHtml()}</div></div>
       <button type="button" class="x" data-s="close" aria-label="Sulge"><i>${icon('close', 14, 'currentColor')}</i></button></div>
-      ${ranges}${chart}<button type="button" class="more" data-s="more">Rohkem</button>`;
+      ${ranges}${chart}<div class="acts"><button type="button" class="more" data-s="more">Rohkem</button>${sp.view ? '<button type="button" class="more" data-s="view">Süsteemi leht</button>' : ''}</div>`;
     this.el.setAttribute('aria-label', sp.title);
   }
   stats(list) {
@@ -924,6 +926,7 @@ export function tileSheet(conf, states) {
     decimals: conf.decimals ?? (unit === '%' ? 0 : 1),
     unit,
     color: conf.color,
+    view: h.view,
     history: { ...h, entity: h.entity || conf.entity }
   };
   if (h.source === 'history' && !h.numeric) spec.text = now => tileState(conf, now).text;

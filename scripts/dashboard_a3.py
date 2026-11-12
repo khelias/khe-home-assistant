@@ -146,7 +146,7 @@ def tv(home):
             active=["on", "playing", "paused", "idle", "standby", "buffering"],
             state_text=[{"entity": dc.TV_APP}],
             corner={"icon": "power", "label": off["name"], "tap_action": off["tap_action"]},
-            history=ONOFF,
+            history={**ONOFF, "view": "/lovelace/teler"},
         )
     )
 
@@ -285,7 +285,7 @@ def build(house, people, model):
                 icon_tap_action={"action": "toggle"},
                 icon_label="Pergola valgus sisse või välja",
                 slider={"attribute": "brightness"},
-                history=ONOFF,
+                history={**ONOFF, "view": "/lovelace/pergola"},
             )
         ),
         wide(
@@ -297,7 +297,11 @@ def build(house, people, model):
                 active=["*"],
                 state_text=[{"entity": dc.MODE_LABEL}],
                 modes=modes(home),
-                history={**ONOFF, "active": [o for o in mode_names if o != "normal"]},
+                history={
+                    **ONOFF,
+                    "active": [o for o in mode_names if o != "normal"],
+                    "view": "/lovelace/ventilatsioon",
+                },
             )
         ),
         *boost(home),

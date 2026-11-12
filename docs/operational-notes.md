@@ -231,7 +231,9 @@ behind every value and device. It replaced the Bubble Card trial of
   not recorded, so it has no ranges.
 - **Limits:** the pergola roof is a group without position and its state
   is `unknown`, so its tile shows no state and opens more-info, not a sheet.
-  Section headings link into Kodu's views (Energia, Soojuspump, Süsteem).
+  Section headings link into Kodu's views (Energia, Soojuspump, Süsteem),
+  and the light's, ventilation's and TV's sheets into Pergola, Ventilatsioon
+  and Teler.
 - **HA bump check:** besides the actions above, open a value's sheet and
   switch it to 7 and 30 days: the two WebSocket commands and the
   `background` handling (`hui-view-background.ts`) can change with the

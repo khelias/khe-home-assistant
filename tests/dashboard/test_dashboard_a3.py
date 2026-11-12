@@ -154,6 +154,18 @@ class Actions(unittest.TestCase):
         self.assertTrue(kodu)
         self.assertLessEqual(kodu, confirmed(VIEW))
 
+    def test_every_kodu_view_link_is_reachable(self):
+        def paths(node):
+            return {
+                d["navigation_path"]
+                for d in walk(node)
+                if d.get("action") == "navigate"
+            }
+
+        sheets = {d["view"] for d in walk(VIEW) if isinstance(d.get("view"), str)}
+        self.assertTrue(paths(HOME))
+        self.assertLessEqual(paths(HOME), paths(VIEW) | sheets)
+
     def test_the_roof_and_the_light_act_as_kodus_features(self):
         (roof,) = [c for c in walk(VIEW) if c.get("entity") == dc.ROOF and "buttons" in c]
         self.assertEqual(

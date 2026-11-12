@@ -30,8 +30,8 @@ own.
 
 ```
 cards/             the dashboard's own Lovelace cards (khe-cards.js, ADR-002,
-                   ADR-005): summary, chips, price and tile, with the history
-                   sheet; the Kodu A3 dashboard draws with them; deploy
+                   ADR-005): summary, price, tile, chips, heading and status,
+                   with the history sheet; Kodu A3 draws with them; deploy
                    copies them to www/khe-cards/
 config/            what deploy copies into HA's /config
   configuration.yaml
