@@ -1,6 +1,6 @@
 # ADR-006: A3 is the house's front page, with the 3D hero in the real style and the live sun
 
-- **Status:** Accepted (2026-11-12)
+- **Status:** Accepted (2026-11-12); decision 1 superseded by [ADR-007](007-a3-in-the-overview.md)
 - **Related:** [ADR-001](001-own-3d-engine.md), [ADR-005](005-a3-glass-cards-history-sheet.md)
 
 ## Context

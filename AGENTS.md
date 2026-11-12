@@ -50,8 +50,9 @@ house3d/           3D house view: engine (core house3d.js, scene/ layer
                    modules, kit and sun), HA card, standalone viewer,
                    placement page, vendored three.js
 scripts/           dashboard_config.py (the HA Overview as data, no I/O),
-                   dashboard_a3.py (the A3 front page kodu-katse from
-                   the same entities, ADR-005),
+                   dashboard_a3.py (A3, the Overview's first view, from
+                   the same entities, and overview(), what the house
+                   saves, ADR-005, ADR-007),
                    ha-dashboard.py (reads the private inputs, saves either),
                    dashboard_demo.py (the demo's made-up entities, texts and
                    series for the same config), dashboard_demo_en.py (its
@@ -181,15 +182,16 @@ the operator first; an approval covers that task only.
   ([notes](docs/operational-notes.md#reloads-restarts-and-prices)).
 - **Helpers come up at their minimum.** Set the first value through the API;
   `initial:` would overwrite the household's choice on every restart.
-- **The dashboard is generated**: `dashboard_config.build()` makes it and
-  `scripts/ha-dashboard.py` saves it; `dashboard_a3.build()` makes the
-  A3 dashboard `kodu-katse` and `ha-dashboard.py --a3` saves that
-  ([notes](docs/operational-notes.md#kodu-a3-kodu-katse)). HA adds sections to the stored
+- **The dashboard is generated**: `dashboard_a3.overview()` makes it,
+  `dashboard_config.build()`'s views with A3 first in Kodu's place and the
+  3D view last, and `scripts/ha-dashboard.py` saves it
+  ([notes](docs/operational-notes.md#a3-the-overviews-first-view)). HA adds sections to the stored
   config by itself when a new device appears. Before rerunning, diff the
   generator's output against the live config: load `ha-dashboard.py` with
   `importlib` (it needs no `websockets` until it saves), dump
   `local_config()`, compare with a WebSocket `lovelace/config` read. The
-  public demo is the same `build()` on made-up inputs, so a new entity id
+  public demo is `dashboard_config.build()` on made-up inputs (Kodu, 3D
+  first, until the demo moves to A3), so a new entity id
   needs an entry in `dashboard_demo.CATALOGUE` (the dashboard tests name it)
   and a new templated card a sample text in `TEXTS`. The demo is English
   too, so a new visible string needs its English line in
@@ -204,7 +206,7 @@ the operator first; an approval covers that task only.
   caption needs its English in `dashboard_demo_en.EN`.
 - **A redesigned view uses the repo's own cards**
   ([ADR-002](docs/decisions/002-own-dashboard-cards.md)), `cards/khe-cards.js`:
-  A3 (`kodu-katse`, the front page) does, in their glass style
+  A3, the Overview's first view, does, in their glass style
   ([ADR-005](docs/decisions/005-a3-glass-cards-history-sheet.md)); Kodu
   went back to stock cards on 2026-10-18 and stays on them. A change
   to the cards bumps `KHE_CARDS_VERSION` and the resource's `?v=`

@@ -1,12 +1,16 @@
-"""The A3 dashboard, the house's front page, as data (ADR-005, ADR-006).
+"""A3, the first view of the house's Overview, as data (ADR-005, ADR-006, ADR-007).
 
-build(house, people, model) returns a one-view Lovelace config for `kodu-katse`: the 3D house as
+overview(house, people, model) is the Overview the house saves: dashboard_config.build()'s views
+with A3's view in place of Kodu, at Kodu's path, and the 3D view moved last. dashboard_config.build()
+itself stays Kodu with 3D first, which the public demo builds.
+
+build(house, people, model) returns A3 as a one-view Lovelace config: the 3D house as
 the hero, then the page's title with the outdoor temperature, people, alarms and live faults as
 chips, and Elekter, Juhtimine, Kliima and Süsteem as glass cards from cards/khe-cards.js. Every
 entity, action and confirmation of Kodu's first page stays on this page; a tap on a value or a
 device opens its history sheet. Entity ids, names and confirmation texts come from
 dashboard_config (its constants, or Kodu's own first page as dashboard_config.home() builds it);
-nothing here spells one, and nothing here reaches Kodu.
+nothing here spells one, and nothing here changes what dashboard_config builds.
 
 Where each sheet reads its history, measured on the house on 2026-11-12
 (`recorder/list_statistic_ids`):
@@ -339,3 +343,13 @@ def build(house, people, model):
         ],
     }
     return copy.deepcopy({"title": "Kodu", "views": [view]})
+
+
+def overview(house, people, model):
+    """The house's Overview: dashboard_config.build() with A3's view in place of the `kodu` view
+    and the 3D view (`maja-3d`) last. A fresh copy every call."""
+    config = dc.build(house, people, model)
+    a3 = build(house, people, model)["views"][0]
+    views = [a3 if v["path"] == "kodu" else v for v in config["views"]]
+    config["views"] = sorted(views, key=lambda v: v["path"] == "maja-3d")
+    return config

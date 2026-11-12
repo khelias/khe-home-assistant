@@ -2115,7 +2115,8 @@ def build(house, people, model):
     h = House(house, people)
     config = {
         "title": "Kodu",
-        # 3D first: the house at a glance is the page that opens. Without a model, Kodu.
+        # 3D first, then Kodu: the demo's order; the house saves another (ADR-007). Without a
+        # model, Kodu first.
         "views": [
             *([house3d_view(model)] if model is not None else []),
             home(h),

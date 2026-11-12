@@ -70,25 +70,33 @@ class CarEntity(unittest.TestCase):
         self.assertEqual(card_car(self.ha.local_config())["entity"], "switch.test_stand_in")
 
 
-class A3(unittest.TestCase):
-    def test_a3_config_reads_the_house_files_and_the_model(self):
-        ha = load_ha_dashboard()
-        read = []
+class Overview(unittest.TestCase):
+    def setUp(self):
+        self.ha = load_ha_dashboard()
+        self.read = []
         files = {"ha-house.json": {"car_entity": "switch.test_stand_in"}, "ha-people.json": []}
-        ha._local = lambda name, default: read.append(name) or files.get(name, default)
-        ha.house3d_card_model = model_without_car_entity
-        config = ha.a3_config()
-        self.assertEqual(sorted(read), ["ha-house.json", "ha-people.json"])
-        self.assertEqual(config["title"], "Kodu")
+        self.ha._local = lambda name, default: self.read.append(name) or files.get(name, default)
+
+    def test_local_config_is_the_overview_of_the_house_files(self):
+        self.ha.house3d_card_model = model_without_car_entity
+        config = self.ha.local_config()
+        self.assertEqual(sorted(set(self.read)), ["ha-house.json", "ha-people.json"])
+        self.assertEqual([v["path"] for v in config["views"]][0], "kodu")
+        self.assertEqual(config["views"][-1]["path"], "maja-3d")
+
+    def test_the_hero_and_the_3d_view_both_carry_the_car_entity(self):
+        self.ha.house3d_card_model = model_without_car_entity
+        config = self.ha.local_config()
         hero = config["views"][0]["sections"][0]["cards"][0]
         self.assertEqual(hero["type"], "custom:house3d-card")
         self.assertEqual(hero["model"]["car"]["entity"], "switch.test_stand_in")
+        self.assertEqual(card_car(config)["entity"], "switch.test_stand_in")
 
-    def test_without_a_model_the_hero_is_left_out(self):
-        ha = load_ha_dashboard()
-        ha._local = lambda name, default: default
-        ha.house3d_card_model = lambda: None
-        cards = ha.a3_config()["views"][0]["sections"][0]["cards"]
+    def test_without_a_model_no_3d_view_and_no_hero(self):
+        self.ha.house3d_card_model = lambda: None
+        config = self.ha.local_config()
+        self.assertNotIn("maja-3d", [v["path"] for v in config["views"]])
+        cards = config["views"][0]["sections"][0]["cards"]
         self.assertNotIn("custom:house3d-card", [c["type"] for c in cards])
 
 

@@ -1,9 +1,11 @@
-"""Tests of the A3 dashboard (scripts/dashboard_a3.py, ADR-005) on a made-up house: it keeps
-every entity, action and confirmation of Kodu's first page, and leaves Kodu as it was.
+"""Tests of A3 (scripts/dashboard_a3.py, ADR-005, ADR-007) on a made-up house: it keeps every
+entity, action and confirmation of Kodu's first page, and overview() puts it first in the
+Overview in Kodu's place, with the 3D view last and every other view as dashboard_config builds it.
 
 Run from the repo root: python3 -I -m unittest discover -s tests/dashboard
 """
 
+import copy
 import json
 import re
 import sys
@@ -101,6 +103,13 @@ KODU = dc.build(HOUSE, PEOPLE, None)
 HOME = dc.home(dc.House(HOUSE, PEOPLE))
 
 
+def links(node):
+    """Every view a page links to: its navigate actions and its sheets' view buttons."""
+    return {d["navigation_path"] for d in walk(node) if d.get("action") == "navigate"} | {
+        d["view"] for d in walk(node) if isinstance(d.get("view"), str)
+    }
+
+
 def confirmations(node):
     out = {}
     for card in walk(node):
@@ -155,16 +164,8 @@ class Actions(unittest.TestCase):
         self.assertLessEqual(kodu, confirmed(VIEW))
 
     def test_every_kodu_view_link_is_reachable(self):
-        def paths(node):
-            return {
-                d["navigation_path"]
-                for d in walk(node)
-                if d.get("action") == "navigate"
-            }
-
-        sheets = {d["view"] for d in walk(VIEW) if isinstance(d.get("view"), str)}
-        self.assertTrue(paths(HOME))
-        self.assertLessEqual(paths(HOME), paths(VIEW) | sheets)
+        self.assertTrue(links(HOME))
+        self.assertLessEqual(links(HOME), links(VIEW))
 
     def test_the_roof_and_the_light_act_as_kodus_features(self):
         (roof,) = [c for c in walk(VIEW) if c.get("entity") == dc.ROOF and "buttons" in c]
@@ -216,6 +217,57 @@ class Build(unittest.TestCase):
         code = src.split('"""', 2)[2]
         quoted = set(re.findall(r'"([^"\s]+)"', code))
         self.assertEqual(quoted & (kodu_entities(KODU) | kodu_entities(VIEW)), set())
+
+
+OVERVIEW = a3.overview(HOUSE, PEOPLE, MODEL)
+BUILT = dc.build(HOUSE, PEOPLE, MODEL)
+
+
+def paths(config):
+    return [v["path"] for v in config["views"]]
+
+
+class Overview(unittest.TestCase):
+    def test_a3_is_first_at_kodus_path_and_3d_is_last(self):
+        self.assertEqual(OVERVIEW["views"][0], VIEW)
+        self.assertEqual(paths(OVERVIEW)[0], "kodu")
+        self.assertEqual(paths(OVERVIEW)[-1], "maja-3d")
+        self.assertNotIn(dc.home(dc.House(HOUSE, PEOPLE)), OVERVIEW["views"])
+
+    def test_every_other_view_is_dashboard_configs_in_its_order(self):
+        built = BUILT["views"]
+        others = [v for v in built if v["path"] not in ("kodu", "maja-3d")]
+        self.assertEqual(OVERVIEW["views"][1:-1], others)
+        self.assertEqual(sorted(paths(OVERVIEW)), sorted(v["path"] for v in built))
+
+    def test_without_inputs_no_3d_view_and_no_hero(self):
+        config = a3.overview({}, [], None)
+        self.assertNotIn("maja-3d", paths(config))
+        self.assertEqual(paths(config)[0], "kodu")
+        types = [c["type"] for c in config["views"][0]["sections"][0]["cards"]]
+        self.assertNotIn("custom:house3d-card", types)
+
+    def test_a_fresh_copy_and_dashboard_config_unchanged(self):
+        before = copy.deepcopy(BUILT)
+        first = a3.overview(HOUSE, PEOPLE, MODEL)
+        first["views"].clear()
+        self.assertTrue(a3.overview(HOUSE, PEOPLE, MODEL)["views"])
+        self.assertEqual(dc.build(HOUSE, PEOPLE, MODEL), before)
+        self.assertEqual(paths(before)[:2], ["maja-3d", "kodu"])
+
+    def test_every_lovelace_link_lands_on_a_view(self):
+        views = {"/lovelace/" + p for p in paths(OVERVIEW)}
+        lovelace = {link for link in links(OVERVIEW) if link.startswith("/lovelace/")}
+        self.assertTrue(lovelace)
+        self.assertEqual(lovelace - views, set())
+
+    def test_every_lovelace_url_in_the_packages_lands_on_a_view(self):
+        views = set(paths(OVERVIEW))
+        found = set()
+        for f in (ROOT / "config/packages").glob("*.yaml"):
+            found |= set(re.findall(r"/lovelace/([a-z0-9-]+)", f.read_text()))
+        self.assertTrue(found)
+        self.assertEqual(found - views, set())
 
 
 if __name__ == "__main__":

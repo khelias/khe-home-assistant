@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-"""Generate and save the house's dashboards: the Overview (Kodu) and A3, the
-front page (sidebar title "Kodu").
+"""Generate and save the house's dashboard, the Overview ("Ülevaade"), whose first view is A3.
 
 The dashboard is storage-mode config in HA's .storage (backed up nightly by
-backup.sh); this script is its source of truth. The configs are built by
-dashboard_config.build() and, for A3 (ADR-005, ADR-006),
-dashboard_a3.build(); this script reads their private inputs, builds and
-saves. Edit there, run here, and HA picks the new config up live.
+backup.sh); this script is its source of truth. The config is built by
+dashboard_a3.overview() (ADR-007): dashboard_config.build()'s views with A3 in
+place of Kodu and the 3D view last; this script reads their private inputs,
+builds and saves. Edit there, run here, and HA picks the new config up live.
 
-Usage:  ha-dashboard.py            (saves Kodu to the "lovelace" Overview)
-        ha-dashboard.py --a3       (saves A3 to "kodu-katse", creating it if it is missing,
-                                    and sets its sidebar title and icon)
+Usage:  ha-dashboard.py            (saves the Overview to "lovelace")
 Needs:  python3 with `websockets`, the HA long-lived token in
         ~/.config/khe/ha-token, optional family list in ~/.config/khe/ha-people.json,
         optional 3D house model (HOUSE3D_MODEL, below).
@@ -24,18 +21,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dashboard_a3
-import dashboard_config
 import house3d_model
 
 HA = "192.168.0.11:8123"
 URL = "lovelace"  # the Overview, a dashboard entry since the 2026.9 migration
-A3 = {
-    "url_path": "kodu-katse",
-    "title": "Kodu",
-    "icon": "mdi:home-heart",
-    "show_in_sidebar": True,
-    "require_admin": False,
-}
 
 
 # This repo is public, so nothing that identifies the house or the family is hard-coded here.
@@ -84,20 +73,13 @@ def with_car_entity(model, entity):
 
 
 def local_config():
-    """The real dashboard: build() with the local house files and the model."""
+    """The real dashboard: overview() with the local house files and the model."""
     house = _local("ha-house.json", {})
     model = with_car_entity(house3d_card_model(), house.get("car_entity"))
-    return dashboard_config.build(house, _local("ha-people.json", []), model)
+    return dashboard_a3.overview(house, _local("ha-people.json", []), model)
 
 
-def a3_config():
-    """A3: dashboard_a3.build() with the local house files and the 3D model."""
-    house = _local("ha-house.json", {})
-    model = with_car_entity(house3d_card_model(), house.get("car_entity"))
-    return dashboard_a3.build(house, _local("ha-people.json", []), model)
-
-
-async def main(config, url_path, create=None):
+async def main(config, url_path):
     async with websockets.connect(f"ws://{HA}/api/websocket", max_size=2**24) as ws:
         await ws.recv()
         await ws.send(json.dumps({"type": "auth", "access_token": TOKEN}))
@@ -113,26 +95,6 @@ async def main(config, url_path, create=None):
                 if r.get("id") == mid[0]:
                     return r
 
-        if create:
-            r = await call(type="lovelace/dashboards/list")
-            if not r.get("success"):
-                raise SystemExit(f"dashboards/list: {r.get('error')}")
-            found = [d for d in r["result"] if d["url_path"] == url_path]
-            if not found:
-                r = await call(type="lovelace/dashboards/create", **create)
-                print("create:", "ok" if r.get("success") else r.get("error"))
-                if not r.get("success"):
-                    raise SystemExit(1)
-            elif (found[0].get("title"), found[0].get("icon")) != (create["title"], create["icon"]):
-                r = await call(
-                    type="lovelace/dashboards/update",
-                    dashboard_id=found[0]["id"],
-                    title=create["title"],
-                    icon=create["icon"],
-                )
-                print("update:", "ok" if r.get("success") else r.get("error"))
-                if not r.get("success"):
-                    raise SystemExit(1)
         r = await call(type="lovelace/config/save", url_path=url_path, config=config)
         print("save:", "ok" if r.get("success") else r.get("error"))
         r = await call(type="lovelace/config", url_path=url_path)
@@ -149,9 +111,6 @@ if __name__ == "__main__":
     import websockets
 
     TOKEN = Path("~/.config/khe/ha-token").expanduser().read_text().strip()
-    if sys.argv[1:] == ["--a3"]:
-        asyncio.run(main(a3_config(), A3["url_path"], create=A3))
-    elif sys.argv[1:]:
+    if sys.argv[1:]:
         sys.exit(__doc__)
-    else:
-        asyncio.run(main(local_config(), URL))
+    asyncio.run(main(local_config(), URL))
