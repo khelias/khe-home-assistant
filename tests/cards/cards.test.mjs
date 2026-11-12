@@ -500,3 +500,23 @@ test('dayName: the weekday and date in HA\'s zone', () => {
   assert.equal(A3.dayName(Date.parse('2026-10-24T21:00:00Z'), 'Europe/Tallinn'), 'pühapäev 25.10');
   assert.equal(A3.dayName(Date.parse('2026-11-10T22:00:00Z'), 'UTC'), 'teisipäev 10.11');
 });
+
+test('pointing: an hour bar, a history moment and the nearest point with a value', () => {
+  const at = (d, h, m = 0) => new Date(2026, 10, d, h, m).getTime();
+  assert.equal(A3.hourSpan({ s: at(12, 18), tomorrow: false }), 'täna 18–19');
+  assert.equal(A3.hourSpan({ s: at(13, 23), tomorrow: true }), 'homme 23–00');
+  const now = at(12, 21);
+  assert.equal(A3.whenLabel(at(12, 14, 35), '24h', false, now), 'täna 14:35');
+  assert.equal(A3.whenLabel(at(11, 22), '24h', true, now), 'eile 22–23');
+  assert.equal(A3.whenLabel(at(11, 9), '7d', false, now), 'kolmapäev 11.11 kell 09');
+  assert.equal(A3.whenLabel(at(11, 0), '7d', true, now), 'kolmapäev 11.11');
+  assert.equal(A3.whenLabel(at(1, 0), '30d', false, now), 'pühapäev 1.11');
+  const pts = [{ t: 0, v: 1 }, { t: 10, v: null }, { t: 20, v: 3 }];
+  assert.equal(A3.nearest(pts, 9), 0);
+  assert.equal(A3.nearest(pts, 12), 2);
+  assert.equal(A3.nearest([{ t: 0, v: null }], 0), null);
+  assert.equal(A3.nearest(pts, 19, true), null);
+  assert.equal(A3.nearest(pts, 9, true), 0);
+  assert.equal(A3.nearest(pts, 25, true), 2);
+  assert.equal(A3.nearest(pts, -1, true), null);
+});

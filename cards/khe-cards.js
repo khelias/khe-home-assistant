@@ -6,7 +6,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 5;
+export const KHE_CARDS_VERSION = 6;
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
 
@@ -227,7 +227,7 @@ export function priceBars(prices, now = new Date(), bands) {
     .sort((a, b) => a.s - b.s)
     .map(p => {
       const at = p.s * 1000;
-      return { t: p.t, level: priceLevel(p.t, bands), height: Math.max(0, Math.min(1, p.t / PRICE_SCALE)), past: at + HOUR <= t, now: at <= t && t < at + HOUR, tomorrow: at >= day1 };
+      return { t: p.t, s: at, level: priceLevel(p.t, bands), height: Math.max(0, Math.min(1, p.t / PRICE_SCALE)), past: at + HOUR <= t, now: at <= t && t < at + HOUR, tomorrow: at >= day1 };
     });
   if (!bars.length) return null;
   return { bars, today: bars.filter(b => !b.tomorrow).length, current: bars.findIndex(b => b.now) };
@@ -429,6 +429,21 @@ ha-card{display:flex;flex-direction:column;padding:0 4px}
     this._timer = setTimeout(() => { if (this._hass) this.hass = this._hass; this.connectedCallback(); }, HOUR - (Date.now() % HOUR) + 1000);
   }
   disconnectedCallback() { clearTimeout(this._timer); }
+  // a mouse over the bars shows that hour's price in place of the price now; a tap opens the sheet
+  _wire() {
+    const P = this._a3 && this._point, svg = P && this._root.querySelector('svg.bars');
+    if (!svg) return;
+    const hd = this._root.querySelector('.hd'), lab = hd.querySelector('.lab'), n = hd.querySelector('.n'), sel = svg.querySelector('.sel');
+    const was = [lab.textContent, n.textContent];
+    wirePoint(svg, f => Math.min(P.bars.length - 1, Math.floor(f * P.bars.length)), i => {
+      hd.classList.toggle('pointing', i !== null);
+      sel.setAttribute('visibility', i === null ? 'hidden' : 'visible');
+      if (i === null) { [lab.textContent, n.textContent] = was; return; }
+      sel.setAttribute('x', (i * P.slot - 1).toFixed(1));
+      lab.textContent = cap(hourSpan(P.bars[i]));
+      n.textContent = formatNumber((P.bars[i].t * 100).toFixed(1), 1);
+    }, false);
+  }
   _html(states, pal) {
     if (this._a3) return priceA3(this, states, pal);
     const c = this._config;
@@ -752,7 +767,7 @@ dialog .ranges{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2p
 dialog .ranges button{height:32px;border-radius:8px;font-size:13px;font-weight:600;text-align:center}
 dialog .ranges button[aria-pressed="true"]{background:var(--segOn);box-shadow:var(--segShadow)}
 dialog .chart{position:relative;height:170px}
-dialog .chart svg{display:block;width:100%;height:170px}
+dialog .chart svg{display:block;width:100%;height:170px;touch-action:pan-y}
 dialog .chart .dot{position:absolute;width:10px;height:10px;margin:-7px 0 0 -7px;border-radius:7px;border:2px solid var(--dotRing)}
 dialog .chart .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--sub)}
 dialog .axis{position:relative;display:flex;justify-content:space-between;font-size:11px;font-weight:600;color:var(--sub)}
@@ -769,6 +784,22 @@ dialog .more{flex:1;height:44px;border-radius:14px;background:var(--seg);font-si
 `;
 
 const W = 350, H = 170;
+
+// pointing at a chart: pick(f) turns the pointer's place across el (0 to 1) into an index or null,
+// show(index or null, f) draws it. A mouse shows what is under it and clears on leaving; a finger
+// keeps what it touched until it taps the same again, unless touch is false: the tap is the card's
+function wirePoint(el, pick, show, touch = true) {
+  let shown = null, before = null, f = 0;
+  const at = ev => { const r = el.getBoundingClientRect(); f = Math.max(0, Math.min(1, (ev.clientX - r.left) / (r.width || 1))); return pick(f); };
+  const set = j => { shown = j; show(j, f); };
+  const mouse = ev => ev.pointerType === 'mouse';
+  el.addEventListener('pointermove', ev => { if (mouse(ev) || (touch && ev.buttons)) set(at(ev)); });
+  el.addEventListener('pointerleave', ev => { if (mouse(ev)) set(null); });
+  if (!touch) return;
+  el.addEventListener('pointerdown', ev => { if (!mouse(ev)) { before = shown; set(at(ev)); } });
+  el.addEventListener('pointerup', ev => { if (!mouse(ev) && at(ev) === before) set(null); });
+}
+const SEL = color => `<path class="sel" d="" stroke="${color}" stroke-opacity="0.45" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
 
 // One <dialog> per card, opened with showModal() into the top layer. spec: { title, entity, more,
 // decimals, unit, color, history } or { title, price: { forecast, level, bands } }.
@@ -800,7 +831,7 @@ class Sheet {
   }
   // the value now follows the house while the sheet is open
   live() {
-    if (!this.el.open) return;
+    if (!this.el.open || this.pointing) return;
     const v = this.el.querySelector('.now');
     if (v) v.innerHTML = this.nowHtml();
   }
@@ -839,12 +870,28 @@ class Sheet {
   render() {
     const sp = this.spec, ranged = !sp.price && sp.history;
     const ranges = ranged ? `<div class="ranges" role="group" aria-label="Ajavahemik">${Object.entries(RANGES).map(([k, r]) => `<button type="button" data-s="${k}" aria-pressed="${k === this.range}">${r.name}</button>`).join('')}</div>` : '';
+    this.point = null;
     const chart = sp.price ? this.priceChart() : this.seriesChart();
     this.body.innerHTML = `<span class="grab" aria-hidden="true"></span>
       <div class="top"><div><div class="title">${esc(sp.title)}</div><div class="now">${this.nowHtml()}</div></div>
       <button type="button" class="x" data-s="close" aria-label="Sulge"><i>${icon('close', 14, 'currentColor')}</i></button></div>
       ${ranges}${chart}<div class="acts"><button type="button" class="more" data-s="more">Rohkem</button>${sp.view ? '<button type="button" class="more" data-s="view">Süsteemi leht</button>' : ''}</div>`;
     this.el.setAttribute('aria-label', sp.title);
+    this.wire();
+  }
+  // pointing at the chart shows that point's value and time in place of the value now
+  wire() {
+    const P = this.point, svg = this.body.querySelector('.chart svg');
+    this.pointing = false;
+    if (!P || !svg) return;
+    const now = this.body.querySelector('.now'), sel = svg.querySelector('.sel');
+    wirePoint(svg, P.pick, (j, f) => {
+      this.pointing = j !== null;
+      if (j === null) { sel.setAttribute('d', ''); now.innerHTML = this.nowHtml(); return; }
+      const r = P.read(j, f);
+      sel.setAttribute('d', `M${r.x.toFixed(1)} 0V${H}`);
+      now.innerHTML = `<span class="v num">${esc(r.v)}</span><span class="u">${esc(r.u)}</span>`;
+    });
   }
   stats(list) {
     return `<div class="stats">${list.map(([k, v]) => `<span><span class="k">${esc(k)}</span><span class="v num">${esc(v)}</span></span>`).join('')}</div>`;
@@ -864,9 +911,13 @@ class Sheet {
     const dot = cur ? `<span class="dot" style="left:${(((b.current + 0.5) * slot) / W * 100).toFixed(2)}%;top:${((H - 12 - Math.max(2, cur.height * (H - 26))) / H * 100).toFixed(2)}%;background:${pal.text}"></span>` : '';
     const ts = b.bars.map(x => x.t * 100), mean = ts.reduce((a, v) => a + v, 0) / ts.length;
     const lab = b.bars.length > b.today ? ['täna 00', '12', 'homme 00', '12', '24'] : ['00', '06', '12', '18', '24'];
+    this.point = {
+      pick: f => Math.min(n - 1, Math.floor(f * n)),
+      read: i => ({ x: (i + 0.5) * slot, v: formatNumber((b.bars[i].t * 100).toFixed(1), 1), u: `senti/kWh · ${hourSpan(b.bars[i])}` })
+    };
     return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Tunnihind täna${b.bars.length > b.today ? ' ja homme' : ''}">
       <path d="M0 42.5H${W}M0 85H${W}M0 127.5H${W}" stroke="${pal.hair}" vector-effect="non-scaling-stroke"/>
-      <path d="${paths.cheap}" fill="${pal.cheap}"/><path d="${paths.mid}" fill="${pal.midBar}"/><path d="${paths.high}" fill="${pal.highBar}"/></svg>${dot}</div>
+      <path d="${paths.cheap}" fill="${pal.cheap}"/><path d="${paths.mid}" fill="${pal.midBar}"/><path d="${paths.high}" fill="${pal.highBar}"/>${SEL(pal.text)}</svg>${dot}</div>
       <div class="axis" aria-hidden="true">${lab.map(l => `<span>${l}</span>`).join('')}</div>
       ${this.stats([['Odavaim', formatNumber(Math.min(...ts).toFixed(1), 1)], ['Keskmine', formatNumber(mean.toFixed(1), 1)], ['Kalleim', formatNumber(Math.max(...ts).toFixed(1), 1)]])}`;
   }
@@ -881,9 +932,19 @@ class Sheet {
     const pal = a3Palette(this.card._hass.themes && this.card._hass.themes.darkMode);
     const grid = `<path d="M0 42.5H${W}M0 85H${W}M0 127.5H${W}" stroke="${pal.hair}" vector-effect="non-scaling-stroke"/>`;
     const axis = `<div class="axis" aria-hidden="true">${axisLabels(range, t0, t1).map(l => `<span>${esc(l)}</span>`).join('')}</div>`;
-    const svg = inner => `<div class="chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(sp.title)}, ajalugu">${grid}${inner}</svg></div>${axis}`;
+    const svg = inner => `<div class="chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(sp.title)}, ajalugu">${grid}${inner}${SEL(pal.text)}</svg></div>${axis}`;
     const fmt = v => formatNumber(v.toFixed(sp.decimals ?? 1), sp.decimals ?? 1);
     const unit = sp.unit ? (sp.unit === '°C' ? '°' : ` ${sp.unit}`) : '';
+    // a bar is read at its middle, a line at its point
+    if (series.kind !== 'step') {
+      const pts = series.points.filter(p => p.t >= t0 || series.kind === 'line'), bars = series.kind === 'bars';
+      const half = bars ? (t1 - t0) / series.points.length / 2 : 0;
+      const xOf = t => ((Math.min(Math.max(t + half, t0), t1) - t0) / (t1 - t0)) * W;
+      this.point = {
+        pick: f => nearest(pts, t0 + f * (t1 - t0) - half, !!series.stepped),
+        read: (i, f) => ({ x: series.stepped ? f * W : xOf(pts[i].t), v: sp.unit === '°C' ? `${fmt(pts[i].v)}°` : fmt(pts[i].v), u: [sp.unit === '°C' ? '' : sp.unit, whenLabel(pts[i].t, range, bars, now)].filter(Boolean).join(' · ') })
+      };
+    }
     if (series.kind === 'step') {
       const p = chartPaths(series, { t0, t1, lo: 0, hi: 1 });
       const s = stepStats(series, t0, now);
@@ -1067,6 +1128,7 @@ const PRICE_A3_CSS = `
 .main{display:flex;flex-direction:column;gap:12px;width:100%;padding:16px 16px 14px;border-radius:24px}
 .hd{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .hd .l{display:flex;flex-direction:column;gap:2px}
+.hd.pointing .sub,.hd.pointing .badge{visibility:hidden}
 .lab{font-size:13px;font-weight:600;color:var(--sub)}
 .big{display:flex;align-items:baseline;gap:6px}
 .big .n{font-size:46px;line-height:1;font-weight:700;letter-spacing:-0.035em}
@@ -1103,6 +1165,7 @@ function priceA3(card, states, pal) {
   const badge = a ? `<span class="badge ${levelTone(level.state)}">${esc(cap(level.state))}</span>` : '';
   const top = `<span class="hd"><span class="l"><span class="lab">Praegu</span>${arvel ? `<span class="big"><span class="n num">${arvel}</span><span class="u">senti/kWh</span></span>` : '<span class="big"><span class="u">Hind pole teada</span></span>'}${sub ? `<span class="sub">${esc(cap(sub))}</span>` : ''}</span>${badge}</span>`;
   const b = priceBars(fc && fc.attributes && fc.attributes.prices, new Date(), c.bands);
+  card._point = null;
   let chart = '<span class="empty">Hinnaprognoosi pole</span>';
   if (b) {
     const n = b.bars.length, slot = 336 / n, bw = Math.max(1, slot - 2);
@@ -1116,10 +1179,11 @@ function priceA3(card, states, pal) {
     const col = { cheap: pal.cheap, mid: pal.midBar, high: pal.highBar };
     const fill = (set, op) => Object.entries(set).map(([k, d]) => (d ? `<path d="${d}" fill="${col[k]}"${op ? ` fill-opacity="${op}"` : ''}/>` : '')).join('');
     const pct = i => `${((i * slot) / 336 * 100).toFixed(1)}%`;
+    card._point = arvel && { bars: b.bars, slot, bw };
     const marks = [`<span style="left:0">täna</span>`];
     if (b.current >= 0 && b.current > 2 && (n <= b.today || b.current < b.today - 4)) marks.push(`<span style="left:${pct(b.current)};transform:translateX(-50%)">nüüd</span>`);
     if (n > b.today) marks.push(`<span style="left:${pct(b.today)}">homme</span>`);
-    chart = `<span class="ch"><svg class="bars" viewBox="0 0 336 64" preserveAspectRatio="none" aria-hidden="true">${fill(past, 0.35)}${fill(paths)}${now ? `<path d="${now}" fill="none" stroke="${pal.text}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>` : ''}</svg><span class="ax" aria-hidden="true">${marks.join('')}</span></span>`;
+    chart = `<span class="ch"><svg class="bars" viewBox="0 0 336 64" preserveAspectRatio="none" aria-hidden="true"><rect class="sel" y="0" width="${(bw + 2).toFixed(1)}" height="64" rx="2" fill="${pal.text}" fill-opacity="0.12" visibility="hidden"/>${fill(past, 0.35)}${fill(paths)}${now ? `<path d="${now}" fill="none" stroke="${pal.text}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>` : ''}</svg><span class="ax" aria-hidden="true">${marks.join('')}</span></span>`;
   }
   const line = (ic, name, text) => `<span class="ln">${icon(ic, 20, pal.sub)}<span>${name ? `<b>${esc(name)}</b> ` : ''}${esc(text)}</span></span>`;
   const windows = (c.windows || []).map(w => [w.icon || 'bolt', w.name, ((states[w.entity] || {}).attributes || {}).tekst]).filter(([, , t]) => t);
@@ -1366,6 +1430,33 @@ export function dayName(t, tz) {
   return `${WEEKDAY[new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay()]} ${p.d}.${p.m}`;
 }
 
+const hh = n => String(n).padStart(2, '0');
+// an hour's price bar as the house says it: 'täna 18–19', 'homme 03–04'
+export const hourSpan = bar => { const h = new Date(bar.s).getHours(); return `${bar.tomorrow ? 'homme' : 'täna'} ${hh(h)}–${hh((h + 1) % 24)}`; };
+// when a pointed history point was, in the browser's zone like the axis: an hour's bar or a
+// moment in the 24 h range, the hour in the week, the day in a month or a day's bar
+export function whenLabel(t, range, bars, now = Date.now()) {
+  const d = new Date(t), n = new Date(now), h = d.getHours();
+  const day = `${WEEKDAY[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}`;
+  if (range === '24h') {
+    const at = bars ? `${hh(h)}–${hh((h + 1) % 24)}` : `${hh(h)}:${hh(d.getMinutes())}`;
+    return `${d.toDateString() === n.toDateString() ? 'täna' : 'eile'} ${at}`;
+  }
+  return range === '7d' && !bars ? `${day} kell ${hh(h)}` : day;
+}
+// the index of the point with a value nearest to t, null when none has one; on a stepped line the
+// value held at t, the last point at or before it (null before the first)
+export function nearest(points, t, stepped = false) {
+  if (stepped) {
+    let i = -1;
+    while (i + 1 < points.length && points[i + 1].t <= t) i++;
+    return i >= 0 && points[i].v !== null ? i : null;
+  }
+  let best = null;
+  points.forEach((p, i) => { if (p.v !== null && (best === null || Math.abs(p.t - t) < Math.abs(points[best].t - t))) best = i; });
+  return best;
+}
+
 // last month's name, Estonian ("oktoober") and as Daikin's month attributes name it ("October")
 export function lastMonthName(now, tz, lang = 'et-EE') {
   const p = zoneParts(now, tz);
@@ -1512,7 +1603,7 @@ const DAYS_CSS = `
 .avg{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
 .avg .n{font-size:28px;font-weight:700;letter-spacing:-0.025em}
 .avg .u{font-size:14px;font-weight:600;color:var(--sub)}
-svg.c{display:block;width:100%;height:120px;touch-action:pan-y;cursor:crosshair}
+svg.c{display:block;width:100%;height:120px;touch-action:pan-y}
 .ax{display:flex;justify-content:space-between;margin-top:4px;font-size:11px;font-weight:600;color:var(--sub)}
 .key{display:flex;gap:14px;font-size:12px;font-weight:600;color:var(--sub)}
 .key span{display:flex;align-items:center;gap:5px}
@@ -1598,28 +1689,20 @@ class DaysCard extends LoadingCard {
     const cells = three.map(([k, v, l]) => `<span><span class="k">${esc(k)}</span><span class="v num">${esc(v)}</span><span class="sub">${esc(l)}</span></span>`).join('');
     return shell(`<span class="avg"><span class="n num">${fmt(stats.avg)}</span><span class="u">${esc(s.caption || '')}</span></span><span>${svg}${axis}</span>${key}<span class="hr"></span><span class="stats">${cells}</span>`);
   }
-  // a mouse shows the day under it; a finger shows the day it touches until the same day is tapped again
+  // pointing at a day shows it in the average's place
   _wire() {
     const P = this._point, svg = this._root.querySelector('svg.c');
     if (!P || !svg) return;
     const n = this._root.querySelector('.avg .n'), u = this._root.querySelector('.avg .u'), sel = svg.querySelector('.sel');
-    let shown = null;
-    const show = j => {
-      shown = j;
-      if (j === null) { sel.setAttribute('visibility', 'hidden'); [n.textContent, u.textContent] = P.avg; return; }
+    wirePoint(svg, f => Math.min(P.pts.length - 1, Math.floor(f * P.pts.length)), j => {
+      sel.setAttribute('visibility', j === null ? 'hidden' : 'visible');
+      if (j === null) { [n.textContent, u.textContent] = P.avg; return; }
       const p = P.pts[j];
       sel.setAttribute('x', (j * P.step).toFixed(1));
-      sel.setAttribute('visibility', 'visible');
       const note = p.late ? (j === P.pts.length - 1 ? 'täna, andmed hilinevad' : 'andmed hilinevad') : P.peak && p.max !== null ? `kalleim tund ${P.fmt(p.max)}` : '';
       n.textContent = p.v === null ? '–' : P.fmt(p.v);
       u.textContent = [P.unit, dayName(p.t, P.tz), note].filter(Boolean).join(' · ');
-    };
-    const at = ev => { const r = svg.getBoundingClientRect(); return Math.max(0, Math.min(P.pts.length - 1, Math.floor(((ev.clientX - r.left) / r.width) * P.pts.length))); };
-    let before = null;
-    svg.addEventListener('pointermove', ev => { if (ev.pointerType === 'mouse' || ev.buttons) show(at(ev)); });
-    svg.addEventListener('pointerleave', ev => { if (ev.pointerType === 'mouse') show(null); });
-    svg.addEventListener('pointerdown', ev => { if (ev.pointerType !== 'mouse') { before = shown; show(at(ev)); } });
-    svg.addEventListener('pointerup', ev => { if (ev.pointerType !== 'mouse' && at(ev) === before) show(null); });
+    });
   }
   _click(ev) {
     const b = ev.target.closest('button[data-p]');
