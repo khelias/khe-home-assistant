@@ -6,7 +6,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 6;
+export const KHE_CARDS_VERSION = 7;
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
 
@@ -942,7 +942,11 @@ class Sheet {
       const xOf = t => ((Math.min(Math.max(t + half, t0), t1) - t0) / (t1 - t0)) * W;
       this.point = {
         pick: f => nearest(pts, t0 + f * (t1 - t0) - half, !!series.stepped),
-        read: (i, f) => ({ x: series.stepped ? f * W : xOf(pts[i].t), v: sp.unit === '°C' ? `${fmt(pts[i].v)}°` : fmt(pts[i].v), u: [sp.unit === '°C' ? '' : sp.unit, whenLabel(pts[i].t, range, bars, now)].filter(Boolean).join(' · ') })
+        // a stepped line holds its value: it is read at the pointer, not where it last changed
+        read: (i, f) => {
+          const t = series.stepped ? t0 + f * (t1 - t0) : pts[i].t;
+          return { x: series.stepped ? f * W : xOf(t), v: sp.unit === '°C' ? `${fmt(pts[i].v)}°` : fmt(pts[i].v), u: [sp.unit === '°C' ? '' : sp.unit, whenLabel(t, range, bars, now)].filter(Boolean).join(' · ') };
+        }
       };
     }
     if (series.kind === 'step') {
