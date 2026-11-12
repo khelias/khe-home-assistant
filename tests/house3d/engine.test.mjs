@@ -1496,6 +1496,33 @@ test('card: heroSize keeps the default without a height and sizes the rows for o
   assert.deepEqual(card.heroSize({ height: 249.6 }), { height: 250, rows: 5 });
 });
 
+test('card: heroMount puts a hero in the real style without the surroundings, and leaves any other card as stored', () => {
+  const stored = { surroundings: true, garden: false };
+  assert.equal(card.HERO_HIDDEN, 'surroundings');
+  assert.deepEqual(card.heroMount(true, 'simple', stored),
+    { style: 'real', layers: { future: false, surroundings: false, garden: false } });
+  assert.deepEqual(card.heroMount(false, 'simple', stored),
+    { style: 'simple', layers: { future: false, surroundings: true, garden: false } });
+  assert.deepEqual(card.heroMount(false, 'real', undefined), { style: 'real', layers: { future: false } });
+  assert.deepEqual(stored, { surroundings: true, garden: false });
+});
+
+test('card: a hero keeps its layer switches to itself and a full view stores them', () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: k => store.delete(k) };
+  try {
+    const el = Object.create(card.House3dCard.prototype);
+    el._heroLayers = {};
+    el._isHero = true;
+    el._writeLayers({ ...el._readLayers(), garden: true });
+    assert.equal(store.size, 0);
+    assert.deepEqual(el._readLayers(), { garden: true });
+    el._isHero = false;
+    el._writeLayers({ ...el._readLayers(), garden: true });
+    assert.equal(store.size, 1);
+  } finally { delete globalThis.localStorage; }
+});
+
 // _fit on a stand-in element: Node has no DOM, so only the sizing logic runs
 function fitted(attrs, hero) {
   const el = Object.create(card.House3dCard.prototype);

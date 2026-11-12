@@ -1,4 +1,4 @@
-"""The Kodu A3 dashboard, as data (ADR-005).
+"""The A3 dashboard, the house's front page, as data (ADR-005, ADR-006).
 
 build(house, people, model) returns a one-view Lovelace config for `kodu-katse`: the 3D house as
 the hero, then the page's title with the outdoor temperature, people, alarms and live faults as
@@ -325,7 +325,7 @@ def build(house, people, model):
         system(h),
     ]
     view = {
-        "title": "Kodu A3",
+        "title": "Kodu",
         "path": "kodu",
         "icon": "mdi:home-heart",
         "type": "sections",
@@ -338,4 +338,4 @@ def build(house, people, model):
             section(climate),
         ],
     }
-    return copy.deepcopy({"title": "Kodu A3", "views": [view]})
+    return copy.deepcopy({"title": "Kodu", "views": [view]})

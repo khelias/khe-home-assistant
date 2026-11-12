@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 39;
+const HOUSE3D_VERSION = 40;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -313,6 +313,16 @@ export function heroSize(config) {
   return { height: Math.round(h), rows: Math.ceil((Math.round(h) + 8) / 64) };
 }
 
+// heroMount(hero, style, layers) -> { style, layers }: what the engine mounts with. A hero (a card
+// with `height`, a dashboard's top) is always the real style with the live sun and never draws
+// HERO_HIDDEN, so it owes no ETAK credit; it keeps its layer switches to itself, not in the stored
+// ones of the full 3D view. Any other card is as the visitor left it.
+export const HERO_HIDDEN = 'surroundings';
+export function heroMount(hero, style, layers) {
+  const all = { ...LAYERS_OFF, ...(layers || {}) };
+  return hero ? { style: 'real', layers: { ...all, [HERO_HIDDEN]: false } } : { style, layers: all };
+}
+
 const STYLE = `
 :host { display: block; height: var(--house3d-height, 480px); }
 /* a hero leaves vertical swipes to the page; the important beats OrbitControls' inline none */
@@ -383,12 +393,15 @@ export class House3dCard extends Base {
     this._states = new Map();
     this._room = null;
     this._style = readStyle();
+    this._heroLayers = {};
     this._time = null; // null: live
   }
 
   setConfig(config) {
     if (!config || !config.model || !Array.isArray(config.model.walls)) throw new Error('house3d-card: config.model with walls is required');
-    const changed = this._config && (this._config.model !== config.model || this._config.language !== config.language);
+    const hero = !!heroSize(config).height;
+    const heroChanged = this._config && hero !== this._isHero;
+    const changed = this._config && (heroChanged || this._config.model !== config.model || this._config.language !== config.language);
     this._config = config;
     this._lang = langOf(config.language);
     this._t = TEXT[this._lang];
@@ -397,9 +410,11 @@ export class House3dCard extends Base {
     if (this._hero.height) this.style.setProperty('--house3d-height', `${this._hero.height}px`);
     else this.style.removeProperty('--house3d-height');
     this.toggleAttribute('hero', !!this._hero.height);
+    this._isHero = hero;
+    this._style = heroMount(hero, heroChanged ? readStyle() : this._style).style;
     this._devices = config.model.devices || [];
     this._car = config.model.car && config.model.car.profile && config.model.car.path ? config.model.car : null;
-    // another model starts from its own home view; another language redraws the card's text
+    // another model starts from its own home view; another language or a hero redraws the card
     if (changed) { this._unmount(); this._states.clear(); this._keep = null; }
     this._render();
   }
@@ -474,7 +489,7 @@ export class House3dCard extends Base {
         <button type="button" data-mode="open" aria-pressed="false">${t.open}</button></div>
         <button type="button" class="icon-btn" data-act="reset" aria-label="${t.resetView}" title="${t.resetView}"></button>
         <button type="button" class="icon-btn" data-act="layers" aria-label="${t.layersTitle}" title="${t.layersTitle}" aria-expanded="false"></button></div>
-      <aside class="sheet" hidden aria-live="polite"></aside>${this._credit()}</ha-card>`;
+      <aside class="sheet" hidden aria-live="polite"></aside>${this._isHero ? '' : this._credit()}</ha-card>`;
     this._sheet = null;
     const wrap = sr.querySelector('.wrap');
     // a hero lets the wheel scroll the page, where OrbitControls on the canvas would zoom the house
@@ -505,7 +520,7 @@ export class House3dCard extends Base {
         onFeature: id => this._openFeature(id),
         // the sun moves on once a minute and with the sliders; an open PV sheet follows it
         onSun: sun => { if (this._view && this._sheet === 'feature') this._renderPv(sun); },
-        layers: { ...LAYERS_OFF, ...readLayers() },
+        layers: heroMount(this._isHero, this._style, this._readLayers()).layers,
         style: this._style,
         mode: keep.mode,
         view: keep.view,
@@ -567,6 +582,7 @@ export class House3dCard extends Base {
   setScene({ style, time } = {}) {
     const at = time ? new Date(time) : null;
     this._sceneTime = at;
+    if (style) style = heroMount(this._isHero, style).style;
     if (!style || style === this._style) return this._setTime(at);
     this._style = style;
     this._time = at;
@@ -579,11 +595,20 @@ export class House3dCard extends Base {
     if (this._sceneTime === undefined) return;
     const live = this._time === this._sceneTime;
     this._sceneTime = undefined;
-    const style = readStyle();
+    const style = heroMount(this._isHero, readStyle()).style;
     if (style === this._style) return live ? this._setTime(null) : undefined;
     this._style = style;
     if (live) this._time = null;
     this._remount();
+  }
+
+  _readLayers() {
+    return this._isHero ? this._heroLayers : readLayers();
+  }
+
+  _writeLayers(layers) {
+    if (this._isHero) this._heroLayers = layers;
+    else writeLayers(layers);
   }
 
   _remount() {
@@ -782,9 +807,9 @@ export class House3dCard extends Base {
     const t = this._t;
     sheet.innerHTML = `<div class="head"><div><h2>${t.layersTitle}</h2></div>
       <button type="button" class="close" data-act="close" aria-label="${t.close}">${this._mod.icon('close')}</button></div>
-      <div class="row"><span>${t.style}</span><div class="seg" role="group" aria-label="${t.style}">
+      ${this._isHero ? '' : `<div class="row"><span>${t.style}</span><div class="seg" role="group" aria-label="${t.style}">
         <button type="button" data-style="simple" aria-pressed="${this._style === 'simple'}">${t.simple}</button>
-        <button type="button" data-style="real" aria-pressed="${this._style === 'real'}">${t.real}</button></div></div>
+        <button type="button" data-style="real" aria-pressed="${this._style === 'real'}">${t.real}</button></div></div>`}
       ${this._style === 'real' ? this._timeRows() : this._time ? `<button type="button" class="now" data-act="now" aria-pressed="false">${t.now}</button>` : ''}
       <div class="list switches"></div>`;
     this._sheet = 'layers';
@@ -799,7 +824,8 @@ export class House3dCard extends Base {
     const list = this.shadowRoot.querySelector('.sheet .switches');
     if (!list || !this._view) return;
     const rank = id => (LAYER_ORDER.includes(id) ? LAYER_ORDER.indexOf(id) : LAYER_ORDER.length);
-    const layers = this._view.layers.slice().sort((a, b) => rank(a.id) - rank(b.id));
+    // a hero never draws the surroundings, so it offers no switch for them
+    const layers = this._view.layers.filter(l => !this._isHero || l.id !== HERO_HIDDEN).sort((a, b) => rank(a.id) - rank(b.id));
     const ids = layers.map(l => l.id).join(' ');
     if (list.dataset.ids !== ids || !layers.length) {
       list.dataset.ids = ids;
@@ -813,9 +839,7 @@ export class House3dCard extends Base {
 
   _switchLayer(id, on) {
     this._view.setLayer(id, on);
-    const stored = readLayers();
-    stored[id] = on;
-    writeLayers(stored);
+    this._writeLayers({ ...this._readLayers(), [id]: on });
     this._renderLayers();
   }
 }

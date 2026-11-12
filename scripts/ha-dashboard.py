@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Generate and save the house's dashboards: the Overview (Kodu) and "Kodu A3".
+"""Generate and save the house's dashboards: the Overview (Kodu) and A3, the
+front page (sidebar title "Kodu").
 
 The dashboard is storage-mode config in HA's .storage (backed up nightly by
 backup.sh); this script is its source of truth. The configs are built by
-dashboard_config.build() and, for Kodu A3 (ADR-005),
+dashboard_config.build() and, for A3 (ADR-005, ADR-006),
 dashboard_a3.build(); this script reads their private inputs, builds and
 saves. Edit there, run here, and HA picks the new config up live.
 
 Usage:  ha-dashboard.py            (saves Kodu to the "lovelace" Overview)
-        ha-dashboard.py --a3       (saves Kodu A3 to "kodu-katse", creating it if it is missing,
+        ha-dashboard.py --a3       (saves A3 to "kodu-katse", creating it if it is missing,
                                     and sets its sidebar title and icon)
 Needs:  python3 with `websockets`, the HA long-lived token in
         ~/.config/khe/ha-token, optional family list in ~/.config/khe/ha-people.json,
@@ -30,7 +31,7 @@ HA = "192.168.0.11:8123"
 URL = "lovelace"  # the Overview, a dashboard entry since the 2026.9 migration
 A3 = {
     "url_path": "kodu-katse",
-    "title": "Kodu A3",
+    "title": "Kodu",
     "icon": "mdi:home-heart",
     "show_in_sidebar": True,
     "require_admin": False,
@@ -90,7 +91,7 @@ def local_config():
 
 
 def a3_config():
-    """Kodu A3: dashboard_a3.build() with the local house files and the 3D model."""
+    """A3: dashboard_a3.build() with the local house files and the 3D model."""
     house = _local("ha-house.json", {})
     model = with_car_entity(house3d_card_model(), house.get("car_entity"))
     return dashboard_a3.build(house, _local("ha-people.json", []), model)

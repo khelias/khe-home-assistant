@@ -1,4 +1,4 @@
-"""Tests of the Kodu A3 dashboard (scripts/dashboard_a3.py, ADR-005) on a made-up house: it keeps
+"""Tests of the A3 dashboard (scripts/dashboard_a3.py, ADR-005) on a made-up house: it keeps
 every entity, action and confirmation of Kodu's first page, and leaves Kodu as it was.
 
 Run from the repo root: python3 -I -m unittest discover -s tests/dashboard

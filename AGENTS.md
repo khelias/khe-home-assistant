@@ -17,7 +17,8 @@ This file holds rules and pointers; the reference lives in:
   the dashboard's own cards ([ADR-002](docs/decisions/002-own-dashboard-cards.md)),
   the demo's English ([ADR-003](docs/decisions/003-demo-in-english.md)),
   a community card trial, since dropped ([ADR-004](docs/decisions/004-bubble-card-trial.md)),
-  and the Kodu A3 dashboard ([ADR-005](docs/decisions/005-a3-glass-cards-history-sheet.md))
+  the A3 dashboard ([ADR-005](docs/decisions/005-a3-glass-cards-history-sheet.md))
+  and A3 as the front page with its live-sun hero ([ADR-006](docs/decisions/006-a3-front-page-live-hero.md))
 - [ROADMAP.md](ROADMAP.md) - house automation, near-term and the long form
 
 House documentation (HA rollout, dashboard layout, HVAC protocols, energy)
@@ -31,7 +32,7 @@ own.
 ```
 cards/             the dashboard's own Lovelace cards (khe-cards.js, ADR-002,
                    ADR-005): summary, price, tile, chips, heading and status,
-                   with the history sheet; Kodu A3 draws with them; deploy
+                   with the history sheet; A3 draws with them; deploy
                    copies them to www/khe-cards/
 config/            what deploy copies into HA's /config
   configuration.yaml
@@ -49,7 +50,7 @@ house3d/           3D house view: engine (core house3d.js, scene/ layer
                    modules, kit and sun), HA card, standalone viewer,
                    placement page, vendored three.js
 scripts/           dashboard_config.py (the HA Overview as data, no I/O),
-                   dashboard_a3.py (the Kodu A3 dashboard kodu-katse from
+                   dashboard_a3.py (the A3 front page kodu-katse from
                    the same entities, ADR-005),
                    ha-dashboard.py (reads the private inputs, saves either),
                    dashboard_demo.py (the demo's made-up entities, texts and
@@ -203,7 +204,7 @@ the operator first; an approval covers that task only.
   caption needs its English in `dashboard_demo_en.EN`.
 - **A redesigned view uses the repo's own cards**
   ([ADR-002](docs/decisions/002-own-dashboard-cards.md)), `cards/khe-cards.js`:
-  Kodu A3 (`kodu-katse`) does, in their glass style
+  A3 (`kodu-katse`, the front page) does, in their glass style
   ([ADR-005](docs/decisions/005-a3-glass-cards-history-sheet.md)); Kodu
   went back to stock cards on 2026-10-18 and stays on them. A change
   to the cards bumps `KHE_CARDS_VERSION` and the resource's `?v=`
@@ -228,7 +229,7 @@ the operator first; an approval covers that task only.
   they control. The front page holds what is done daily; per-side controls,
   rare settings and diagnostics go on a `subview` behind a "Seaded" badge. A
   `note()` truncates to one line, so longer text needs a markdown card.
-  Kodu A3 is the exception: one page of glass cards under the 3D house,
+  A3 is the exception: one page of glass cards under the 3D house,
   with a history sheet per value instead of views
   ([ADR-005](docs/decisions/005-a3-glass-cards-history-sheet.md)).
 - Read the integration's section in `docs/operational-notes.md` before

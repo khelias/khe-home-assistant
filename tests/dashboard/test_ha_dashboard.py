@@ -79,7 +79,7 @@ class A3(unittest.TestCase):
         ha.house3d_card_model = model_without_car_entity
         config = ha.a3_config()
         self.assertEqual(sorted(read), ["ha-house.json", "ha-people.json"])
-        self.assertEqual(config["title"], "Kodu A3")
+        self.assertEqual(config["title"], "Kodu")
         hero = config["views"][0]["sections"][0]["cards"][0]
         self.assertEqual(hero["type"], "custom:house3d-card")
         self.assertEqual(hero["model"]["car"]["entity"], "switch.test_stand_in")
