@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 42;
+const HOUSE3D_VERSION = 43;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -490,7 +490,7 @@ export class House3dCard extends Base {
     sr.innerHTML = `<style>${STYLE}</style><ha-card class="wrap"><div class="view"></div>
       <div class="bar">${this._isHero ? '' : `${this._modeSeg('roof')}
         <button type="button" class="icon-btn" data-act="reset" aria-label="${t.resetView}" title="${t.resetView}"></button>`}
-        <button type="button" class="icon-btn" data-act="layers" aria-label="${t.layersTitle}" title="${t.layersTitle}" aria-expanded="false"></button></div>
+        <button type="button" class="icon-btn" data-act="layers" aria-label="${this._isHero ? t.view : t.layersTitle}" title="${this._isHero ? t.view : t.layersTitle}" aria-expanded="false"></button></div>
       <aside class="sheet" hidden aria-live="polite"></aside>${this._isHero ? '' : this._credit()}</ha-card>`;
     this._sheet = null;
     const wrap = sr.querySelector('.wrap');
@@ -820,7 +820,7 @@ export class House3dCard extends Base {
     this._room = null;
     if (this._view) this._view.focusRoom(null);
     const t = this._t;
-    sheet.innerHTML = `<div class="head"><div><h2>${t.layersTitle}</h2></div>
+    sheet.innerHTML = `<div class="head"><div><h2>${this._isHero ? t.view : t.layersTitle}</h2></div>
       <button type="button" class="close" data-act="close" aria-label="${t.close}">${this._mod.icon('close')}</button></div>
       ${this._isHero ? `<div class="row">${this._modeSeg(this._view.mode)}<button type="button" class="now" data-act="reset">${t.resetView}</button></div>` : `<div class="row"><span>${t.style}</span><div class="seg" role="group" aria-label="${t.style}">
         <button type="button" data-style="simple" aria-pressed="${this._style === 'simple'}">${t.simple}</button>
