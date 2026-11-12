@@ -64,6 +64,15 @@ COST = "estfeed:estfeed_cost_642b"
 HEATING = "switch.space_heating_climate_control"
 LEAVING = "sensor.space_heating_leaving_water_temperature"
 BOILER_TEMP = "sensor.boileri_vee_temperatuur"
+# "Sees" is the Komfovent wall panel in the utility room, the one indoor thermometer the house has.
+PANEL_TEMP = "sensor.komfovent_panel_1_temperature"
+PUMP_OUTDOOR = "sensor.space_heating_outdoor_temperature"
+SHIFT = "number.space_heating_temperature_control"
+BOILER_TODAY = "sensor.boiler_energy_today"
+HEATING_FAULT = "binary_sensor.space_heating_unit_state"
+TANK_FAULT = "binary_sensor.hot_water_tank_state"
+# The boiler's legionella floor, °C.
+DHW_FLOOR = 45
 SUPPLY = "sensor.komfovent_supply_temperature"
 EXTRACT = "sensor.komfovent_extract_temperature"
 HUMIDITY = "sensor.komfovent_panel_1_humidity"
@@ -438,8 +447,8 @@ def confirm(entity, name, text, **kw):
 
 FAULTS = [
     (SMOKE, "Tulekahju"),
-    ("binary_sensor.space_heating_unit_state", "Soojuspumba viga"),
-    ("binary_sensor.hot_water_tank_state", "Boileri viga"),
+    (HEATING_FAULT, "Soojuspumba viga"),
+    (TANK_FAULT, "Boileri viga"),
     ("binary_sensor.komfovent_status_alarm_fault", "Ventilatsiooni viga"),
     ("binary_sensor.komfovent_status_alarm_warning", "Ventilatsiooni hoiatus"),
 ]
@@ -749,7 +758,7 @@ def home(h):
                 [
                     nowrite(HEATING, "Küte (Daikin)"),
                     tile(LEAVING, "Küttevee temp"),
-                    when_on("binary_sensor.space_heating_unit_state", "Soojuspumba viga"),
+                    when_on(HEATING_FAULT, "Soojuspumba viga"),
                 ],
                 **nav("/lovelace/soojuspump"),
             ),
@@ -760,7 +769,7 @@ def home(h):
                     # Daikin Powerful: the one DHW quick mode on Kodu. Temporary, the unit returns to normal
                     # by itself once the tank is hot, so an accidental tap costs one heat-up, not a setting.
                     *dhw_boost(),
-                    when_on("binary_sensor.hot_water_tank_state", "Boileri viga"),
+                    when_on(TANK_FAULT, "Boileri viga"),
                 ],
                 **nav("/lovelace/soojuspump"),
             ),
@@ -1333,7 +1342,7 @@ soojuspump = {
     "badges": [
         {
             "type": "entity",
-            "entity": "switch.space_heating_climate_control",
+            "entity": HEATING,
             "name": "Küte",
             "show_name": True,
             "show_state": True,
@@ -1348,7 +1357,7 @@ soojuspump = {
         },
         {
             "type": "entity",
-            "entity": "switch.space_heating_climate_control",
+            "entity": HEATING,
             "name": "Seaded",
             "icon": "mdi:tune",
             "color": "grey",
@@ -1364,26 +1373,21 @@ soojuspump = {
                 *row(
                     [
                         nowrite(
-                            "sensor.space_heating_leaving_water_temperature",
+                            LEAVING,
                             "Küttevesi",
                             vertical=True,
                         ),
-                        # "Sees" is the Komfovent wall panel in the utility room, the one indoor thermometer the house has.
-                        nowrite("sensor.komfovent_panel_1_temperature", "Sees", vertical=True),
-                        nowrite(
-                            "sensor.space_heating_outdoor_temperature", "Väljas", vertical=True
-                        ),
-                        nowrite(
-                            "number.space_heating_temperature_control", "Kõvera nihe", vertical=True
-                        ),
+                        nowrite(PANEL_TEMP, "Sees", vertical=True),
+                        nowrite(PUMP_OUTDOOR, "Väljas", vertical=True),
+                        nowrite(SHIFT, "Kõvera nihe", vertical=True),
                     ]
                 ),
-                when_on("binary_sensor.space_heating_unit_state", "Soojuspumba viga"),
+                when_on(HEATING_FAULT, "Soojuspumba viga"),
                 hist(
                     "Küttevesi ja välistemperatuur 48 h",
                     [
-                        ("sensor.space_heating_leaving_water_temperature", "Küttevesi"),
-                        ("sensor.space_heating_outdoor_temperature", "Väljas"),
+                        (LEAVING, "Küttevesi"),
+                        (PUMP_OUTDOOR, "Väljas"),
                     ],
                     48,
                 ),
@@ -1394,24 +1398,22 @@ soojuspump = {
             [
                 *row(
                     [
-                        nowrite(
-                            "sensor.boileri_vee_temperatuur", "Vesi", color="blue", vertical=True
-                        ),
+                        nowrite(BOILER_TEMP, "Vesi", color="blue", vertical=True),
                         nowrite(DHW, "Siht", state_content=["temperature"], vertical=True),
-                        nowrite("sensor.boiler_energy_today", "Täna", vertical=True),
+                        nowrite(BOILER_TODAY, "Täna", vertical=True),
                         nowrite(BOILER_MONTH, "Sel kuul", vertical=True),
                     ]
                 ),
-                when_on("binary_sensor.hot_water_tank_state", "Boileri viga"),
+                when_on(TANK_FAULT, "Boileri viga"),
                 hist(
                     "Boileri vee temperatuur 48 h",
-                    [("sensor.boileri_vee_temperatuur", "Boileri vesi")],
+                    [(BOILER_TEMP, "Boileri vesi")],
                     48,
                 ),
                 # Daikin's own DHW electricity counter, whole kWh. Space-heating kWh are deliberately absent: that counter is broken on the unit.
                 daikin_bars(
                     "Boiler päevas, kWh",
-                    "sensor.boiler_energy_today",
+                    BOILER_TODAY,
                     "15d",
                     "day",
                     DAYS_JS,
@@ -2074,13 +2076,11 @@ soojuspump_seaded = {
         section(
             "Küte",
             [
-                confirm(
-                    "switch.space_heating_climate_control", "Küte", "Lülitad maja kütte. Kindel?"
-                ),
+                confirm(HEATING, "Küte", "Lülitad maja kütte. Kindel?"),
                 label("sensor.kutte_reziim", "select.space_heating_operation_mode", "Kütte režiim"),
                 # The one heating knob the unit exposes: +1 shifts the weather curve one degree up, -1 down.
                 tile(
-                    "number.space_heating_temperature_control",
+                    SHIFT,
                     "Küttevee nihe",
                     features=[{"type": "numeric-input", "style": "buttons"}],
                 ),
@@ -2089,9 +2089,9 @@ soojuspump_seaded = {
         section(
             "Soe vesi",
             [
-                note("Siht 55 °C, mitte alla 45 °C (legionella)."),
+                note(f"Siht 55 °C, mitte alla {DHW_FLOOR} °C (legionella)."),
                 tile(
-                    "water_heater.hot_water_tank_domestic_hot_water_tank",
+                    DHW,
                     "Boiler",
                     state_content=["current_temperature"],
                     features=[{"type": "target-temperature"}],

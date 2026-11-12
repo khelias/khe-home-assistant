@@ -1,9 +1,12 @@
-"""A3, the house's Overview in A3's look, as data (ADR-005 to ADR-008, ADR-010).
+"""A3, the house's Overview in A3's look, as data (ADR-005 to ADR-008, ADR-010, ADR-011).
 
 overview(house, people, model) is the Overview the house saves: dashboard_config.build()'s views
-with A3's views in place of Kodu's at the same paths (`kodu`, `energia`) and the 3D view moved
-last. dashboard_config.build() itself stays Kodu with 3D first, which the public demo builds.
-energia() is Energia: the month, the days, who used what and the price, from daily statistics.
+with A3's views in place of Kodu's at the same paths (`kodu`, `energia`, `soojuspump`) and the 3D
+view moved last. dashboard_config.build() itself stays Kodu with 3D first, which the public demo
+builds. energia() is Energia: the month, the days, who used what and the price, from daily
+statistics. soojuspump(h) is Soojuspump: the status, the indoor and boiler temperatures as 48-hour
+lines from hourly statistics, the heating shift as a stepper, the boost and the boiler's
+electricity by the day.
 
 build(house, people, model) returns A3 as a one-view Lovelace config: the 3D house as
 the hero, then the page's title with the outdoor temperature, people, alarms and live faults as
@@ -26,7 +29,10 @@ Where each sheet reads its history, measured on the house on 2026-11-12
     outdoor, supply, extract,     statistics   mean, min, max (5minute, hour, day)
       humidity, boiler water
     estfeed consumption and cost  statistics   change (hour, day)
-    heating leaving water         history      numeric line (no statistics kept)
+    heating leaving water,        history      numeric line (no statistics kept)
+      the pump's outdoor sensor
+    indoor panel, boiler water    statistics   mean (hour), Soojuspump's 48-hour lines
+    boiler energy today           statistics   change (day), Soojuspump's 16 days
     pergola light, TV             history      on/off
     ventilation mode              history      the modes but normal count as on
     pergola roof                  none         a group without position: its state is unknown
@@ -508,11 +514,156 @@ def energia():
     }
 
 
+def soojuspump(h):
+    """Soojuspump in A3's look (ADR-007, ADR-011): the status, Küte with the shift, Soe vesi with
+    the boost, the boiler's electricity and the settings row."""
+    home = dc.home(h)
+    faults = [
+        {"entity": e, "name": n} for e, n in dc.FAULTS if e in (dc.HEATING_FAULT, dc.TANK_FAULT)
+    ]
+    # full width in a wide tile's row here, Kodu keeps them half; the water's temperature is the
+    # reading above them, so they say what the boost does instead
+    boost_tiles = [
+        wide({**t, "state_text": "Käib, lõpeb ise, kui vesi on soe" if t["active"] else "Väljas"})
+        for t in boost(home)
+    ]
+    sp = dc.soojuspump
+    return {
+        "title": sp["title"],
+        "path": sp["path"],
+        "icon": sp["icon"],
+        "type": "sections",
+        "max_columns": sp["max_columns"],
+        "background": BACKGROUND,
+        "sections": [
+            section(
+                [
+                    card(
+                        "chips-card",
+                        style="a3",
+                        title=sp["title"],
+                        faults=faults,
+                        status={
+                            "entity": dc.HEATING,
+                            "ok": "Korras, küte ja boiler töötavad",
+                            "off": "Küte väljas",
+                        },
+                        grid_options={"columns": "full"},
+                    ),
+                    heading("Küte"),
+                    card(
+                        "reading-card",
+                        label="Sees",
+                        entity=dc.PANEL_TEMP,
+                        decimals=1,
+                        note={"range": True},
+                        chip={
+                            "entity": dc.HEATING,
+                            "on": "Küte sees",
+                            "off": "Küte väljas",
+                            "fault": dc.HEATING_FAULT,
+                            "fault_text": "Küte seisab",
+                        },
+                        line={
+                            "statistic": dc.PANEL_TEMP,
+                            "hours": 48,
+                            "color": "orange",
+                            "aria": "Toatemperatuur 48 tundi",
+                        },
+                        cells=[
+                            {
+                                "entity": dc.LEAVING,
+                                "name": "Küttevesi",
+                                "caption": "pumbast välja",
+                                "color": "heat",
+                                "history": MEAN,
+                            },
+                            {
+                                "entity": dc.PUMP_OUTDOOR,
+                                "name": "Väljas",
+                                "caption": "pumba andur",
+                                "color": "teal",
+                                "history": MEAN,
+                            },
+                        ],
+                        stepper={"entity": dc.SHIFT, "name": "Küttevee nihe"},
+                        grid_options={"columns": "full"},
+                    ),
+                    heading("Soe vesi"),
+                    card(
+                        "reading-card",
+                        label="Boileris",
+                        entity=dc.BOILER_TEMP,
+                        decimals=0,
+                        note={"target": {"entity": dc.DHW, "attribute": "temperature"}},
+                        line={
+                            "statistic": dc.BOILER_TEMP,
+                            "hours": 48,
+                            "color": "blue",
+                            "floor": dc.DHW_FLOOR,
+                            "name": "vesi",
+                            "aria": "Boileri vesi 48 tundi",
+                        },
+                        grid_options={"columns": "full"},
+                    ),
+                    *boost_tiles,
+                ]
+            ),
+            section(
+                [
+                    heading("Boileri elekter", "/lovelace/energia"),
+                    card(
+                        "days-card",
+                        days=16,
+                        series=[
+                            {
+                                "name": "kWh",
+                                "statistic": dc.BOILER_TODAY,
+                                "type": "change",
+                                "unit": "kWh",
+                                "decimals": 1,
+                                "color": "orange",
+                                "caption": "kWh päevas keskmiselt",
+                                "aria": "Boileri elekter päevade kaupa",
+                            }
+                        ],
+                        cells=[
+                            {"name": "Täna", "entity": dc.BOILER_TODAY, "note": "päev pole läbi"},
+                            {"name": "Sel kuul", "entity": dc.BOILER_MONTH, "share_of": dc.MONTH},
+                            {"entity": dc.BOILER_MONTH, "last": "month", "note": "terve kuu"},
+                        ],
+                        foot="Küte oma elektrit ei mõõda; kogu maja on Energias.",
+                        grid_options={"columns": "full"},
+                    ),
+                    wide(
+                        tile(
+                            dc.HEATING,
+                            "Seaded",
+                            icon="tune",
+                            active=[],
+                            state_text="Küte välja, kütte režiim, boileri siht",
+                            chevron=True,
+                            tap_action={
+                                "action": "navigate",
+                                "navigation_path": "/lovelace/soojuspump-seaded",
+                            },
+                        )
+                    ),
+                ]
+            ),
+        ],
+    }
+
+
 def overview(house, people, model):
     """The house's Overview: dashboard_config.build() with A3's views in place of Kodu's (`kodu`,
-    `energia`) and the 3D view (`maja-3d`) last. A fresh copy every call."""
+    `energia`, `soojuspump`) and the 3D view (`maja-3d`) last. A fresh copy every call."""
     config = dc.build(house, people, model)
-    a3 = {"kodu": build(house, people, model)["views"][0], "energia": energia()}
+    a3 = {
+        "kodu": build(house, people, model)["views"][0],
+        "energia": energia(),
+        "soojuspump": soojuspump(dc.House(house, people)),
+    }
     views = [a3.get(v["path"], v) for v in config["views"]]
     config["views"] = sorted(views, key=lambda v: v["path"] == "maja-3d")
     return config

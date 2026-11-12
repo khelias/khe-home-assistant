@@ -1,6 +1,6 @@
 # ADR-008: A3 page cards read the recorder's daily statistics themselves
 
-- **Status:** Accepted (2026-11-12)
+- **Status:** Accepted (2026-11-12); decision 1 extended to hourly lines by [ADR-011](011-a3-hourly-lines-and-a-written-setpoint.md)
 - **Related:** [ADR-002](002-own-dashboard-cards.md), [ADR-005](005-a3-glass-cards-history-sheet.md), [ADR-007](007-a3-in-the-overview.md)
 
 ## Context

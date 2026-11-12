@@ -1,12 +1,13 @@
 // Home Assistant cards of the redesigned views (ADR-002, ADR-005): khe-summary-card,
 // khe-price-card, khe-tile-card and, for Kodu A3, khe-chips-card, khe-heading-card and
-// khe-status-card, with `style: a3` drawing glass boxes and a tap opening a history sheet.
+// khe-status-card, with `style: a3` drawing glass boxes and a tap opening a history sheet;
+// Energia's month, days and split cards (ADR-008) and Soojuspump's reading card (ADR-011).
 // The A2 and A3 designs are linked from the ADRs. Actions go through HA as a hass-action event, so HA runs the confirmation,
 // more-info, navigation and service call. No build step and no CDN; the pure helpers are
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 8;
+export const KHE_CARDS_VERSION = 9;
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
 
@@ -65,7 +66,8 @@ const ICONS = {
   moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   home: '<path d="M3 11l9-7 9 7M5 10v10h14V10M10 20v-6h4v6"/>',
-  chevron: '<path d="M9 6l6 6-6 6"/>'
+  chevron: '<path d="M9 6l6 6-6 6"/>',
+  tune: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8M16 5v4M10 15v4"/>'
 };
 const icon = (key, size, color) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[key] || ICONS.bolt}</svg>`;
 
@@ -253,12 +255,13 @@ function part(p, st, states) {
 // { lit, unavailable, text } for the tile's look and its second line
 export function tileState(conf, states) {
   const st = states[conf.entity];
+  const sc = conf.state_text;
+  // a fixed text (a link's description) stays whatever the entity's state
+  if (typeof sc === 'string') return { lit: tileActive(st, conf.active), unavailable: false, text: sc };
   if (!hasValue(st)) return { lit: false, unavailable: true, text: 'pole saadaval' };
   const lit = tileActive(st, conf.active);
-  const sc = conf.state_text;
   let text;
-  if (typeof sc === 'string') text = sc;
-  else if (Array.isArray(sc)) text = sc.map(p => part(p, st, states)).filter(Boolean).join(' · ');
+  if (Array.isArray(sc)) text = sc.map(p => part(p, st, states)).filter(Boolean).join(' · ');
   else text = stateWord(st);
   return { lit, unavailable: false, text };
 }
@@ -1048,13 +1051,18 @@ h1{margin:0;font-size:34px;line-height:1.05;font-weight:700;letter-spacing:-0.02
 .chip.bad i{background:var(--highBar);color:#fff}
 .chip.bad{color:var(--high)}
 .chip b{font-weight:600}
+.status{display:flex;align-items:center;gap:7px;margin-top:-6px;padding:0 4px;font-size:15px;font-weight:600;color:var(--sub)}
+.status i{flex:none;width:8px;height:8px;border-radius:4px;background:var(--sub);opacity:.6}
+.status.ok i{background:var(--cheap);opacity:1}
+.status.bad{color:var(--high)}
+.status.bad i{background:var(--highBar);opacity:1}
 /* a heading card's 14 + 44 px, so the title's baseline meets the section headings' beside it */
 .title{padding:0}
 .title .head{margin-top:14px;height:44px}
 `;
   _watched() {
     const c = this._config;
-    return [...(c.people || []), ...(c.alarms || []), ...(c.faults || [])].map(x => x.entity).concat(c.outdoor ? [c.outdoor.entity] : []);
+    return [...(c.people || []), ...(c.alarms || []), ...(c.faults || []), ...(c.status ? [c.status] : [])].map(x => x.entity).concat(c.outdoor ? [c.outdoor.entity] : []);
   }
   _html(states) {
     const c = this._config;
@@ -1080,7 +1088,9 @@ h1{margin:0;font-size:34px;line-height:1.05;font-weight:700;letter-spacing:-0.02
       this._sheets.set('out', { title: c.outdoor.name || 'Õues', entity: c.outdoor.entity, more: c.outdoor.entity, decimals: c.outdoor.decimals ?? 1, unit: '°C', color: 'teal', history: { entity: c.outdoor.entity, ...c.outdoor.history } });
       if (v) out = `<button type="button" class="out" data-k="out">${v}° õues</button>`;
     }
-    const head = `<div class="head"><h1>${esc(c.title || 'Kodu')}</h1>${out}</div>`, row = `<div class="row">${list.join('')}</div>`;
+    const line = statusLine(states, c);
+    const status = line ? `<span class="status ${line.tone}"><i></i>${esc(line.text)}</span>` : '';
+    const head = `<div class="head"><h1>${esc(c.title || 'Kodu')}</h1>${out}</div>${status}`, row = list.length ? `<div class="row">${list.join('')}</div>` : '';
     const body = { title: head, chips: row }[c.part] ?? head + row;
     return `<div class="wrap${c.part === 'title' ? ' title' : ''}">${body}</div>`;
   }
@@ -1229,6 +1239,7 @@ const TILE_A3_CSS = `
 .btns button{min-width:58px;height:40px;padding:0 12px;border-radius:20px;background:var(--seg);font-size:14px;font-weight:600;text-align:center}
 .btns button[aria-pressed="true"]{background:var(--press);color:var(--onPress)}
 .corner{flex:none;width:44px;height:44px;border-radius:22px;background:var(--seg);display:flex;align-items:center;justify-content:center;margin-left:auto}
+.chev{flex:none;display:flex;color:var(--sub);pointer-events:none}
 .top{display:flex;justify-content:space-between;align-items:center}
 .sl{position:relative;display:block;height:36px;border-radius:18px;background:var(--track);overflow:hidden;cursor:pointer;touch-action:pan-y}
 .sl i{position:absolute;left:0;top:0;bottom:0;background:var(--fill);transition:width 220ms cubic-bezier(.2,.9,.25,1)}
@@ -1293,7 +1304,8 @@ function tileA3(card, states, pal) {
       return `<button type="button" class="press" data-k="m${i}" aria-pressed="${m.option === current}">${esc(m.name)}</button>`;
     }).join('')}</span>`;
   }
-  if (c.wide) return `<div class="${cls}"><span class="row">${discEl}${body}${extra}${corner}</span>${below}</div>`;
+  const chev = c.chevron ? `<span class="chev" aria-hidden="true">${icon('chevron', 14, 'currentColor')}</span>` : '';
+  if (c.wide) return `<div class="${cls}"><span class="row">${discEl}${body}${extra}${corner}${chev}</span>${below}</div>`;
   return `<div class="${cls}"><span class="top">${discEl}${corner}</span>${body}${below}</div>`;
 }
 
@@ -1382,9 +1394,10 @@ export function dailyRequest(ids, types, days, now, tz) {
   return { type: 'recorder/statistics_during_period', start_time: new Date(dayStarts(days, now, tz)[0]).toISOString(), statistic_ids: ids, period: 'day', types };
 }
 
-// the last two days of an energy counter by the hour, for the data cutoff
-// (from a whole hour, so one hour's requests are the same message and can be shared)
-export const hourlyRequest = (id, now) => ({ type: 'recorder/statistics_during_period', start_time: new Date(Math.floor(now / HOUR) * HOUR - 48 * HOUR).toISOString(), statistic_ids: [id], period: 'hour', types: ['change'] });
+// the last `hours` whole hours of a statistic by the hour, by default an energy counter's last two
+// days for the data cutoff (from a whole hour, so one hour's requests are the same message and can
+// be shared)
+export const hourlyRequest = (id, now, hours = 48, types = ['change']) => ({ type: 'recorder/statistics_during_period', start_time: new Date(Math.floor(now / HOUR) * HOUR - hours * HOUR).toISOString(), statistic_ids: [id], period: 'hour', types });
 
 // where a delayed counter's data ends: the end of its last hour with a value, or null
 export function dataCutoff(resp, id) {
@@ -1446,13 +1459,19 @@ export const hourSpan = bar => { const h = new Date(bar.s).getHours(); return `$
 // when a pointed history point was, in the browser's zone like the axis: an hour's bar or a
 // moment in the 24 h range, the hour in the week, the day in a month or a day's bar
 export function whenLabel(t, range, bars, now = Date.now()) {
-  const d = new Date(t), n = new Date(now), h = d.getHours();
+  const d = new Date(t), h = d.getHours();
   const day = `${WEEKDAY[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}`;
   if (range === '24h') {
     const at = bars ? `${hh(h)}–${hh((h + 1) % 24)}` : `${hh(h)}:${hh(d.getMinutes())}`;
-    return `${d.toDateString() === n.toDateString() ? 'täna' : 'eile'} ${at}`;
+    return `${dayWord(t, now) ?? day} ${at}`;
   }
   return range === '7d' && !bars ? `${day} kell ${hh(h)}` : day;
+}
+// 'täna' or 'eile' for a moment in the browser's zone, null for an earlier day
+function dayWord(t, now) {
+  const d = new Date(t), n = new Date(now);
+  const k = Math.round((new Date(n.getFullYear(), n.getMonth(), n.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / (24 * HOUR));
+  return k === 0 ? 'täna' : k === 1 ? 'eile' : null;
 }
 // the index of the point with a value nearest to t, null when none has one; on a stepped line the
 // value held at t, the last point at or before it (null before the first)
@@ -1473,17 +1492,24 @@ export function lastMonthName(now, tz, lang = 'et-EE') {
   return new Intl.DateTimeFormat(lang, { month: 'long', timeZone: tz }).format(new Date(dayStart(p.y, p.m - 1, 15, tz)));
 }
 
+// Last month's value from a sensor's attributes: a utility meter's own one (`last_period`), or
+// 'month', Daikin's month attributes, which name this year's months and the previous year's as
+// `Last <Month>` (last month in January is `Last December`). null on the first two days of a
+// month, when it may still be the one before, and for "-" or a missing value.
+export function lastMonthValue(st, key, now, tz) {
+  if (!key || !st || earlyInMonth(now, tz)) return null;
+  const a = st.attributes || {};
+  if (key !== 'month') return parseEt(a[key]);
+  const en = lastMonthName(now, tz, 'en-US');
+  return parseEt(a[zoneParts(now, tz).m === 1 ? `Last ${en}` : en]);
+}
+
 // the split card's rows: each part's kWh this month, its share and last month's, and the rest of
 // the house. Shares are of the larger of the total and the parts, so a delayed total cannot push
 // them past 100; last month is left out on the first two days, when it may still be the one before.
 export function splitRows(states, conf, now, tz) {
   const v = e => (hasValue(states[e]) ? num(states[e].state) : null);
-  const early = earlyInMonth(now, tz), en = lastMonthName(now, tz, 'en-US');
-  const last = (p, st) => {
-    if (early || !p.last || !st) return null;
-    const a = st.attributes || {};
-    return parseEt(p.last === 'month' ? a[en] : a[p.last]);
-  };
+  const last = (p, st) => lastMonthValue(st, p.last, now, tz);
   const parts = (conf.parts || []).map(p => ({ ...p, kwh: v(p.entity), last: last(p, states[p.entity]) }))
     .filter(p => p.kwh !== null && !(p.hide_zero && p.kwh <= 0));
   const total = v(conf.total), sum = parts.reduce((a, p) => a + p.kwh, 0);
@@ -1497,6 +1523,89 @@ export function splitRows(states, conf, now, tz) {
 // A3's usage sheet: an energy entity's value now, its consumption and cost by hour and by day
 export function usageSheet(entity, history) {
   return { title: 'Tarbimine', entity, more: entity, decimals: 1, unit: 'kWh', color: 'indigo', history };
+}
+
+/* ---------- A3 Soojuspump (ADR-011): hourly lines, the shift stepper, the boiler's cells ---------- */
+
+// the WebSocket message for the hourly means of the last `hours` whole hours
+export const lineRequest = (id, hours, now) => hourlyRequest(id, now, hours, ['mean']);
+
+// the hourly means as a line that ends at the live value, so its last point agrees with the big
+// number while the hour's statistics are not compiled yet
+export function lineSeries(resp, id, live, now) {
+  const { points } = seriesFrom(resp, { entity: id, source: 'statistics', type: 'mean' });
+  if (live != null) points.push({ t: now, v: live, live: true });
+  return { kind: 'line', points };
+}
+
+// { lo, hi } a line is drawn between: its lineStats and a floor, padded; null without a value
+export function lineRange(stats, floor) {
+  if (!stats) return null;
+  const lo = floor == null ? stats.lo : Math.min(stats.lo, floor), hi = floor == null ? stats.hi : Math.max(stats.hi, floor);
+  const pad = (hi - lo) * 0.1 || 0.5;
+  return { lo: lo - pad, hi: hi + pad };
+}
+
+// three labels under a line from t0 to now: its start, its middle and 'nüüd', each as the day
+// ('täna', 'eile' or the weekday) and the hour in the browser's zone
+export function lineAxis(t0, now) {
+  const at = t => { const d = new Date(t); return `${dayWord(t, now) ?? WEEKDAY[d.getDay()]} ${hh(d.getHours())}`; };
+  return [at(t0), at((t0 + now) / 2), 'nüüd'];
+}
+
+// the shift as the stepper shows it and the line under its name
+export const stepText = v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v)}°`;
+export function stepNote(v) {
+  if (!v) return 'Küttevesi täpselt kõvera järgi';
+  return `Küttevesi ${Math.abs(v)}° ${v > 0 ? 'soojem' : 'jahedam'} kui kõvera järgi`;
+}
+// a number entity's value and its { min, max, step }
+function stepState(st) {
+  const a = (st || {}).attributes || {};
+  return { cur: hasValue(st) ? num(st.state) : null, lim: { min: num(a.min) ?? -Infinity, max: num(a.max) ?? Infinity, step: num(a.step) || 1 } };
+}
+// the value one step up (dir 1) or down (-1) from v, within the entity's min, max and step
+export function stepValue(v, dir, { min = -Infinity, max = Infinity, step = 1 } = {}) {
+  const n = Math.round((v + dir * step) / step) * step;
+  return Math.max(min, Math.min(max, Number(n.toFixed(6))));
+}
+// the write a settled stepper sends: none when the taps net to the value the entity has
+export const stepWrite = (pending, current) => (pending === null || pending === current ? null : pending);
+
+// the days card's own cells: [{ k, v, l }], a sensor's value with its unit, its share of another
+// (of the larger of the two, as splitRows does, so a delayed total cannot pass 100) or last
+// month's value by name; a last-month cell is left out on the first two days of a month
+export function dayCells(states, cells, now, tz) {
+  const out = [];
+  for (const c of cells || []) {
+    const st = states[c.entity], unit = ((st || {}).attributes || {}).unit_of_measurement || '';
+    const show = v => (v === null ? '–' : `${formatNumber(String(v))}${unit ? ` ${unit}` : ''}`);
+    if (c.last) {
+      if (earlyInMonth(now, tz)) continue;
+      out.push({ k: c.name || cap(lastMonthName(now, tz)), v: show(lastMonthValue(st, c.last, now, tz)), l: c.note || '' });
+      continue;
+    }
+    const v = hasValue(st) ? num(st.state) : null;
+    let l = c.note || '';
+    if (c.share_of) {
+      const t = states[c.share_of], total = hasValue(t) ? num(t.state) : null, denom = Math.max(total ?? 0, v ?? 0);
+      l = v !== null && total !== null && denom > 0 ? `${Math.round((v / denom) * 100)} % majast` : '';
+    }
+    out.push({ k: c.name, v: show(v), l });
+  }
+  return out;
+}
+
+// the chips card's status line: { tone, text }; ok only while `entity` is on and every fault reads off
+export function statusLine(states, conf) {
+  const s = conf.status;
+  if (!s) return null;
+  const faults = conf.faults || [];
+  if (faultsOn(states, faults).length) return { tone: 'bad', text: s.bad || 'Viga' };
+  const on = stateOf(states, s.entity);
+  if (on === 'on' && faults.every(f => stateOf(states, f.entity) === (f.bad === 'off' ? 'on' : 'off'))) return { tone: 'ok', text: s.ok };
+  if (on === 'off') return { tone: 'off', text: s.off || 'Väljas' };
+  return { tone: 'off', text: 'Seisund pole teada' };
 }
 
 // one fetch per message and HA-zone hour, shared by the cards on a page (the month and days cards
@@ -1624,6 +1733,7 @@ svg.c{display:block;width:100%;height:120px;touch-action:pan-y}
 .stats .k{font-size:13px;font-weight:600;color:var(--sub)}
 .stats .v{font-size:17px;font-weight:700}
 .msg{display:flex;align-items:center;justify-content:center;height:120px;font-size:14px;color:var(--sub)}
+.foot{font-size:12px;color:var(--sub)}
 `;
 
 // daily bars of one statistic, or several behind a segmented control: the last `days` days in
@@ -1631,7 +1741,10 @@ svg.c{display:block;width:100%;height:120px;touch-action:pan-y}
 class DaysCard extends LoadingCard {
   static css = DAYS_CSS;
   _check(c) { if (!(c.series || []).length) throw new Error('khe-days-card: series is required'); }
-  _watched() { return (this._config.series || []).map(s => s.today && s.today.entity).filter(Boolean); }
+  _watched() {
+    const c = this._config;
+    return [...(c.series || []).map(s => s.today && s.today.entity), ...(c.cells || []).flatMap(x => [x.entity, x.share_of])].filter(Boolean);
+  }
   // one daily request per set of types, and the cutoff's hourly one
   _requests(now, tz) {
     const c = this._config, byType = new Map();
@@ -1657,12 +1770,16 @@ class DaysCard extends LoadingCard {
     if (d.error) return shell('<div class="msg">Andmeid ei saanud lugeda</div>');
     const daily = d.res[`daily:${s.peak ? `${s.type},max` : s.type}`];
     // a delayed counter's days after its cutoff are late; a price is known ahead
-    // with no hour of data in two days the cutoff is today's start: only today is late
-    const cutoff = c.cutoff && s.type === 'change' ? dataCutoff(d.res.cutoff, c.cutoff) ?? dayStarts(1, d.now, d.tz)[0] : Infinity;
+    // with no hour of data in two days the cutoff is today's start: only today is late, as it is
+    // for a counter without a cutoff, whose today has not ended
+    const today = dayStarts(1, d.now, d.tz)[0];
+    const cutoff = s.type !== 'change' ? Infinity : c.cutoff ? dataCutoff(d.res.cutoff, c.cutoff) ?? today : today;
     const pts = dailySeries(daily, s.statistic, s.type, c.days || 31, d.now, d.tz, cutoff);
     const scale = s.scale || 1, dec = s.decimals ?? 1;
     const stats = dayStats(pts);
-    if (!stats) return shell('<div class="msg">Selle aja kohta andmeid pole</div>');
+    // the entity cells do not need the statistics
+    const own = c.cells ? `<span class="hr"></span><span class="stats">${dayCells(states, c.cells, d.now, d.tz).map(x => `<span><span class="k">${esc(x.k)}</span><span class="v num">${esc(x.v)}</span><span class="sub">${esc(x.l)}</span></span>`).join('')}</span>` : '';
+    if (!stats) return shell(`<div class="msg">Selle aja kohta andmeid pole</div>${own}`);
     const fmt = v => fmtN(v * scale, dec);
     const W = 341, H = 120, TOP = 8, BOT = 2, N = pts.length, GAP = 2, bw = (W - GAP * (N - 1)) / N;
     const hi = Math.max(...pts.map(p => Math.max(p.v ?? 0, s.peak ? p.max ?? 0 : 0))) * 1.05 || 1;
@@ -1681,7 +1798,7 @@ class DaysCard extends LoadingCard {
     const bars = [...paths].map(([k, dd]) => { const [f, o] = k.split('|'); return `<path d="${dd}" fill="${f}"${o !== '1' ? ` fill-opacity="${o}"` : ''}/>`; }).join('');
     const grid = [0.25, 0.5, 0.75].map(f => `M0 ${(TOP + (H - TOP - BOT) * f).toFixed(1)}H${W}`).join('');
     // pointing at a day shows its value in the average's place (_wire)
-    this._point = { pts, fmt, unit: s.unit || '', peak: s.peak, tz: d.tz, avg: [fmt(stats.avg), s.caption || ''], step: bw + GAP };
+    this._point = { pts, fmt, unit: s.unit || '', peak: s.peak, tz: d.tz, avg: [fmt(stats.avg), s.caption || ''], step: bw + GAP, unfinished: !c.cutoff };
     const sel = `<rect class="sel" y="0" width="${bw.toFixed(1)}" height="${H}" fill="${pal.text}" fill-opacity="0.1" visibility="hidden"/>`;
     const svg = `<svg class="c" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(s.aria || s.name)}">${sel}<path d="${grid}" stroke="${pal.hair}" fill="none" vector-effect="non-scaling-stroke"/>${bars}${peak ? `<path d="${peak}" stroke="${pal.text}" stroke-opacity="0.55" stroke-width="1.5" fill="none" vector-effect="non-scaling-stroke"/>` : ''}</svg>`;
     const marks = [0, Math.round(N / 4), Math.round(N / 2), Math.round((3 * N) / 4)].map(j => pts[j].label).concat('täna');
@@ -1689,7 +1806,8 @@ class DaysCard extends LoadingCard {
     const key = s.peak ? `<span class="key"><span><i style="width:10px;height:10px;border-radius:3px;background:${pal.sub}"></i>päeva keskmine</span><span><i style="width:12px;height:2px;background:${pal.text};opacity:.55"></i>kalleim tund</span></span>` : '';
     const u = s.unit ? ` ${s.unit}` : '';
     let three;
-    if (s.peak) {
+    if (c.cells) three = dayCells(states, c.cells, d.now, d.tz).map(x => [x.k, x.v, x.l]);
+    else if (s.peak) {
       three = [['Odavaim päev', stats.small], ['Kalleim päev', stats.big], ['Kalleim tund', stats.peak]].map(([k, x]) => [k, x ? fmt(x.v) : '–', x ? x.label : '']);
     } else {
       const t = s.today && states[s.today.entity];
@@ -1697,7 +1815,7 @@ class DaysCard extends LoadingCard {
       three = [['Suurim', `${fmt(stats.big.v)}${u}`, stats.big.label], ['Väikseim', `${fmt(stats.small.v)}${u}`, stats.small.label], ['Täna seni', tv === null ? '–' : `${fmtN(tv, dec)}${u}`, 'päev pole läbi']];
     }
     const cells = three.map(([k, v, l]) => `<span><span class="k">${esc(k)}</span><span class="v num">${esc(v)}</span><span class="sub">${esc(l)}</span></span>`).join('');
-    return shell(`<span class="avg"><span class="n num">${fmt(stats.avg)}</span><span class="u">${esc(s.caption || '')}</span></span><span>${svg}${axis}</span>${key}<span class="hr"></span><span class="stats">${cells}</span>`);
+    return shell(`<span class="avg"><span class="n num">${fmt(stats.avg)}</span><span class="u">${esc(s.caption || '')}</span></span><span>${svg}${axis}</span>${key}<span class="hr"></span><span class="stats">${cells}</span>${c.foot ? `<span class="foot">${esc(c.foot)}</span>` : ''}`);
   }
   // pointing at a day shows it in the average's place
   _wire() {
@@ -1709,7 +1827,8 @@ class DaysCard extends LoadingCard {
       if (j === null) { [n.textContent, u.textContent] = P.avg; return; }
       const p = P.pts[j];
       sel.setAttribute('x', (j * P.step).toFixed(1));
-      const note = p.late ? (j === P.pts.length - 1 ? 'täna, andmed hilinevad' : 'andmed hilinevad') : P.peak && p.max !== null ? `kalleim tund ${P.fmt(p.max)}` : '';
+      const last = j === P.pts.length - 1;
+      const note = p.late ? (last && P.unfinished ? 'päev pole läbi' : last ? 'täna, andmed hilinevad' : 'andmed hilinevad') : P.peak && p.max !== null ? `kalleim tund ${P.fmt(p.max)}` : '';
       n.textContent = p.v === null ? '–' : P.fmt(p.v);
       u.textContent = [P.unit, dayName(p.t, P.tz), note].filter(Boolean).join(' · ');
     });
@@ -1759,6 +1878,166 @@ class SplitCard extends KheCard {
   }
 }
 
+// the reading card's look: the price card's head (.main, .hd, .lab, .big, .badge, .hr) and its own parts
+const READING_CSS = `${PRICE_A3_CSS}
+.main{padding:16px;box-sizing:border-box}
+.badge.off{background:var(--seg);color:var(--sub)}
+svg.ln{display:block;width:100%;height:88px;touch-action:pan-y}
+.lx{display:flex;justify-content:space-between;margin-top:4px;font-size:11px;font-weight:600;color:var(--sub)}
+.key{display:flex;gap:14px;font-size:12px;font-weight:600;color:var(--sub)}
+.key span{display:flex;align-items:center;gap:5px}
+.key i{display:inline-block;width:12px}
+.msg{display:flex;align-items:center;justify-content:center;height:88px;font-size:14px;color:var(--sub)}
+.cells{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.cells button{display:flex;flex-direction:column;gap:1px;min-width:0;min-height:44px}
+.cells .v{font-size:20px;font-weight:700;letter-spacing:-0.02em}
+.step{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.step .t{display:flex;flex-direction:column;gap:1px;min-width:0}
+.step .nm{font-size:15px;font-weight:600}
+.step .err{color:var(--high);font-weight:600}
+.stp{flex:none;display:flex;align-items:center;gap:2px;padding:2px;border-radius:12px;background:var(--seg)}
+.stp button{width:44px;height:40px;border-radius:10px;font-size:20px;font-weight:600;text-align:center}
+.stp button:disabled{opacity:.35;cursor:default}
+.stp .sv{min-width:46px;height:40px;border-radius:10px;background:var(--segOn);box-shadow:var(--segShadow);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700}
+`;
+
+const LW = 341, LH = 88, LTOP = 8, LBOT = 4;
+
+// One reading big, with a note, a chip, its hourly line, cells that open their history sheets and
+// a stepper: Soojuspump's Küte and Soe vesi (ADR-011). The stepper's value moves at once and is
+// written once the taps settle (STEP_SETTLE); a pending value outlives redraws.
+const STEP_SETTLE = 1500, STEP_WAIT = 60e3;
+class ReadingCard extends LoadingCard {
+  static css = READING_CSS;
+  _check(c) { if (!c.entity) throw new Error('khe-reading-card: entity is required'); }
+  _watched() {
+    const c = this._config, chip = c.chip || {};
+    return [c.entity, (c.line || {}).statistic, chip.entity, chip.fault, ((c.note || {}).target || {}).entity, ...(c.cells || []).map(x => x.entity), (c.stepper || {}).entity].filter(Boolean);
+  }
+  _requests(now) { const l = this._config.line; return l ? { line: lineRequest(l.statistic, l.hours || 48, now) } : {}; }
+  _html(states, pal) {
+    const c = this._config, now = Date.now(), st = states[c.entity];
+    this._actions = new Map();
+    this._sheets = new Map();
+    this._point = null;
+    const { value } = splitValue(st, c.decimals);
+    const l = c.line, hours = (l && l.hours) || 48, floor = l ? l.floor : undefined;
+    const { chart, key, range } = l ? this._line(states, pal, l, hours, now) : {};
+    const n = c.note || {};
+    let note = '';
+    if (n.target) {
+      const t = attrText(states[n.target.entity], n.target.attribute);
+      note = t ? `Siht ${t}${floor != null ? `, mitte alla ${fmtN(floor, 0)}°` : ''}` : '';
+    } else if (n.range && range) note = `${hours} tunniga ${fmtN(range.lo, c.decimals ?? 1)}° kuni ${fmtN(range.hi, c.decimals ?? 1)}°`;
+    const top = `<span class="hd"><span class="l"><span class="lab">${esc(c.label || '')}</span><span class="big"><span class="n num">${esc(value)}</span></span>${note ? `<span class="sub">${esc(note)}</span>` : ''}</span>${this._chip(states)}</span>`;
+    const parts = [`${top}${chart ? `<span class="ch">${chart}</span>${key}` : ''}`];
+    if ((c.cells || []).length) parts.push(this._cells(states));
+    if (c.stepper) parts.push(this._stepper(states));
+    return `<div class="glass main">${parts.join('<span class="hr"></span>')}</div>`;
+  }
+  // the hourly line, its floor key and its { lo, hi } for the note; sets what pointing reads
+  _line(states, pal, l, hours, now) {
+    const d = this._data;
+    if (!d) return { chart: '<span class="msg">Laen…</span>' };
+    if (d.error) return { chart: '<span class="msg">Andmeid ei saanud lugeda</span>' };
+    const lst = states[l.statistic], live = hasValue(lst) ? num(lst.state) : null;
+    const series = lineSeries(d.res.line, l.statistic, live, now);
+    const t0 = Math.floor(d.now / HOUR) * HOUR - hours * HOUR;
+    const range = lineStats(series, t0, now), r = lineRange(range, l.floor);
+    if (!r) return { chart: '<span class="msg">Selle aja kohta andmeid pole</span>' };
+    const color = a3Color(l.color)[0], dec = this._config.decimals ?? 1;
+    const p = chartPaths(series, { w: LW, h: LH, top: LTOP, bot: LBOT, t0, t1: now, lo: r.lo, hi: r.hi });
+    const y = v => LH - LBOT - ((v - r.lo) / (r.hi - r.lo)) * (LH - LTOP - LBOT);
+    const grid = [1 / 3, 2 / 3].map(f => `M0 ${(LH * f).toFixed(1)}H${LW}`).join('');
+    const floored = l.floor != null;
+    const floor = floored ? `<path d="M0 ${y(l.floor).toFixed(1)}H${LW}" stroke="${pal.sub}" stroke-dasharray="3 3" stroke-opacity="0.7" fill="none" vector-effect="non-scaling-stroke"/>` : '';
+    const pts = series.points;
+    this._point = {
+      pick: f => nearest(pts, t0 + f * (now - t0)),
+      read: i => ({ x: ((pts[i].t - t0) / (now - t0)) * LW, v: `${fmtN(pts[i].v, dec)}°`, when: pts[i].live ? 'nüüd' : whenLabel(pts[i].t, '24h', true, now) })
+    };
+    const chart = `<svg class="ln" viewBox="0 0 ${LW} ${LH}" preserveAspectRatio="none" role="img" aria-label="${esc(l.aria || this._config.label)}"><path d="${grid}" stroke="${pal.hair}" fill="none" vector-effect="non-scaling-stroke"/>${floor}<path d="${p.area}" fill="${color}" fill-opacity="0.16"/><path d="${p.line}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>${SEL(pal.text)}</svg><span class="lx" aria-hidden="true">${lineAxis(t0, now).map(x => `<span>${esc(x)}</span>`).join('')}</span>`;
+    const key = floored ? `<span class="key"><span><i style="height:2px;background:${color}"></i>${esc(l.name || '')}</span><span><i style="border-top:1px dashed ${pal.sub}"></i>${fmtN(l.floor, 0)}° piir</span></span>` : '';
+    return { chart, key, range };
+  }
+  // Küte sees, Küte väljas, or Küte seisab while the fault is on
+  _chip(states) {
+    const ch = this._config.chip;
+    if (!ch) return '';
+    const st = states[ch.entity];
+    let tone, word;
+    if (ch.fault && stateOf(states, ch.fault) === 'on') [tone, word] = ['high', ch.fault_text];
+    else if (!hasValue(st)) return '';
+    else [tone, word] = st.state === 'on' ? ['mid', ch.on] : ['off', ch.off];
+    return `<span class="badge ${tone}">${esc(word)}</span>`;
+  }
+  _cells(states) {
+    const list = this._config.cells.map((x, i) => {
+      const st = states[x.entity], { value } = splitValue(st, x.decimals ?? 0);
+      this._sheets.set(`c${i}`, { title: x.title || x.name, entity: x.entity, more: x.entity, decimals: 1, unit: '°C', color: x.color, history: { entity: x.entity, ...x.history } });
+      return `<button type="button" class="press" data-k="c${i}" aria-label="${esc(`${x.name} ${value}, ajalugu`)}"><span class="lab">${esc(x.name)}</span><span class="v num">${esc(value)}</span><span class="sub">${esc(x.caption || '')}</span></button>`;
+    });
+    return `<span class="cells">${list.join('')}</span>`;
+  }
+  _stepper(states) {
+    const sp = this._config.stepper, { cur, lim } = stepState(states[sp.entity]);
+    const p = this._pend;
+    // the entity reports the written value: the pending one is done
+    if (p && p.sent && cur === p.v) { this._pend = null; clearTimeout(this._dropTimer); }
+    const v = this._pend ? this._pend.v : cur;
+    const note = this._err ? '<span class="sub err">Ei õnnestunud</span>' : `<span class="sub">${v === null ? 'pole saadaval' : esc(stepNote(v))}</span>`;
+    const btn = (dir, ch, label) => `<button type="button" class="press" data-k="st${dir}" data-st="${dir}" aria-label="${label}"${v === null || stepValue(v, dir, lim) === v ? ' disabled' : ''}>${ch}</button>`;
+    return `<span class="step"><span class="t"><span class="nm">${esc(sp.name)}</span>${note}</span><span class="stp" role="group" aria-label="${esc(sp.name)}">${btn(-1, '−', 'Nihe ühe kraadi võrra alla')}<span class="sv num" aria-live="polite">${v === null ? '–' : stepText(v)}</span>${btn(1, '+', 'Nihe ühe kraadi võrra üles')}</span></span>`;
+  }
+  _tap(dir) {
+    const { cur, lim } = stepState(this._hass.states[this._config.stepper.entity]);
+    if (cur === null) return;
+    this._err = false;
+    this._pend = { v: stepValue(this._pend ? this._pend.v : cur, dir, lim), sent: false };
+    clearTimeout(this._dropTimer);
+    clearTimeout(this._stepTimer);
+    this._stepTimer = setTimeout(() => this._flush(), STEP_SETTLE);
+    this._draw();
+  }
+  // the settled value goes to HA as one number.set_value, unless the taps netted to the current one;
+  // an error, or no report within STEP_WAIT, drops it
+  _flush() {
+    clearTimeout(this._stepTimer);
+    this._stepTimer = null;
+    const p = this._pend;
+    if (!p || p.sent || !this._hass) return;
+    const entity = this._config.stepper.entity;
+    const w = stepWrite(p.v, num(stateOf(this._hass.states, entity)));
+    if (w === null) { this._pend = null; this._draw(); return; }
+    p.sent = true;
+    const drop = err => { if (this._pend !== p) return; this._pend = null; this._err = err; this._draw(); };
+    // a direct call, not a hass-action event: this can run after the card has left the page (ADR-011)
+    Promise.resolve(this._hass.callService('number', 'set_value', { entity_id: entity, value: w })).catch(() => drop(true));
+    this._dropTimer = setTimeout(() => drop(false), STEP_WAIT);
+  }
+  disconnectedCallback() { if (this._stepTimer) this._flush(); }
+  _click(ev) {
+    const b = ev.target.closest('button[data-st]');
+    if (b) { if (!b.disabled) this._tap(Number(b.dataset.st)); return; }
+    super._click(ev);
+  }
+  // pointing at the line shows that hour's value and time in place of the value now
+  _wire() {
+    const P = this._point, svg = this._root.querySelector('svg.ln');
+    if (!P || !svg) return;
+    const hd = this._root.querySelector('.hd'), lab = hd.querySelector('.lab'), n = hd.querySelector('.n'), sel = svg.querySelector('.sel');
+    const was = [lab.textContent, n.textContent];
+    wirePoint(svg, P.pick, i => {
+      hd.classList.toggle('pointing', i !== null);
+      if (i === null) { sel.setAttribute('d', ''); [lab.textContent, n.textContent] = was; return; }
+      const r = P.read(i);
+      sel.setAttribute('d', `M${r.x.toFixed(1)} 0V${LH}`);
+      lab.textContent = cap(r.when);
+      n.textContent = r.v;
+    });
+  }
+}
+
 const ELEMENTS = [
   ['khe-summary-card', SummaryCard, 'KHE summary', 'The house in one sentence, with summary chips.'],
   ['khe-price-card', PriceCard, 'KHE price', 'The electricity price now, the hourly bars and the cheapest windows.'],
@@ -1768,7 +2047,8 @@ const ELEMENTS = [
   ['khe-status-card', StatusCard, 'KHE status', 'System health as dots (A3).'],
   ['khe-month-card', MonthCard, 'KHE month', "The month's energy cost, its pace, today, yesterday and last month (A3)."],
   ['khe-days-card', DaysCard, 'KHE days', 'Daily bars of a statistic, several behind a switch (A3).'],
-  ['khe-split-card', SplitCard, 'KHE split', "Who used the month's energy (A3)."]
+  ['khe-split-card', SplitCard, 'KHE split', "Who used the month's energy (A3)."],
+  ['khe-reading-card', ReadingCard, 'KHE reading', 'One reading with its hourly line, cells and a stepper (A3).']
 ];
 if (typeof customElements !== 'undefined') {
   window.customCards = window.customCards || [];

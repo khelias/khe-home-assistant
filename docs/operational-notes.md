@@ -177,7 +177,9 @@ The repo's own Lovelace cards are in `cards/khe-cards.js`:
 `custom:khe-status-card`, with `style: a3` on the first three
 ([ADR-005](decisions/005-a3-glass-cards-history-sheet.md)), and for Energia
 `custom:khe-month-card`, `custom:khe-days-card` and `custom:khe-split-card`
-([ADR-008](decisions/008-a3-page-cards-read-statistics.md)). Kodu was drawn
+([ADR-008](decisions/008-a3-page-cards-read-statistics.md)), and for
+Soojuspump `custom:khe-reading-card`
+([ADR-011](decisions/011-a3-hourly-lines-and-a-written-setpoint.md)). Kodu was drawn
 with them on 2026-10-17 and went back to stock cards the next day; A3
 uses them. Deploy replaces `www/khe-cards/` in HA's config volume, so HA
 serves them as `/local/khe-cards/`, and a change arrives without a restart.
@@ -215,7 +217,7 @@ behind every value and device. It replaced the Bubble Card trial of
 
 - **Saving:** `ha-dashboard.py` saves `dashboard_a3.overview()`:
   `dashboard_config.build()`'s views with A3's in place of Kodu's at the same
-  paths (`kodu` and, since 2026-11-12, `energia`) and the 3D view
+  paths (`kodu` and, since 2026-11-12, `energia` and `soojuspump`) and the 3D view
   (`maja-3d`) last. Kodu stays in `dashboard_config.py` for the demo and as
   A3's source of entities and confirmations.
 - **Undo:** revert the commit and run `ha-dashboard.py` for the Overview
@@ -268,6 +270,8 @@ behind every value and device. It replaced the Bubble Card trial of
   switch it to 7 and 30 days: the two WebSocket commands and the
   `background` handling (`hui-view-background.ts`) can change with the
   frontend. Open Energia too: its cards read the same statistics command.
+  On Soojuspump tap the shift once up and once back and see the unit take
+  each (one `number.set_value` per settled change).
   On a wide screen check that the hero still stretches beside Elekter: it
   reads `hui-sections-view`'s `.section` and `.content` and relies on
   `row_span`.
@@ -280,9 +284,21 @@ behind every value and device. It replaced the Bubble Card trial of
   hour with data is the cutoff, days past it are lighter and out of the
   numbers, and the month's pace counts to it. The split card's last month is
   the utility meters' `last_period` and the boiler's attribute named by the
-  previous month in English (`October`); on the first two days of a month
-  it is left out, and in January the boiler's `December` has not been
-  checked yet.
+  previous month in English (`October`), in January `Last December`
+  (Daikin names the previous year's months so; seen on 2026-11-12); on the
+  first two days of a month it is left out.
+- **Soojuspump** ([ADR-011](decisions/011-a3-hourly-lines-and-a-written-setpoint.md)):
+  the chips card's `status` line (ok only while the heating switch is on
+  and both Daikin faults read `off`, the faults as chips under it), then two
+  reading cards: the utility-room panel's and the boiler water's 48 hourly
+  means (the line ends at the live state; the boiler's has the 45° floor),
+  the leaving water and the pump's outdoor sensor as cells whose sheets fall
+  back to history (neither keeps statistics), and the shift as a stepper that
+  writes once its taps settle. Kodu's two boost tiles sit full width under
+  Soe vesi. The days card shows `boiler_energy_today`'s daily `change` for
+  16 days, today lighter and out of the average, with Täna, Sel kuul (its
+  share of `maja_sel_kuul`) and last month as cells. Kodu's 24-month boiler
+  chart is not carried. The settings subview is still Kodu's.
 
 ## The 3D house view (`house3d`)
 

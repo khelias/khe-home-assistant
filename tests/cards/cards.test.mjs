@@ -459,7 +459,7 @@ const SPLIT = {
 };
 const splitStates = (over = {}) => ({
   'sensor.total': st('362'), 'binary_sensor.fresh': st('on'),
-  'sensor.boiler': st('50', { October: 106, December: '-' }), 'sensor.vent': st('15.879', { last_period: '42.589' }),
+  'sensor.boiler': st('50', { October: 106, December: '-', 'Last December': 43 }), 'sensor.vent': st('15.879', { last_period: '42.589' }),
   'sensor.heater': st('0', { last_period: '0' }), ...over
 });
 
@@ -484,8 +484,9 @@ test('Energia: a delayed total never makes the rest negative or the shares pass 
 test('Energia: last month hidden on the first two days, and a dash or missing month left out', () => {
   const early = A3.splitRows(splitStates(), SPLIT, Date.parse('2026-11-01T10:00:00Z'), TZ).rows;
   assert.ok(early.every(r => r.last === null));
+  // in January last month is Daikin's `Last December`, not this year's December ("-")
   const jan = A3.splitRows(splitStates(), SPLIT, Date.parse('2027-01-10T10:00:00Z'), TZ).rows;
-  assert.equal(jan[0].last, null);
+  assert.equal(jan[0].last, 43);
   const gone = A3.splitRows(splitStates({ 'sensor.vent': st('unavailable') }), SPLIT, NOW, TZ).rows;
   assert.deepEqual(gone.map(r => r.name), ['Boiler', 'Ülejäänud maja']);
 });
@@ -508,6 +509,10 @@ test('pointing: an hour bar, a history moment and the nearest point with a value
   const now = at(12, 21);
   assert.equal(A3.whenLabel(at(12, 14, 35), '24h', false, now), 'täna 14:35');
   assert.equal(A3.whenLabel(at(11, 22), '24h', true, now), 'eile 22–23');
+  // by day distance: across midnight it is yesterday, two days back the weekday and date
+  assert.equal(A3.whenLabel(at(12, 23, 50), '24h', false, at(13, 0, 30)), 'eile 23:50');
+  assert.equal(A3.whenLabel(at(13, 0, 10), '24h', false, at(13, 0, 30)), 'täna 00:10');
+  assert.equal(A3.whenLabel(at(10, 22), '24h', true, now), 'teisipäev 10.11 22–23');
   assert.equal(A3.whenLabel(at(11, 9), '7d', false, now), 'kolmapäev 11.11 kell 09');
   assert.equal(A3.whenLabel(at(11, 0), '7d', true, now), 'kolmapäev 11.11');
   assert.equal(A3.whenLabel(at(1, 0), '30d', false, now), 'pühapäev 1.11');
@@ -519,4 +524,129 @@ test('pointing: an hour bar, a history moment and the nearest point with a value
   assert.equal(A3.nearest(pts, 9, true), 0);
   assert.equal(A3.nearest(pts, 25, true), 2);
   assert.equal(A3.nearest(pts, -1, true), null);
+});
+
+/* ---------- A3 Soojuspump (ADR-011): hourly lines, the shift stepper, the boiler's cells ---------- */
+
+const HOURLY = JSON.parse(readFileSync(new URL('./fixtures/hourly.json', import.meta.url), 'utf-8'));
+
+test('Soojuspump: the hourly request is 48 whole hours back, the same all hour', () => {
+  const r = A3.lineRequest('sensor.a', 48, HOURLY.now);
+  assert.deepEqual(r, { type: 'recorder/statistics_during_period', start_time: '2026-11-10T20:00:00.000Z', statistic_ids: ['sensor.a'], period: 'hour', types: ['mean'] });
+  assert.deepEqual(A3.lineRequest('sensor.a', 48, Date.parse('2026-11-12T20:59:59Z')), r);
+  assert.equal(A3.lineRequest('sensor.a', 48, Date.parse('2026-11-12T21:00:00Z')).start_time, '2026-11-10T21:00:00.000Z');
+});
+
+test('Soojuspump: the line from the house ends at the live value', () => {
+  const s = A3.lineSeries(HOURLY.hourly_mean, 'sensor.a', 24.463, HOURLY.now);
+  assert.equal(s.points.length, 49);
+  assert.deepEqual(s.points[48], { t: HOURLY.now, v: 24.463, live: true });
+  assert.equal(s.points[0].v, HOURLY.hourly_mean['sensor.a'][0].mean);
+  assert.ok(s.points.slice(0, 48).every(p => p.v > 20 && p.v < 26));
+  assert.equal(A3.lineSeries(HOURLY.hourly_mean, 'sensor.a', null, HOURLY.now).points.length, 48);
+  assert.deepEqual(A3.lineSeries({}, 'sensor.a', null, HOURLY.now).points, []);
+  const st = A3.lineStats(s, HOURLY.hourly_mean['sensor.a'][0].start, HOURLY.now);
+  assert.equal(st.hi, 24.463);
+});
+
+test('Soojuspump: the range takes in a floor outside the data', () => {
+  const pts = A3.lineSeries(HOURLY.hourly_mean, 'sensor.b', 55, HOURLY.now).points;
+  const stats = A3.lineStats({ kind: 'line', points: pts }, 0, HOURLY.now), floor = Math.floor(stats.lo) - 5;
+  // a floor under the data stretches the range down to it
+  const r = A3.lineRange(stats, floor);
+  assert.ok(r.lo < floor && r.hi > 55);
+  assert.ok(A3.lineRange(stats).lo > floor);
+  assert.equal(A3.lineRange(null, 45), null);
+  // a flat line still has a span
+  const flat = A3.lineRange({ lo: 3, hi: 3 });
+  assert.ok(flat.hi > flat.lo);
+});
+
+test('Soojuspump: the axis says the day by distance, then the weekday', () => {
+  const at = (d, h) => new Date(2026, 10, d, h).getTime();
+  assert.deepEqual(A3.lineAxis(at(10, 21), at(12, 21)), ['teisipäev 21', 'eile 21', 'nüüd']);
+  assert.deepEqual(A3.lineAxis(at(12, 3), at(12, 21)), ['täna 03', 'täna 12', 'nüüd']);
+});
+
+test('Soojuspump: the shift notes at -1, 0 and +1', () => {
+  assert.equal(A3.stepNote(-1), 'Küttevesi 1° jahedam kui kõvera järgi');
+  assert.equal(A3.stepNote(0), 'Küttevesi täpselt kõvera järgi');
+  assert.equal(A3.stepNote(1), 'Küttevesi 1° soojem kui kõvera järgi');
+  assert.deepEqual([-2, 0, 3].map(A3.stepText), ['−2°', '0°', '+3°']);
+});
+
+test('Soojuspump: the stepper stays within min and max, and taps that net to zero write nothing', () => {
+  const lim = { min: -10, max: 10, step: 1 };
+  assert.equal(A3.stepValue(1, 1, lim), 2);
+  assert.equal(A3.stepValue(10, 1, lim), 10);
+  assert.equal(A3.stepValue(-10, -1, lim), -10);
+  assert.equal(A3.stepValue(-9, -1, lim), -10);
+  assert.equal(A3.stepValue(0.5, 1, { step: 0.5 }), 1);
+  assert.equal(A3.stepWrite(2, 1), 2);
+  assert.equal(A3.stepWrite(1, 1), null);
+  assert.equal(A3.stepWrite(null, 1), null);
+});
+
+const BOILER_CELLS = [
+  { name: 'Täna', entity: 'sensor.today', note: 'päev pole läbi' },
+  { name: 'Sel kuul', entity: 'sensor.month', share_of: 'sensor.total' },
+  { entity: 'sensor.month', last: 'month', note: 'terve kuu' }
+];
+const boilerStates = (over = {}) => ({
+  'sensor.today': st('2', { unit_of_measurement: 'kWh' }),
+  'sensor.month': st('50', { unit_of_measurement: 'kWh', October: 106, December: '-', 'Last December': 43 }),
+  'sensor.total': st('362', { unit_of_measurement: 'kWh' }), ...over
+});
+
+test('Soojuspump: the boiler cells, today, the share of the house and last month', () => {
+  assert.deepEqual(A3.dayCells(boilerStates(), BOILER_CELLS, NOW, TZ), [
+    { k: 'Täna', v: '2 kWh', l: 'päev pole läbi' }, { k: 'Sel kuul', v: '50 kWh', l: '14 % majast' }, { k: 'Oktoober', v: '106 kWh', l: 'terve kuu' }
+  ]);
+});
+
+test('Soojuspump: a share with a zero, a missing or a lagging month', () => {
+  const share = over => A3.dayCells(boilerStates(over), BOILER_CELLS, NOW, TZ)[1].l;
+  assert.equal(share({ 'sensor.month': st('0'), 'sensor.total': st('0') }), '');
+  assert.equal(share({ 'sensor.month': st('0') }), '0 % majast');
+  assert.equal(share({ 'sensor.total': st('unavailable') }), '');
+  // a delayed house total below the boiler's month: never past 100
+  assert.equal(share({ 'sensor.total': st('40') }), '100 % majast');
+  assert.equal(A3.dayCells(boilerStates({ 'sensor.month': st('unknown') }), BOILER_CELLS, NOW, TZ)[1].v, '–');
+});
+
+test('Soojuspump: last month left out on days 1-2, a dash, and Last December in January', () => {
+  assert.equal(A3.dayCells(boilerStates(), BOILER_CELLS, Date.parse('2026-11-02T10:00:00Z'), TZ).length, 2);
+  const jan = A3.dayCells(boilerStates(), BOILER_CELLS, Date.parse('2027-01-10T10:00:00Z'), TZ)[2];
+  assert.deepEqual(jan, { k: 'Detsember', v: '43 kWh', l: 'terve kuu' });
+  const dash = A3.dayCells(boilerStates({ 'sensor.month': st('50', { October: '-' }) }), BOILER_CELLS, NOW, TZ)[2];
+  assert.equal(dash.v, '–');
+  assert.equal(A3.lastMonthValue(st('1', { last_period: '42.589' }), 'last_period', NOW, TZ), 42.589);
+});
+
+test('Soojuspump: the status line, ok only with heating on and both faults off', () => {
+  const conf = { faults: [{ entity: 'binary_sensor.unit', name: 'Soojuspumba viga' }, { entity: 'binary_sensor.tank', name: 'Boileri viga' }], status: { entity: 'switch.heat', ok: 'Korras, küte ja boiler töötavad', off: 'Küte väljas' } };
+  const s = (heat, unit = 'off', tank = 'off') => A3.statusLine({ 'switch.heat': st(heat), 'binary_sensor.unit': st(unit), 'binary_sensor.tank': st(tank) }, conf);
+  assert.deepEqual(s('on'), { tone: 'ok', text: 'Korras, küte ja boiler töötavad' });
+  assert.deepEqual(s('on', 'on'), { tone: 'bad', text: 'Viga' });
+  assert.deepEqual(s('off', 'off', 'on'), { tone: 'bad', text: 'Viga' });
+  assert.deepEqual(s('off'), { tone: 'off', text: 'Küte väljas' });
+  assert.deepEqual(s('on', 'unavailable'), { tone: 'off', text: 'Seisund pole teada' });
+  assert.deepEqual(s('unavailable'), { tone: 'off', text: 'Seisund pole teada' });
+  assert.equal(A3.statusLine({}, {}), null);
+});
+
+test('Soojuspump: the boiler days from the house, today out of the average', () => {
+  const pts = A3.dailySeries(HOURLY.daily_change, 'sensor.c', 'change', 16, HOURLY.now, TZ, A3.dayStarts(1, HOURLY.now, TZ)[0]);
+  assert.equal(pts.length, 16);
+  assert.deepEqual([pts[0].label, pts[15].label], ['28.10', '12.11']);
+  assert.deepEqual(pts.map(p => p.late).filter(Boolean).length, 1);
+  assert.ok(pts[15].late);
+  const full = pts.slice(0, 15).map(p => p.v);
+  assert.ok(Math.abs(A3.dayStats(pts).avg - full.reduce((a, v) => a + v, 0) / 15) < 1e-9);
+});
+
+test('Soojuspump: a link tile keeps its fixed text when its entity is unavailable', () => {
+  const conf = { entity: 'switch.heat', state_text: 'Küte välja, kütte režiim, boileri siht', active: [] };
+  assert.deepEqual(A3.tileState(conf, { 'switch.heat': st('unavailable') }), { lit: false, unavailable: false, text: conf.state_text });
+  assert.equal(A3.tileState(conf, { 'switch.heat': st('on') }).lit, false);
 });

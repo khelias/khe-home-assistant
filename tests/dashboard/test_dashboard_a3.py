@@ -219,7 +219,9 @@ class Build(unittest.TestCase):
 
     def test_wide_puts_the_title_over_the_hero_and_narrow_keeps_it_under(self):
         title, hero, chips, narrow = VIEW["sections"][0]["cards"]
-        screen = lambda c: [v["media_query"] for v in c.get("visibility", []) if v["condition"] == "screen"]
+        screen = lambda c: [
+            v["media_query"] for v in c.get("visibility", []) if v["condition"] == "screen"
+        ]
         self.assertEqual((title["part"], chips["part"]), ("title", "chips"))
         self.assertNotIn("part", narrow)
         self.assertEqual(screen(title), [a3.WIDE])
@@ -258,7 +260,7 @@ class Overview(unittest.TestCase):
         self.assertNotIn(dc.home(dc.House(HOUSE, PEOPLE)), OVERVIEW["views"])
 
     def test_every_other_view_is_dashboard_configs_in_its_order(self):
-        swapped = {"kodu": VIEW, "energia": a3.energia()}
+        swapped = {"kodu": VIEW, "energia": a3.energia(), "soojuspump": SOOJUSPUMP}
         built = [swapped.get(v["path"], v) for v in BUILT["views"] if v["path"] != "maja-3d"]
         self.assertEqual(OVERVIEW["views"][:-1], built)
         self.assertEqual(sorted(paths(OVERVIEW)), sorted(v["path"] for v in BUILT["views"]))
@@ -341,6 +343,74 @@ class Energia(unittest.TestCase):
             with self.subTest(part=part["name"]):
                 self.assertIn(part["last"], ("month", "last_period"))
                 self.assertTrue(part["view"].startswith("/lovelace/"))
+
+
+SOOJUSPUMP = a3.soojuspump(dc.House(HOUSE, PEOPLE))
+KODU_SOOJUSPUMP = dc.soojuspump
+
+
+class Soojuspump(unittest.TestCase):
+    def test_every_kodu_soojuspump_entity_is_on_the_page(self):
+        missing = kodu_entities(KODU_SOOJUSPUMP) - ids(without_sheets(SOOJUSPUMP))
+        self.assertEqual(missing, set())
+
+    def test_the_settings_subview_is_reachable(self):
+        self.assertIn("/lovelace/soojuspump-seaded", links(SOOJUSPUMP))
+        self.assertLessEqual(links(KODU_SOOJUSPUMP), links(SOOJUSPUMP))
+
+    def test_kodus_title_icon_and_columns_with_a3s_background(self):
+        for k in ("title", "path", "icon", "max_columns"):
+            self.assertEqual(SOOJUSPUMP[k], KODU_SOOJUSPUMP[k])
+        self.assertEqual(SOOJUSPUMP["background"], VIEW["background"])
+
+    def test_cards_are_the_repos_own(self):
+        types = {c["type"] for s in SOOJUSPUMP["sections"] for c in s["cards"]}
+        self.assertTrue(all(t.startswith("custom:khe-") for t in types))
+        self.assertIn("custom:khe-reading-card", types)
+
+    def test_the_boost_confirmations_are_kodus(self):
+        kodu = confirmations(KODU)
+        found = 0
+        for card in walk(SOOJUSPUMP):
+            for act in card_actions(card):
+                if "confirmation" not in act:
+                    continue
+                found += 1
+                key = (card.get("entity"), bare(act))
+                self.assertEqual(kodu.get(key), {json.dumps(act["confirmation"])})
+        self.assertEqual(found, 2)
+
+    def test_the_boost_tiles_are_full_width_here_and_half_on_kodu(self):
+        def boosts(node):
+            return [c for c in walk(node) if c.get("entity") == dc.DHW and "icon_tap_action" in c]
+
+        self.assertEqual(len(boosts(SOOJUSPUMP)), 2)
+        self.assertTrue(all(c["grid_options"] == {"columns": 12} for c in boosts(SOOJUSPUMP)))
+        self.assertTrue(all(c["grid_options"] == {"columns": 6} for c in boosts(VIEW)))
+        # the water's temperature is the reading above, not repeated on the tiles
+        self.assertTrue(all(isinstance(c["state_text"], str) for c in boosts(SOOJUSPUMP)))
+
+    def test_the_stepper_is_the_shift_and_the_floor_is_the_boilers(self):
+        readings = [c for c in walk(SOOJUSPUMP) if c.get("type") == "custom:khe-reading-card"]
+        self.assertEqual([c["stepper"]["entity"] for c in readings if "stepper" in c], [dc.SHIFT])
+        self.assertEqual([c["line"].get("floor") for c in readings], [None, dc.DHW_FLOOR])
+
+    def test_every_sheet_names_its_source(self):
+        for c in walk(SOOJUSPUMP):
+            h = c.get("history")
+            if isinstance(h, dict):
+                with self.subTest(card=c.get("name")):
+                    self.assertIn(h["source"], ("statistics", "history"))
+
+    def test_kodus_soojuspump_is_unchanged(self):
+        before = copy.deepcopy(dc.soojuspump)
+        a3.soojuspump(dc.House(HOUSE, PEOPLE))
+        self.assertEqual(dc.soojuspump, before)
+
+    def test_energia_is_unchanged(self):
+        (days, _price) = [c for c in walk(ENERGIA) if c.get("type") == "custom:khe-days-card"]
+        self.assertNotIn("cells", days)
+        self.assertNotIn("foot", days)
 
 
 if __name__ == "__main__":

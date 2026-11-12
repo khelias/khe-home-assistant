@@ -20,9 +20,11 @@ This file holds rules and pointers; the reference lives in:
   the A3 dashboard ([ADR-005](docs/decisions/005-a3-glass-cards-history-sheet.md)),
   A3 as the front page with its live-sun hero ([ADR-006](docs/decisions/006-a3-front-page-live-hero.md)),
   A3 in the Overview with the other views to follow ([ADR-007](docs/decisions/007-a3-in-the-overview.md)),
-  page cards reading daily statistics ([ADR-008](docs/decisions/008-a3-page-cards-read-statistics.md))
-  and the hero with its surroundings ([ADR-009](docs/decisions/009-hero-shows-the-surroundings.md)),
-  and the hero beside the cards on wide screens ([ADR-010](docs/decisions/010-a3-landscape-hero-beside-the-cards.md))
+  page cards reading daily statistics ([ADR-008](docs/decisions/008-a3-page-cards-read-statistics.md)),
+  the hero with its surroundings ([ADR-009](docs/decisions/009-hero-shows-the-surroundings.md)),
+  the hero beside the cards on wide screens ([ADR-010](docs/decisions/010-a3-landscape-hero-beside-the-cards.md))
+  and page lines from hourly statistics with a stepper that writes the
+  heating shift ([ADR-011](docs/decisions/011-a3-hourly-lines-and-a-written-setpoint.md))
 - [ROADMAP.md](ROADMAP.md) - house automation, near-term and the long form
 
 House documentation (HA rollout, dashboard layout, HVAC protocols, energy)
@@ -35,10 +37,10 @@ own.
 
 ```
 cards/             the dashboard's own Lovelace cards (khe-cards.js, ADR-002,
-                   ADR-005, ADR-008): summary, price, tile, chips, heading,
-                   status, and Energia's month, days and split, with the
-                   history sheet; A3 draws with them; deploy
-                   copies them to www/khe-cards/
+                   ADR-005, ADR-008, ADR-011): summary, price, tile, chips,
+                   heading, status, Energia's month, days and split, and
+                   Soojuspump's reading, with the history sheet; A3 draws
+                   with them; deploy copies them to www/khe-cards/
 config/            what deploy copies into HA's /config
   configuration.yaml
   packages/        one package per device or concern
@@ -55,9 +57,9 @@ house3d/           3D house view: engine (core house3d.js, scene/ layer
                    modules, kit and sun), HA card, standalone viewer,
                    placement page, vendored three.js
 scripts/           dashboard_config.py (the HA Overview as data, no I/O),
-                   dashboard_a3.py (A3 and Energia in A3's look from the
-                   same entities, and overview(), what the house saves,
-                   ADR-005, ADR-007, ADR-008),
+                   dashboard_a3.py (A3, Energia and Soojuspump in A3's
+                   look from the same entities, and overview(), what the
+                   house saves, ADR-005, ADR-007, ADR-008, ADR-011),
                    ha-dashboard.py (reads the private inputs, saves either),
                    dashboard_demo.py (the demo's made-up entities, texts and
                    series for the same config), dashboard_demo_en.py (its
