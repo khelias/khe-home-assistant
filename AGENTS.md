@@ -114,7 +114,7 @@ tests/cards/       the dashboard cards' pure helpers (node:test)
 4. **Fork PRs can reach the homelab runner.** Fork PR approval stays at
    `all_external_contributors`, and a fork run is approved only after
    reading its `.github/workflows/` diff ([estate
-   ADR-020](https://github.com/khelias/khe-architecture/blob/main/decisions/020-agent-work-through-pull-requests.md)).
+   ADR-023](https://github.com/khelias/khe-architecture/blob/main/decisions/023-agent-pushes-where-its-session-allows.md)).
 
 ## Deploy
 
@@ -158,7 +158,7 @@ the operator first; an approval covers that task only.
   sent with `scripts/ha-ws.py '{"type": "..."}'`, which handles auth and ids.
   Host and port are in `scripts/ha-dashboard.py` and `scripts/ha-ws.py`.
 - **Config lives in git, not on the VM.** Edit `config/packages/*.yaml`,
-  commit, the operator pushes, deploy copies it into the volume, then
+  commit, push (the agent, where its session allows), deploy copies it into the volume, then
   restart or reload HA through the API. Deploy replaces
   `configuration.yaml`, `packages/`, `tuya_local_devices/`, `www/house3d/`
   and `www/khe-cards/` in the volume, so a hand edit there is lost at the
