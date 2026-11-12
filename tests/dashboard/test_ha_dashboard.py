@@ -70,5 +70,17 @@ class CarEntity(unittest.TestCase):
         self.assertEqual(card_car(self.ha.local_config())["entity"], "switch.test_stand_in")
 
 
+class Trial(unittest.TestCase):
+    def test_trial_config_reads_only_the_house_files(self):
+        ha = load_ha_dashboard()
+        read = []
+        files = {"ha-house.json": {}, "ha-people.json": []}
+        ha._local = lambda name, default: read.append(name) or files.get(name, default)
+        ha.house3d_card_model = lambda: self.fail("the trial has no 3D view")
+        config = ha.trial_config()
+        self.assertEqual(sorted(read), ["ha-house.json", "ha-people.json"])
+        self.assertEqual(config["title"], "Kodu katse")
+
+
 if __name__ == "__main__":
     unittest.main()

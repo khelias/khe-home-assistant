@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Generate and save the Home Assistant Overview dashboard for the house.
+"""Generate and save the house's dashboards: the Overview (Kodu) and the trial "Kodu katse".
 
 The dashboard is storage-mode config in HA's .storage (backed up nightly by
-backup.sh); this script is its source of truth. The config itself is built by
-dashboard_config.build(); this script reads its private inputs, builds and
+backup.sh); this script is its source of truth. The configs are built by
+dashboard_config.build() and, for the Bubble Card trial (ADR-004),
+dashboard_trial.build(); this script reads their private inputs, builds and
 saves. Edit there, run here, and HA picks the new config up live.
 
-Usage:  ha-dashboard.py            (saves to the "lovelace" Overview)
+Usage:  ha-dashboard.py            (saves Kodu to the "lovelace" Overview)
+        ha-dashboard.py --trial    (creates "kodu-katse" if it is missing, saves the trial there)
 Needs:  python3 with `websockets`, the HA long-lived token in
         ~/.config/khe/ha-token, optional family list in ~/.config/khe/ha-people.json,
         optional 3D house model (HOUSE3D_MODEL, below).
@@ -20,10 +22,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dashboard_config
+import dashboard_trial
 import house3d_model
 
 HA = "192.168.0.11:8123"
 URL = "lovelace"  # the Overview, a dashboard entry since the 2026.9 migration
+TRIAL = {
+    "url_path": "kodu-katse",
+    "title": "Kodu katse",
+    "icon": "mdi:home-variant",
+    "show_in_sidebar": True,
+    "require_admin": False,
+}
 
 
 # This repo is public, so nothing that identifies the house or the family is hard-coded here.
@@ -78,7 +88,12 @@ def local_config():
     return dashboard_config.build(house, _local("ha-people.json", []), model)
 
 
-async def main(config):
+def trial_config():
+    """The trial dashboard: dashboard_trial.build() with the local house files, no 3D model."""
+    return dashboard_trial.build(_local("ha-house.json", {}), _local("ha-people.json", []))
+
+
+async def main(config, url_path, create=None):
     async with websockets.connect(f"ws://{HA}/api/websocket", max_size=2**24) as ws:
         await ws.recv()
         await ws.send(json.dumps({"type": "auth", "access_token": TOKEN}))
@@ -94,9 +109,18 @@ async def main(config):
                 if r.get("id") == mid[0]:
                     return r
 
-        r = await call(type="lovelace/config/save", url_path=URL, config=config)
+        if create:
+            r = await call(type="lovelace/dashboards/list")
+            if not r.get("success"):
+                raise SystemExit(f"dashboards/list: {r.get('error')}")
+            if url_path not in [d["url_path"] for d in r["result"]]:
+                r = await call(type="lovelace/dashboards/create", **create)
+                print("create:", "ok" if r.get("success") else r.get("error"))
+                if not r.get("success"):
+                    raise SystemExit(1)
+        r = await call(type="lovelace/config/save", url_path=url_path, config=config)
         print("save:", "ok" if r.get("success") else r.get("error"))
-        r = await call(type="lovelace/config", url_path=URL)
+        r = await call(type="lovelace/config", url_path=url_path)
         v = r["result"]["views"]
         print(
             "views:",
@@ -110,4 +134,9 @@ if __name__ == "__main__":
     import websockets
 
     TOKEN = Path("~/.config/khe/ha-token").expanduser().read_text().strip()
-    asyncio.run(main(local_config()))
+    if sys.argv[1:] == ["--trial"]:
+        asyncio.run(main(trial_config(), TRIAL["url_path"], create=TRIAL))
+    elif sys.argv[1:]:
+        sys.exit(__doc__)
+    else:
+        asyncio.run(main(local_config(), URL))

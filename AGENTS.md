@@ -14,8 +14,9 @@ This file holds rules and pointers; the reference lives in:
   quirks, measured behaviour and the 3D view
 - [docs/decisions/](docs/decisions/) - this repo's decisions, estate-style
   ADRs (the estate's own are in khe-architecture): the 3D engine (ADR-001),
-  the dashboard's own cards ([ADR-002](docs/decisions/002-own-dashboard-cards.md))
-  and the demo's English ([ADR-003](docs/decisions/003-demo-in-english.md))
+  the dashboard's own cards ([ADR-002](docs/decisions/002-own-dashboard-cards.md)),
+  the demo's English ([ADR-003](docs/decisions/003-demo-in-english.md))
+  and the Bubble Card trial dashboard ([ADR-004](docs/decisions/004-bubble-card-trial.md))
 - [ROADMAP.md](ROADMAP.md) - house automation, near-term and the long form
 
 House documentation (HA rollout, dashboard layout, HVAC protocols, energy)
@@ -194,7 +195,9 @@ the operator first; an approval covers that task only.
   caption needs its English in `dashboard_demo_en.EN`.
 - **A redesigned view uses the repo's own cards**
   ([ADR-002](docs/decisions/002-own-dashboard-cards.md)), `cards/khe-cards.js`;
-  no view does today, Kodu went back to stock cards on 2026-10-18. A change
+  no view does today, Kodu went back to stock cards on 2026-10-18. The
+  exception is the trial dashboard Kodu katse (`kodu-katse`), which may use
+  Bubble Card ([ADR-004](docs/decisions/004-bubble-card-trial.md)). A change
   to the cards bumps `KHE_CARDS_VERSION` and the resource's `?v=`
   ([notes](docs/operational-notes.md#dashboard-cards-cards)).
 - **The house is the House room of the KHE family**
@@ -205,7 +208,11 @@ the operator first; an approval covers that task only.
   type, controls and lists, no gradients, blur or glow) by review, since
   this repo has no npm project and is outside the family's design check
   (`khe-design-lint`). On `/ha/` the header takes the dark family values
-  until the 3D view has a light theme.
+  until the 3D view has a light theme. The Bubble Card trial dashboard does
+  not meet point 1 (its round buttons, sliders and pop-up shadow), as
+  ADR-021 point 5 allows, with
+  [ADR-004](docs/decisions/004-bubble-card-trial.md); it keeps no blur and
+  no translucency.
 - **Keep the house idiom in a new view**, and read two existing views first.
   A row is a `horizontal-stack` of 2-4 vertical tiles or `third()`, never a
   lone full-width tile; full width is for charts, forecast cards and alerts.
@@ -214,6 +221,9 @@ the operator first; an approval covers that task only.
   they control. The front page holds what is done daily; per-side controls,
   rare settings and diagnostics go on a `subview` behind a "Seaded" badge. A
   `note()` truncates to one line, so longer text needs a markdown card.
+  The trial dashboard is the exception: Bubble Card buttons and a pop-up
+  per system instead of tile rows and views
+  ([ADR-004](docs/decisions/004-bubble-card-trial.md)).
 - Read the integration's section in `docs/operational-notes.md` before
   touching it.
 
