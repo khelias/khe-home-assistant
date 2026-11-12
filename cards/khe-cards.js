@@ -6,7 +6,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 4;
+export const KHE_CARDS_VERSION = 5;
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
 
@@ -1359,6 +1359,12 @@ export function monthPace(cost, cutoff, now, tz) {
 // "in <month>" in Estonian, by the month's number (1-12): the inessive is not one suffix for all
 const IN_MONTH = ['jaanuaris', 'veebruaris', 'märtsis', 'aprillis', 'mais', 'juunis', 'juulis', 'augustis', 'septembris', 'oktoobris', 'novembris', 'detsembris'];
 export const inLastMonth = (now, tz) => IN_MONTH[(zoneParts(now, tz).m + 10) % 12];
+const WEEKDAY = ['pühapäev', 'esmaspäev', 'teisipäev', 'kolmapäev', 'neljapäev', 'reede', 'laupäev'];
+// 'kolmapäev 11.11' for a day's start in HA's zone
+export function dayName(t, tz) {
+  const p = zoneParts(t, tz);
+  return `${WEEKDAY[new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay()]} ${p.d}.${p.m}`;
+}
 
 // last month's name, Estonian ("oktoober") and as Daikin's month attributes name it ("October")
 export function lastMonthName(now, tz, lang = 'et-EE') {
@@ -1506,7 +1512,7 @@ const DAYS_CSS = `
 .avg{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
 .avg .n{font-size:28px;font-weight:700;letter-spacing:-0.025em}
 .avg .u{font-size:14px;font-weight:600;color:var(--sub)}
-svg.c{display:block;width:100%;height:120px}
+svg.c{display:block;width:100%;height:120px;touch-action:pan-y;cursor:crosshair}
 .ax{display:flex;justify-content:space-between;margin-top:4px;font-size:11px;font-weight:600;color:var(--sub)}
 .key{display:flex;gap:14px;font-size:12px;font-weight:600;color:var(--sub)}
 .key span{display:flex;align-items:center;gap:5px}
@@ -1545,6 +1551,7 @@ class DaysCard extends LoadingCard {
     const seg = list.length > 1 ? `<span class="seg" role="group" aria-label="Ühik">${list.map((x, j) => `<button type="button" data-p="${j}" aria-pressed="${j === i}">${esc(x.name)}</button>`).join('')}</span>` : '';
     const d = this._data;
     const shell = body => `<div class="glass box">${seg}${body}</div>`;
+    this._point = null;
     if (!d) return shell('<div class="msg">Laen…</div>');
     if (d.error) return shell('<div class="msg">Andmeid ei saanud lugeda</div>');
     const daily = d.res[`daily:${s.peak ? `${s.type},max` : s.type}`];
@@ -1572,7 +1579,10 @@ class DaysCard extends LoadingCard {
     });
     const bars = [...paths].map(([k, dd]) => { const [f, o] = k.split('|'); return `<path d="${dd}" fill="${f}"${o !== '1' ? ` fill-opacity="${o}"` : ''}/>`; }).join('');
     const grid = [0.25, 0.5, 0.75].map(f => `M0 ${(TOP + (H - TOP - BOT) * f).toFixed(1)}H${W}`).join('');
-    const svg = `<svg class="c" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(s.aria || s.name)}"><path d="${grid}" stroke="${pal.hair}" fill="none" vector-effect="non-scaling-stroke"/>${bars}${peak ? `<path d="${peak}" stroke="${pal.text}" stroke-opacity="0.55" stroke-width="1.5" fill="none" vector-effect="non-scaling-stroke"/>` : ''}</svg>`;
+    // pointing at a day shows its value in the average's place (_wire)
+    this._point = { pts, fmt, unit: s.unit || '', peak: s.peak, tz: d.tz, avg: [fmt(stats.avg), s.caption || ''], step: bw + GAP };
+    const sel = `<rect class="sel" y="0" width="${bw.toFixed(1)}" height="${H}" fill="${pal.text}" fill-opacity="0.1" visibility="hidden"/>`;
+    const svg = `<svg class="c" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(s.aria || s.name)}">${sel}<path d="${grid}" stroke="${pal.hair}" fill="none" vector-effect="non-scaling-stroke"/>${bars}${peak ? `<path d="${peak}" stroke="${pal.text}" stroke-opacity="0.55" stroke-width="1.5" fill="none" vector-effect="non-scaling-stroke"/>` : ''}</svg>`;
     const marks = [0, Math.round(N / 4), Math.round(N / 2), Math.round((3 * N) / 4)].map(j => pts[j].label).concat('täna');
     const axis = `<div class="ax" aria-hidden="true">${marks.map(l => `<span>${esc(l)}</span>`).join('')}</div>`;
     const key = s.peak ? `<span class="key"><span><i style="width:10px;height:10px;border-radius:3px;background:${pal.sub}"></i>päeva keskmine</span><span><i style="width:12px;height:2px;background:${pal.text};opacity:.55"></i>kalleim tund</span></span>` : '';
@@ -1587,6 +1597,29 @@ class DaysCard extends LoadingCard {
     }
     const cells = three.map(([k, v, l]) => `<span><span class="k">${esc(k)}</span><span class="v num">${esc(v)}</span><span class="sub">${esc(l)}</span></span>`).join('');
     return shell(`<span class="avg"><span class="n num">${fmt(stats.avg)}</span><span class="u">${esc(s.caption || '')}</span></span><span>${svg}${axis}</span>${key}<span class="hr"></span><span class="stats">${cells}</span>`);
+  }
+  // a mouse shows the day under it; a finger shows the day it touches until the same day is tapped again
+  _wire() {
+    const P = this._point, svg = this._root.querySelector('svg.c');
+    if (!P || !svg) return;
+    const n = this._root.querySelector('.avg .n'), u = this._root.querySelector('.avg .u'), sel = svg.querySelector('.sel');
+    let shown = null;
+    const show = j => {
+      shown = j;
+      if (j === null) { sel.setAttribute('visibility', 'hidden'); [n.textContent, u.textContent] = P.avg; return; }
+      const p = P.pts[j];
+      sel.setAttribute('x', (j * P.step).toFixed(1));
+      sel.setAttribute('visibility', 'visible');
+      const note = p.late ? (j === P.pts.length - 1 ? 'täna, andmed hilinevad' : 'andmed hilinevad') : P.peak && p.max !== null ? `kalleim tund ${P.fmt(p.max)}` : '';
+      n.textContent = p.v === null ? '–' : P.fmt(p.v);
+      u.textContent = [P.unit, dayName(p.t, P.tz), note].filter(Boolean).join(' · ');
+    };
+    const at = ev => { const r = svg.getBoundingClientRect(); return Math.max(0, Math.min(P.pts.length - 1, Math.floor(((ev.clientX - r.left) / r.width) * P.pts.length))); };
+    let before = null;
+    svg.addEventListener('pointermove', ev => { if (ev.pointerType === 'mouse' || ev.buttons) show(at(ev)); });
+    svg.addEventListener('pointerleave', ev => { if (ev.pointerType === 'mouse') show(null); });
+    svg.addEventListener('pointerdown', ev => { if (ev.pointerType !== 'mouse') { before = shown; show(at(ev)); } });
+    svg.addEventListener('pointerup', ev => { if (ev.pointerType !== 'mouse' && at(ev) === before) show(null); });
   }
   _click(ev) {
     const b = ev.target.closest('button[data-p]');

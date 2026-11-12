@@ -460,6 +460,7 @@ def energia():
                                 "scale": 100,
                                 "decimals": 1,
                                 "bands": [thresholds[1]["value"], thresholds[2]["value"]],
+                                "unit": "senti/kWh",
                                 "caption": "senti/kWh keskmiselt, kõigi tasudega",
                                 "aria": "Elektri hinna päeva keskmine ja kalleim tund",
                             }

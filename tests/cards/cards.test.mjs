@@ -494,3 +494,9 @@ test('Energia: the usage sheet spec both the price card and the month card open'
   const h = { entity: 'stat:a', cost: 'stat:b', source: 'statistics', type: 'change' };
   assert.deepEqual(A3.usageSheet('sensor.m', h), { title: 'Tarbimine', entity: 'sensor.m', more: 'sensor.m', decimals: 1, unit: 'kWh', color: 'indigo', history: h });
 });
+
+test('dayName: the weekday and date in HA\'s zone', () => {
+  assert.equal(A3.dayName(Date.parse('2026-11-10T22:00:00Z'), 'Europe/Tallinn'), 'kolmapäev 11.11');
+  assert.equal(A3.dayName(Date.parse('2026-10-24T21:00:00Z'), 'Europe/Tallinn'), 'pühapäev 25.10');
+  assert.equal(A3.dayName(Date.parse('2026-11-10T22:00:00Z'), 'UTC'), 'teisipäev 10.11');
+});
