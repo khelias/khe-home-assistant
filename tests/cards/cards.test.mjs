@@ -650,3 +650,53 @@ test('Soojuspump: a link tile keeps its fixed text when its entity is unavailabl
   assert.deepEqual(A3.tileState(conf, { 'switch.heat': st('unavailable') }), { lit: false, unavailable: false, text: conf.state_text });
   assert.equal(A3.tileState(conf, { 'switch.heat': st('on') }).lit, false);
 });
+
+/* ---------- the cards' languages (ADR-012) ---------- */
+
+const keysOf = o => Object.entries(o).map(([k, v]) => (v && typeof v === 'object' && !Array.isArray(v) ? `${k}{${keysOf(v)}}` : Array.isArray(v) ? `${k}[${v.length}]` : k)).sort().join(',');
+
+test('languages: English has every Estonian key, list length and sensor tone', () => {
+  assert.deepEqual(A3.LANGUAGES, ['et', 'en']);
+  assert.equal(keysOf(A3.words('en')), keysOf(A3.words('et')));
+  const tones = lang => Object.values(A3.sensorWords(lang).tone).sort().join();
+  assert.equal(tones('en'), tones('et'));
+  assert.equal(keysOf(A3.sensorWords('en')).replace(/tone\{[^}]*\}|phrase\{[^}]*\}/g, ''), keysOf(A3.sensorWords('et')).replace(/tone\{[^}]*\}|phrase\{[^}]*\}/g, ''));
+  // an unknown language reads Estonian
+  assert.equal(A3.words('fr'), A3.words('et'));
+});
+
+test('languages: no Estonian letter outside the Estonian tables and comments', () => {
+  const src = readFileSync(new URL('../../cards/khe-cards.js', import.meta.url), 'utf8');
+  const code = src.replace(/const ET(_SENSOR)? = \{[\s\S]*?\n\};/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').map(l => l.replace(/^\s*\/\/.*$/, '').replace(/\s\/\/ .*$/, ''));
+  assert.deepEqual(code.filter(l => /[õäöüšž]/i.test(l)).map(l => l.trim()), []);
+});
+
+test('languages: the helpers in English', () => {
+  assert.equal(joinEt(['a', 'b', 'c'], 'en'), 'a, b and c');
+  assert.equal(formatNumber('21.4', undefined, 'en'), '21.4');
+  assert.equal(formatNumber(8.8, 1, 'en'), '8.8');
+  assert.equal(stateWord(st('armed_home'), 'en'), 'armed');
+  assert.equal(stateWord(st('9.2', { unit_of_measurement: 'kWh' }), 'en'), '9.2 kWh');
+  const calmEn = calm({ 'sensor.level': st('normal', { arvel: 14.2 }) });
+  assert.deepEqual(sentence(calmEn, CONF, 'en'), { text: 'All is well. Electricity is at its normal price right now.', warn: false });
+  assert.equal(sentence(calm({ 'binary_sensor.smoke': st('on'), 'binary_sensor.vent': st('on') }), { faults: FAULTS }, 'en').text, 'Needs attention: Tulekahju and Ventilatsiooni viga.');
+  assert.equal(peopleText(calm({ 'person.jaan': st('home') }), PEOPLE, 'en'), 'Mari and Jaan home');
+  assert.equal(A3.levelTone('very expensive', 'en'), 'high');
+  assert.equal(A3.levelTone('cheap', 'en'), 'good');
+  // an Estonian sensor word on an English card has no tone of its own
+  assert.equal(A3.levelTone('kallis', 'en'), 'mid');
+  assert.equal(A3.dayName(Date.parse('2026-11-10T22:00:00Z'), 'Europe/Tallinn', 'en'), 'Wednesday 11/11');
+  const at = (d, h, m = 0) => new Date(2026, 10, d, h, m).getTime(), now = at(12, 21);
+  assert.equal(A3.hourSpan({ s: at(13, 23), tomorrow: true }, 'en'), 'tomorrow 23–00');
+  assert.equal(A3.whenLabel(at(11, 22), '24h', true, now, 'en'), 'yesterday 22–23');
+  assert.equal(A3.whenLabel(at(11, 9), '7d', false, now, 'en'), 'Wednesday 11/11 at 09');
+  assert.deepEqual(A3.lineAxis(at(10, 21), at(12, 21), 'en'), ['Tuesday 21', 'yesterday 21', 'now']);
+  assert.equal(A3.inLastMonth(Date.parse('2027-01-10T12:00:00Z'), 'Europe/Tallinn', 'en'), 'in December');
+  assert.equal(A3.stepNote(0, 'en'), 'Heating water right on the curve');
+  assert.equal(A3.stepNote(-2, 'en'), 'Heating water 2° cooler than the curve');
+  assert.deepEqual(A3.splitValue(st('5.087', { unit_of_measurement: '°C' }), 1, 'en'), { value: '5.1°', unit: '' });
+  assert.equal(A3.axisLabels('24h', 0, 3600e3, 'en')[4], 'now');
+  assert.equal(A3.usageSheet('sensor.m', {}, 'en').title, 'Use');
+  assert.equal(A3.statusLine({}, { status: { entity: 'binary_sensor.x', ok: 'Works' } }, 'en').text, 'State not known');
+});

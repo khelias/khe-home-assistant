@@ -7,7 +7,8 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 10;
+export const KHE_CARDS_VERSION = 11;
+
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
 
@@ -78,42 +79,142 @@ const NO_VALUE = new Set(['unavailable', 'unknown', '']);
 const hasValue = st => !!st && !NO_VALUE.has(st.state);
 const stateOf = (states, entity) => (states[entity] || {}).state;
 
-// "a", "a ja b", "a, b ja c"
-export function joinEt(list) {
+// The cards' own words, one table per language, chosen by the card's `language` config and never
+// by the HA profile (ADR-012): a household member with an English profile still reads Estonian.
+// Every Estonian letter in this file stays inside ET and ET_SENSOR; a test holds the line.
+const ET = {
+  locale: 'et-EE', and: 'ja',
+  words: {
+    on: 'sees', off: 'väljas', open: 'lahti', closed: 'kinni', opening: 'avaneb', closing: 'sulgub', playing: 'mängib',
+    paused: 'pausil', idle: 'ootel', standby: 'ootel', buffering: 'laeb', home: 'kodus', not_home: 'eemal', disarmed: 'valveta',
+    arming: 'valvestub', pending: 'sisenemisviivitus', triggered: 'häire', heat: 'küte', eco: 'säästlik',
+    performance: 'kiirsoojendus', unknown: 'teadmata', unavailable: 'pole saadaval'
+  },
+  armed: 'valves', notKnown: 'pole teada', away: 'eemal', home: 'kodus',
+  alarmOn: l => `Valve on häires: ${l}.`, attention: l => `Vajab tähelepanu: ${l}.`, allOk: 'Kõik on korras.',
+  priceNow: w => ` Elekter on praegu ${w}.`,
+  security: { triggered: 'häires', pending: 'sisenemisviivitus', arming: 'valvestub', armed: 'valves' },
+  allDisarmed: 'kõik valveta', peopleHome: l => `${l} kodus`, nobodyHome: 'keegi pole kodus',
+  electricity: 'Elekter', securityLabel: 'Turvalisus', climate: 'Kliima', people: 'Inimesed', centShort: 's',
+  cents: 'senti/kWh', priceUnknown: 'Hind pole teada', energyLink: 'Energia ›', noForecast: 'Hinnaprognoosi pole',
+  today: 'täna', tomorrow: 'homme', yesterday: 'eile', now: 'nüüd', hourPrices: both => `Tunnihinnad, täna${both ? ' ja homme' : ''}`,
+  hourPrice: both => `Tunnihind täna${both ? ' ja homme' : ''}`, mode: n => `${n}: režiim`, brightness: n => `${n}: heledus`,
+  ranges: { '24h': '24 h', '7d': '7 päeva', '30d': '30 päeva' }, range: 'Ajavahemik',
+  close: 'Sulge', more: 'Rohkem', systemPage: 'Süsteemi leht', loading: 'Laen…', historyFailed: 'Ajalugu ei saanud lugeda',
+  dataFailed: 'Andmeid ei saanud lugeda', noData: 'Selle aja kohta andmeid pole', noDataShort: 'Andmeid pole',
+  history: n => `${n}, ajalugu`, lowest: 'Madalaim', mean: 'Keskmine', highest: 'Kõrgeim', cheapest: 'Odavaim', dearest: 'Kalleim',
+  stateNow: 'Praegu', times: 'Kordi', total: 'Kokku', cost: 'Kulu', peakHour: 'Suurim tund', peakDay: 'Suurim päev',
+  outdoors: 'Õues', outside: v => `${v}° õues`, homeTitle: 'Kodu', system: 'Süsteem', update: l => `Uuendus: ${l}`,
+  priceTitle: 'Elekter, kõigi tasudega', exchange: v => `börsil ${v} senti`, priceAria: 'Elektri hind, ajalugu',
+  use: 'Tarbimine', useAria: 'Tarbimine, ajalugu',
+  weekdays: ['pühapäev', 'esmaspäev', 'teisipäev', 'kolmapäev', 'neljapäev', 'reede', 'laupäev'],
+  // "in <month>": the inessive is not one suffix for all
+  inMonth: ['jaanuaris', 'veebruaris', 'märtsis', 'aprillis', 'mais', 'juunis', 'juulis', 'augustis', 'septembris', 'oktoobris', 'novembris', 'detsembris'],
+  dayMonth: (d, m) => `${d}.${m}`, at: h => `kell ${h}`,
+  rest: 'Ülejäänud maja', restNote: 'kõik, mida eraldi ei mõõdeta', late: 'andmed hilinevad', todayLate: 'täna, andmed hilinevad',
+  inLast: (m, v) => `${m} ${v} kWh`, splitAria: (n, v) => `${n}, ${v} kWh sel kuul, ajalugu`,
+  curve: v => (!v ? 'Küttevesi täpselt kõvera järgi' : `Küttevesi ${Math.abs(v)}° ${v > 0 ? 'soojem' : 'jahedam'} kui kõvera järgi`),
+  ofHouse: p => `${p} % majast`, fault: 'Viga', offState: 'Väljas', stateUnknown: 'Seisund pole teada',
+  compare: { high: m => `Kallim kui ${m}`, good: m => `Odavam kui ${m}`, mid: m => `Sama hinnaga kui ${m}` },
+  thisMonth: 'Sel kuul', costUnknown: 'Kulu pole teada', average: v => `, keskmiselt ${v} senti/kWh`,
+  dayOf: (d, n) => `${d} päeva ${n}-st`, pace: v => `Selle tempoga umbes ${v} €`, todayCell: 'Täna', yesterdayCell: 'Eile',
+  noFees: 'Eurod ilma kuutasudeta.', monthAria: 'Sel kuul, tarbimise ajalugu', monthDate: (m, d) => `${m}, ${d}. päev`, energy: 'Energia',
+  unitSwitch: 'Ühik', dayAvg: 'päeva keskmine', dearestHour: 'kalleim tund', dearestHourAt: v => `kalleim tund ${v}`,
+  cheapestDay: 'Odavaim päev', dearestDay: 'Kalleim päev', largest: 'Suurim', smallest: 'Väikseim', todaySoFar: 'Täna seni', dayNotOver: 'päev pole läbi',
+  target: t => `Siht ${t}`, notBelow: v => `, mitte alla ${v}°`, rangeNote: (h, a, b) => `${h} tunniga ${a}° kuni ${b}°`, limit: v => `${v}° piir`,
+  failed: 'Ei õnnestunud', shiftDown: 'Nihe ühe kraadi võrra alla', shiftUp: 'Nihe ühe kraadi võrra üles'
+};
+const EN = {
+  locale: 'en-GB', and: 'and',
+  words: {
+    on: 'on', off: 'off', open: 'open', closed: 'closed', opening: 'opening', closing: 'closing', playing: 'playing',
+    paused: 'paused', idle: 'idle', standby: 'standby', buffering: 'buffering', home: 'home', not_home: 'away', disarmed: 'disarmed',
+    arming: 'arming', pending: 'entry delay', triggered: 'alarm', heat: 'heating', eco: 'eco',
+    performance: 'boost', unknown: 'unknown', unavailable: 'unavailable'
+  },
+  armed: 'armed', notKnown: 'not known', away: 'away', home: 'home',
+  alarmOn: l => `Alarm triggered: ${l}.`, attention: l => `Needs attention: ${l}.`, allOk: 'All is well.',
+  priceNow: w => ` Electricity is ${w} right now.`,
+  security: { triggered: 'alarm triggered', pending: 'entry delay', arming: 'arming', armed: 'armed' },
+  allDisarmed: 'all disarmed', peopleHome: l => `${l} home`, nobodyHome: 'nobody home',
+  electricity: 'Electricity', securityLabel: 'Security', climate: 'Climate', people: 'People', centShort: 'c',
+  cents: 'cents/kWh', priceUnknown: 'Price not known', energyLink: 'Energy ›', noForecast: 'No price forecast',
+  today: 'today', tomorrow: 'tomorrow', yesterday: 'yesterday', now: 'now', hourPrices: both => `Hourly prices, today${both ? ' and tomorrow' : ''}`,
+  hourPrice: both => `Hourly price today${both ? ' and tomorrow' : ''}`, mode: n => `${n}: mode`, brightness: n => `${n}: brightness`,
+  ranges: { '24h': '24 h', '7d': '7 days', '30d': '30 days' }, range: 'Time range',
+  close: 'Close', more: 'More', systemPage: 'System page', loading: 'Loading…', historyFailed: 'Could not read the history',
+  dataFailed: 'Could not read the data', noData: 'No data for this period', noDataShort: 'No data',
+  history: n => `${n}, history`, lowest: 'Lowest', mean: 'Average', highest: 'Highest', cheapest: 'Cheapest', dearest: 'Dearest',
+  stateNow: 'Now', times: 'Times', total: 'Total', cost: 'Cost', peakHour: 'Largest hour', peakDay: 'Largest day',
+  outdoors: 'Outdoors', outside: v => `${v}° outside`, homeTitle: 'Home', system: 'System', update: l => `Update: ${l}`,
+  priceTitle: 'Electricity, all fees included', exchange: v => `${v} cents on the exchange`, priceAria: 'Electricity price, history',
+  use: 'Use', useAria: 'Use, history',
+  weekdays: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+  inMonth: ['in January', 'in February', 'in March', 'in April', 'in May', 'in June', 'in July', 'in August', 'in September', 'in October', 'in November', 'in December'],
+  dayMonth: (d, m) => `${d}/${m}`, at: h => `at ${h}`,
+  rest: 'Rest of the house', restNote: 'everything not metered on its own', late: 'data delayed', todayLate: 'today, data delayed',
+  inLast: (m, v) => `${v} kWh ${m}`, splitAria: (n, v) => `${n}, ${v} kWh this month, history`,
+  curve: v => (!v ? 'Heating water right on the curve' : `Heating water ${Math.abs(v)}° ${v > 0 ? 'warmer' : 'cooler'} than the curve`),
+  ofHouse: p => `${p} % of the house`, fault: 'Fault', offState: 'Off', stateUnknown: 'State not known',
+  compare: { high: m => `Dearer than ${m}`, good: m => `Cheaper than ${m}`, mid: m => `Same price as ${m}` },
+  thisMonth: 'This month', costUnknown: 'Cost not known', average: v => `, on average ${v} cents/kWh`,
+  dayOf: (d, n) => `Day ${d} of ${n}`, pace: v => `At this pace about ${v} €`, todayCell: 'Today', yesterdayCell: 'Yesterday',
+  noFees: 'Euros without monthly fees.', monthAria: 'This month, use history', monthDate: (m, d) => `${m}, day ${d}`, energy: 'Energy',
+  unitSwitch: 'Unit', dayAvg: 'day average', dearestHour: 'dearest hour', dearestHourAt: v => `dearest hour ${v}`,
+  cheapestDay: 'Cheapest day', dearestDay: 'Dearest day', largest: 'Largest', smallest: 'Smallest', todaySoFar: 'Today so far', dayNotOver: 'day not over',
+  target: t => `Target ${t}`, notBelow: v => `, not below ${v}°`, rangeNote: (h, a, b) => `${a}° to ${b}° in ${h} hours`, limit: v => `${v}° limit`,
+  failed: 'Did not work', shiftDown: 'Shift one degree down', shiftUp: 'Shift one degree up'
+};
+// The words the house's sensors write (the price level, the tomorrow line's lead word), as they
+// arrive in each language: the house's templates write Estonian, the English demo English.
+const ET_SENSOR = {
+  tone: { 'väga odav': 'good', odav: 'good', tavaline: 'mid', 'kõrgevõitu': 'mid', kallis: 'high', 'väga kallis': 'high' },
+  phrase: { tavaline: 'tavalise hinnaga' }, lead: 'Homme'
+};
+const EN_SENSOR = {
+  tone: { 'very cheap': 'good', cheap: 'good', normal: 'mid', 'fairly high': 'mid', expensive: 'high', 'very expensive': 'high' },
+  phrase: { normal: 'at its normal price' }, lead: 'Tomorrow'
+};
+const LANGS = { et: [ET, ET_SENSOR], en: [EN, EN_SENSOR] };
+// the table of a language, Estonian for any other
+export const words = lang => (LANGS[lang] || LANGS.et)[0];
+export const sensorWords = lang => (LANGS[lang] || LANGS.et)[1];
+export const LANGUAGES = Object.keys(LANGS);
+
+// "a", "a ja b", "a, b ja c", in English "a, b and c"
+export function joinEt(list, lang = 'et') {
   if (list.length < 2) return list.join('');
-  return `${list.slice(0, -1).join(', ')} ja ${list[list.length - 1]}`;
+  return `${list.slice(0, -1).join(', ')} ${words(lang).and} ${list[list.length - 1]}`;
 }
 
-// a number with the Estonian decimal comma, as many decimals as given or as the string carries
-const NF = [0, 1, 2].map(d => new Intl.NumberFormat('et-EE', { minimumFractionDigits: d, maximumFractionDigits: d }));
-export function formatNumber(v, decimals) {
+// a number in the language's format (the Estonian decimal comma), as many decimals as given or as
+// the string carries
+const NF = new Map();
+export function formatNumber(v, decimals, lang = 'et') {
   const s = String(v ?? ''), n = Number(s);
   if (s.trim() === '' || !Number.isFinite(n)) return null;
-  return NF[Math.min(2, decimals ?? (s.split('.')[1] || '').length)].format(n);
+  const d = Math.min(2, decimals ?? (s.split('.')[1] || '').length), loc = words(lang).locale, k = `${loc}|${d}`;
+  if (!NF.has(k)) NF.set(k, new Intl.NumberFormat(loc, { minimumFractionDigits: d, maximumFractionDigits: d }));
+  return NF.get(k).format(n);
 }
 const withUnit = (n, unit) => (unit === '°C' ? `${n}°` : unit ? `${n} ${unit}` : n);
 
 // the lower-case state words the canvas uses in a tile's second line; HA's formatEntityState
 // capitalises and names each armed mode, where the design wants one "valves"
-const WORDS = {
-  on: 'sees', off: 'väljas', open: 'lahti', closed: 'kinni', opening: 'avaneb', closing: 'sulgub', playing: 'mängib',
-  paused: 'pausil', idle: 'ootel', standby: 'ootel', buffering: 'laeb', home: 'kodus', not_home: 'eemal', disarmed: 'valveta',
-  arming: 'valvestub', pending: 'sisenemisviivitus', triggered: 'häire', heat: 'küte', eco: 'säästlik',
-  performance: 'kiirsoojendus', unknown: 'teadmata', unavailable: 'pole saadaval'
-};
-export function stateWord(st) {
-  if (!st) return WORDS.unavailable;
+export function stateWord(st, lang = 'et') {
+  const w = words(lang);
+  if (!st) return w.words.unavailable;
   const s = st.state;
-  if (s.startsWith('armed_')) return 'valves';
-  if (WORDS[s]) return WORDS[s];
-  const n = formatNumber(s);
+  if (s.startsWith('armed_')) return w.armed;
+  if (Object.hasOwn(w.words, s)) return w.words[s];
+  const n = formatNumber(s, undefined, lang);
   return n === null ? s : withUnit(n, (st.attributes || {}).unit_of_measurement);
 }
 const TEMPERATURE_ATTRS = new Set(['current_temperature', 'temperature']);
-function attrText(st, key) {
+function attrText(st, key, lang) {
   const v = st && st.attributes ? st.attributes[key] : undefined;
   if (v === undefined || v === null || v === '') return '';
-  const n = typeof v === 'number' || /^-?\d+(\.\d+)?$/.test(String(v)) ? formatNumber(v) : null;
+  const n = typeof v === 'number' || /^-?\d+(\.\d+)?$/.test(String(v)) ? formatNumber(v, undefined, lang) : null;
   if (n === null) return String(v);
   return TEMPERATURE_ATTRS.has(key) ? `${n}°` : n;
 }
@@ -151,62 +252,64 @@ export function modeAction(entity, mode, current) {
 
 /* ---------- summary: the sentence and the chips ---------- */
 
-const PRICE_WORD = { tavaline: 'tavalise hinnaga' };
+
 const faultsOn = (states, faults) => (faults || []).filter(f => { const st = states[f.entity]; return !!st && st.state === (f.bad ?? 'on'); });
 
 // { text, warn }: the house in one or two sentences
-export function sentence(states, conf) {
+export function sentence(states, conf, lang = 'et') {
   const triggered = (conf.alarms || []).filter(a => stateOf(states, a.entity) === 'triggered');
   const faults = faultsOn(states, conf.faults);
+  const w = words(lang);
   let text, warn = true;
-  if (triggered.length) text = `Valve on häires: ${joinEt(triggered.map(a => a.name))}.`;
-  else if (faults.length) text = `Vajab tähelepanu: ${joinEt(faults.map(f => f.name))}.`;
-  else { text = 'Kõik on korras.'; warn = false; }
+  if (triggered.length) text = w.alarmOn(joinEt(triggered.map(a => a.name), lang));
+  else if (faults.length) text = w.attention(joinEt(faults.map(f => f.name), lang));
+  else { text = w.allOk; warn = false; }
   const level = conf.price && states[conf.price];
-  if (hasValue(level)) text += ` Elekter on praegu ${PRICE_WORD[level.state] || level.state}.`;
+  if (hasValue(level)) text += w.priceNow(sensorWords(lang).phrase[level.state] || level.state);
   return { text, warn };
 }
 
 // the security chip's line: what is armed, arming, delayed or alarming, per partition
-export function securityText(states, alarms) {
-  const groups = [['triggered', 'häires'], ['pending', 'sisenemisviivitus'], ['arming', 'valvestub'], ['armed', 'valves']];
+export function securityText(states, alarms, lang = 'et') {
+  const w = words(lang), groups = Object.entries(w.security);
   const of = a => { const s = stateOf(states, a.entity) || 'unavailable'; return s.startsWith('armed_') ? 'armed' : s; };
   const parts = [];
   for (const [key, word] of groups) {
     const names = alarms.filter(a => of(a) === key).map(a => a.name.toLowerCase());
-    if (names.length) parts.push(`${joinEt(names)} ${word}`);
+    if (names.length) parts.push(`${joinEt(names, lang)} ${word}`);
   }
   if (parts.length) return parts.join(', ');
-  return alarms.every(a => of(a) === 'disarmed') ? 'kõik valveta' : 'pole teada';
+  return alarms.every(a => of(a) === 'disarmed') ? w.allDisarmed : w.notKnown;
 }
 
-export function peopleText(states, people) {
-  const home = people.filter(p => stateOf(states, p.entity) === 'home').map(p => p.name);
-  return home.length ? `${joinEt(home)} kodus` : 'keegi pole kodus';
+export function peopleText(states, people, lang = 'et') {
+  const home = people.filter(p => stateOf(states, p.entity) === 'home').map(p => p.name), w = words(lang);
+  return home.length ? w.peopleHome(joinEt(home, lang)) : w.nobodyHome;
 }
 
 // [{ key, icon, color, label, value, warn, tap }]: the faults that are on, then the four summaries
-export function chips(states, conf) {
+export function chips(states, conf, lang = 'et') {
+  const w = words(lang);
   const out = faultsOn(states, conf.faults).map(f => ({ key: `fault:${f.entity}`, icon: 'alert', label: f.name, warn: true, tap: actionDetail(f.entity, { action: 'more-info' }) }));
   const level = conf.price && states[conf.price];
   if (conf.price) {
-    const arvel = level && formatNumber((level.attributes || {}).arvel, 1);
-    const value = hasValue(level) ? `${arvel ? `${arvel} s, ` : ''}${level.state}` : 'pole teada';
-    out.push({ key: 'price', icon: 'bolt', color: 'green', label: 'Elekter', value, tap: navigate(conf.energy_path) });
+    const arvel = level && formatNumber((level.attributes || {}).arvel, 1, lang);
+    const value = hasValue(level) ? `${arvel ? `${arvel} ${w.centShort}, ` : ''}${level.state}` : w.notKnown;
+    out.push({ key: 'price', icon: 'bolt', color: 'green', label: w.electricity, value, tap: navigate(conf.energy_path) });
   }
   const alarms = conf.alarms || [];
   if (alarms.length) {
     const armed = alarms.some(a => (stateOf(states, a.entity) || '').startsWith('armed_'));
     const alarming = alarms.some(a => ['triggered', 'pending'].includes(stateOf(states, a.entity)));
-    out.push({ key: 'security', icon: armed ? 'shield-check' : 'shield', color: 'blue', label: 'Turvalisus', value: securityText(states, alarms), warn: alarming, tap: actionDetail(alarms[0].entity, { action: 'more-info' }) });
+    out.push({ key: 'security', icon: armed ? 'shield-check' : 'shield', color: 'blue', label: w.securityLabel, value: securityText(states, alarms, lang), warn: alarming, tap: actionDetail(alarms[0].entity, { action: 'more-info' }) });
   }
   const c = conf.climate || {};
   const t = states[c.temperature], h = states[c.humidity];
-  const tn = hasValue(t) && formatNumber(t.state, 1), hn = hasValue(h) && formatNumber(h.state, 0);
+  const tn = hasValue(t) && formatNumber(t.state, 1, lang), hn = hasValue(h) && formatNumber(h.state, 0, lang);
   const climate = [tn && `${tn}°`, hn && `${hn} %`].filter(Boolean);
-  if (climate.length) out.push({ key: 'climate', icon: 'thermometer', color: 'warm', label: 'Kliima', value: climate.join(' · ') });
+  if (climate.length) out.push({ key: 'climate', icon: 'thermometer', color: 'warm', label: w.climate, value: climate.join(' · ') });
   const people = conf.people || [];
-  if (people.length) out.push({ key: 'people', icon: 'people', label: 'Inimesed', value: peopleText(states, people), tap: actionDetail(people[0].entity, { action: 'more-info' }) });
+  if (people.length) out.push({ key: 'people', icon: 'people', label: w.people, value: peopleText(states, people, lang), tap: actionDetail(people[0].entity, { action: 'more-info' }) });
   return out;
 }
 
@@ -246,23 +349,23 @@ export function tileActive(st, active = DEFAULT_ACTIVE) {
 
 // one part of a tile's second line: 'state', an attribute, another entity or { entity|attribute, label }
 const partEntity = p => (p && typeof p === 'object' ? p.entity : typeof p === 'string' && p.includes('.') ? p : null);
-function part(p, st, states) {
+function part(p, st, states, lang) {
   const e = partEntity(p);
-  const v = e ? (hasValue(states[e]) ? stateWord(states[e]) : '') : p === 'state' ? stateWord(st) : attrText(st, typeof p === 'object' ? p.attribute : p);
+  const v = e ? (hasValue(states[e]) ? stateWord(states[e], lang) : '') : p === 'state' ? stateWord(st, lang) : attrText(st, typeof p === 'object' ? p.attribute : p, lang);
   return v && p.label ? `${p.label} ${v}` : v;
 }
 
 // { lit, unavailable, text } for the tile's look and its second line
-export function tileState(conf, states) {
+export function tileState(conf, states, lang = 'et') {
   const st = states[conf.entity];
   const sc = conf.state_text;
   // a fixed text (a link's description) stays whatever the entity's state
   if (typeof sc === 'string') return { lit: tileActive(st, conf.active), unavailable: false, text: sc };
-  if (!hasValue(st)) return { lit: false, unavailable: true, text: 'pole saadaval' };
+  if (!hasValue(st)) return { lit: false, unavailable: true, text: words(lang).words.unavailable };
   const lit = tileActive(st, conf.active);
   let text;
-  if (Array.isArray(sc)) text = sc.map(p => part(p, st, states)).filter(Boolean).join(' · ');
-  else text = stateWord(st);
+  if (Array.isArray(sc)) text = sc.map(p => part(p, st, states, lang)).filter(Boolean).join(' · ');
+  else text = stateWord(st, lang);
   return { lit, unavailable: false, text };
 }
 
@@ -295,6 +398,8 @@ class KheCard extends Base {
   setConfig(config) {
     this._check(config || {});
     this._config = config;
+    this._lang = config.language;
+    this._w = words(config.language);
     this._a3 = config.style === 'a3' || !!this.constructor.a3only;
     this._cssDark = null;
     this._ids = this._watched();
@@ -377,9 +482,9 @@ span.chip{cursor:default}
   }
   _html(states, pal) {
     const c = this._config;
-    const s = sentence(states, c);
+    const s = sentence(states, c, this._lang);
     this._actions = new Map();
-    const list = chips(states, c).map(ch => {
+    const list = chips(states, c, this._lang).map(ch => {
       if (ch.tap) this._actions.set(ch.key, ch.tap);
       const color = ch.warn ? pal.high : ch.color ? litPair(pal, ch.color)[pal.dark ? 0 : 1] : pal.icon;
       const inner = `${icon(ch.icon, 22, color)}<span class="t"><span class="l">${esc(ch.label)}</span>${ch.value ? `<span class="v">${esc(ch.value)}</span>` : ''}</span>`;
@@ -443,35 +548,35 @@ ha-card{display:flex;flex-direction:column;padding:0 4px}
       sel.setAttribute('visibility', i === null ? 'hidden' : 'visible');
       if (i === null) { [lab.textContent, n.textContent] = was; return; }
       sel.setAttribute('x', (i * P.slot - 1).toFixed(1));
-      lab.textContent = cap(hourSpan(P.bars[i]));
-      n.textContent = formatNumber((P.bars[i].t * 100).toFixed(1), 1);
+      lab.textContent = cap(hourSpan(P.bars[i], this._lang));
+      n.textContent = formatNumber((P.bars[i].t * 100).toFixed(1), 1, this._lang);
     }, false);
   }
   _html(states, pal) {
     if (this._a3) return priceA3(this, states, pal);
-    const c = this._config;
+    const c = this._config, w = this._w;
     const level = states[c.level], fc = states[c.forecast];
     const link = navigate(c.energy_path);
     this._actions = new Map([['energy', link]]);
-    const arvel = hasValue(level) && formatNumber((level.attributes || {}).arvel, 1);
+    const arvel = hasValue(level) && formatNumber((level.attributes || {}).arvel, 1, this._lang);
     const hinnang = hasValue(level) && (level.attributes || {}).hinnang;
-    const top = `<div class="top">${arvel ? `<span class="num">${arvel}</span><span class="unit">senti/kWh · ${esc(level.state)}</span>` : '<span class="unit">Hind pole teada</span>'}${link ? '<button type="button" class="link" data-k="energy">Energia ›</button>' : ''}</div>${hinnang ? `<p class="hint">${esc(hinnang)}.</p>` : ''}`;
+    const top = `<div class="top">${arvel ? `<span class="num">${arvel}</span><span class="unit">${w.cents} · ${esc(level.state)}</span>` : `<span class="unit">${w.priceUnknown}</span>`}${link ? `<button type="button" class="link" data-k="energy">${esc(w.energyLink)}</button>` : ''}</div>${hinnang ? `<p class="hint">${esc(hinnang)}.</p>` : ''}`;
     const b = priceBars(fc && fc.attributes && fc.attributes.prices, new Date(), c.bands);
     let chart;
-    if (!b) chart = '<p class="empty">Hinnaprognoosi pole</p>';
+    if (!b) chart = `<p class="empty">${w.noForecast}</p>`;
     else {
       const bars = b.bars.map(x => `<div class="bar ${x.level}${x.past ? ' past' : ''}${x.tomorrow ? ' tomorrow' : ''}${x.now ? ' now' : ''}" style="height:${(x.height * 100).toFixed(1)}%"></div>`).join('');
-      const axis = b.bars.length > b.today ? ['00', '12', '<span class="day">homme</span>', '12', '24'] : ['00', '06', '12', '18', '24'];
-      const label = `Tunnihinnad, täna${b.bars.length > b.today ? ' ja homme' : ''}`;
+      const axis = b.bars.length > b.today ? ['00', '12', `<span class="day">${w.tomorrow}</span>`, '12', '24'] : ['00', '06', '12', '18', '24'];
+      const label = w.hourPrices(b.bars.length > b.today);
       chart = `<div class="bars" role="img" aria-label="${label}">${bars}</div><div class="axis" aria-hidden="true">${axis.map(a => `<span>${a}</span>`).join('')}</div>`;
     }
     const windows = (c.windows || []).map(w => [w.name, (states[w.entity] && states[w.entity].attributes || {}).tekst]).filter(([, t]) => t);
     const tomorrow = hasValue(states[c.tomorrow]) && (states[c.tomorrow].attributes || {}).tekst;
     const usage = (c.usage || []).map(u => {
       const st = states[u.entity];
-      if (!hasValue(st)) return [u.name, 'pole saadaval'];
+      if (!hasValue(st)) return [u.name, w.words.unavailable];
       const kulu = (st.attributes || {}).kulu;
-      return [u.name, `${stateWord(st)}${kulu ? ` · ${kulu}` : ''}`];
+      return [u.name, `${stateWord(st, this._lang)}${kulu ? ` · ${kulu}` : ''}`];
     });
     const boxes = list => `<div class="boxes">${list.map(([l, v]) => `<div class="box"><span class="l">${esc(l)}</span><span class="v">${esc(v)}</span></div>`).join('')}</div>`;
     const parts = [top, chart];
@@ -521,7 +626,7 @@ ha-card.modes{display:flex;flex-direction:column;gap:10px;padding:12px}
   _html(states, pal) {
     if (this._a3) return tileA3(this, states, pal);
     const c = this._config;
-    const ts = tileState(c, states);
+    const ts = tileState(c, states, this._lang);
     const name = c.name || ((states[c.entity] || {}).attributes || {}).friendly_name || c.entity;
     const [discBg, iconColor] = ts.lit ? litPair(pal, c.color) : [pal.disc, pal.icon];
     const key = ts.lit && c.icon_on ? c.icon_on : c.icon;
@@ -545,7 +650,7 @@ ha-card.modes{display:flex;flex-direction:column;gap:10px;padding:12px}
       this._actions.set(k, modeAction(c.entity, m, current));
       return `<button type="button" data-k="${k}" aria-pressed="${m.option === current}">${esc(m.name)}</button>`;
     }).join('');
-    return `<ha-card class="modes ${cls}"><div class="head">${passes ? '' : discEl}${body}</div><div class="seg" role="group" aria-label="${esc(`${name}: režiim`)}">${seg}</div></ha-card>`;
+    return `<ha-card class="modes ${cls}"><div class="head">${passes ? '' : discEl}${body}</div><div class="seg" role="group" aria-label="${esc(this._w.mode(name))}">${seg}</div></ha-card>`;
   }
 }
 
@@ -599,9 +704,9 @@ button:focus-visible{outline-color:var(--accent)}
 
 // The ranges: the statistics period for a measurement and for an energy counter, and the span.
 export const RANGES = {
-  '24h': { name: '24 h', ms: 24 * HOUR, period: '5minute', energy: 'hour' },
-  '7d': { name: '7 päeva', ms: 7 * 24 * HOUR, period: 'hour', energy: 'day' },
-  '30d': { name: '30 päeva', ms: 30 * 24 * HOUR, period: 'day', energy: 'day' }
+  '24h': { ms: 24 * HOUR, period: '5minute', energy: 'hour' },
+  '7d': { ms: 7 * 24 * HOUR, period: 'hour', energy: 'day' },
+  '30d': { ms: 30 * 24 * HOUR, period: 'day', energy: 'day' }
 };
 
 // The WebSocket message for a tile's history config ({ entity, source, type, cost }) over a range.
@@ -731,21 +836,21 @@ export function chartPaths(series, { w = 350, h = 170, top = 14, bot = 12, t0, t
 }
 
 // five axis labels from t0 to t1: hours for a day, weekdays for a week, dates for a month
-export function axisLabels(range, t0, t1) {
+export function axisLabels(range, t0, t1, lang = 'et') {
   const fmt = range === '24h' ? { hour: '2-digit', minute: '2-digit' } : range === '7d' ? { weekday: 'short' } : { day: 'numeric', month: 'numeric' };
-  const F = new Intl.DateTimeFormat('et-EE', fmt);
-  return [0, 1, 2, 3].map(i => F.format(new Date(t0 + ((t1 - t0) * i) / 4))).concat('nüüd');
+  const w = words(lang), F = new Intl.DateTimeFormat(w.locale, fmt);
+  return [0, 1, 2, 3].map(i => F.format(new Date(t0 + ((t1 - t0) * i) / 4))).concat(w.now);
 }
 
-const LEVEL_TONE = { 'väga odav': 'good', odav: 'good', tavaline: 'mid', 'kõrgevõitu': 'mid', kallis: 'high', 'väga kallis': 'high' };
-export const levelTone = word => LEVEL_TONE[word] || 'mid';
+// a price level's tone by the word the level sensor writes in that language
+export const levelTone = (word, lang = 'et') => sensorWords(lang).tone[word] || 'mid';
 const cap = s => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 // a value split for display: { value, unit } with the decimal comma, or the state word
-export function splitValue(st, decimals) {
-  if (!hasValue(st)) return { value: stateWord(st), unit: '' };
-  const n = formatNumber(st.state, decimals);
-  if (n === null) return { value: stateWord(st), unit: '' };
+export function splitValue(st, decimals, lang = 'et') {
+  if (!hasValue(st)) return { value: stateWord(st, lang), unit: '' };
+  const n = formatNumber(st.state, decimals, lang);
+  if (n === null) return { value: stateWord(st, lang), unit: '' };
   const u = (st.attributes || {}).unit_of_measurement || '';
   return u === '°C' ? { value: `${n}°`, unit: '' } : { value: n, unit: u };
 }
@@ -839,13 +944,13 @@ class Sheet {
     if (v) v.innerHTML = this.nowHtml();
   }
   nowHtml() {
-    const sp = this.spec, st = this.card._hass.states[sp.entity];
+    const sp = this.spec, st = this.card._hass.states[sp.entity], L = this.card._lang, w = this.card._w;
     if (sp.price) {
-      const a = hasValue(st) && formatNumber((st.attributes || {}).arvel, 1);
-      return a ? `<span class="v num">${a}</span><span class="u">senti/kWh</span>` : '<span class="v">pole teada</span>';
+      const a = hasValue(st) && formatNumber((st.attributes || {}).arvel, 1, L);
+      return a ? `<span class="v num">${a}</span><span class="u">${w.cents}</span>` : `<span class="v">${w.notKnown}</span>`;
     }
     if (sp.text) return `<span class="v">${esc(sp.text(this.card._hass.states))}</span>`;
-    const { value, unit } = splitValue(st, sp.decimals);
+    const { value, unit } = splitValue(st, sp.decimals, L);
     return `<span class="v num">${esc(value)}</span>${unit ? `<span class="u">${esc(unit)}</span>` : ''}`;
   }
   async load() {
@@ -871,14 +976,14 @@ class Sheet {
     this.render();
   }
   render() {
-    const sp = this.spec, ranged = !sp.price && sp.history;
-    const ranges = ranged ? `<div class="ranges" role="group" aria-label="Ajavahemik">${Object.entries(RANGES).map(([k, r]) => `<button type="button" data-s="${k}" aria-pressed="${k === this.range}">${r.name}</button>`).join('')}</div>` : '';
+    const sp = this.spec, ranged = !sp.price && sp.history, w = this.card._w;
+    const ranges = ranged ? `<div class="ranges" role="group" aria-label="${w.range}">${Object.keys(RANGES).map(k => `<button type="button" data-s="${k}" aria-pressed="${k === this.range}">${w.ranges[k]}</button>`).join('')}</div>` : '';
     this.point = null;
     const chart = sp.price ? this.priceChart() : this.seriesChart();
     this.body.innerHTML = `<span class="grab" aria-hidden="true"></span>
       <div class="top"><div><div class="title">${esc(sp.title)}</div><div class="now">${this.nowHtml()}</div></div>
-      <button type="button" class="x" data-s="close" aria-label="Sulge"><i>${icon('close', 14, 'currentColor')}</i></button></div>
-      ${ranges}${chart}<div class="acts"><button type="button" class="more" data-s="more">Rohkem</button>${sp.view ? '<button type="button" class="more" data-s="view">Süsteemi leht</button>' : ''}</div>`;
+      <button type="button" class="x" data-s="close" aria-label="${w.close}"><i>${icon('close', 14, 'currentColor')}</i></button></div>
+      ${ranges}${chart}<div class="acts"><button type="button" class="more" data-s="more">${w.more}</button>${sp.view ? `<button type="button" class="more" data-s="view">${w.systemPage}</button>` : ''}</div>`;
     this.el.setAttribute('aria-label', sp.title);
     this.wire();
   }
@@ -900,9 +1005,9 @@ class Sheet {
     return `<div class="stats">${list.map(([k, v]) => `<span><span class="k">${esc(k)}</span><span class="v num">${esc(v)}</span></span>`).join('')}</div>`;
   }
   priceChart() {
-    const sp = this.spec, fc = this.card._hass.states[sp.price.forecast];
+    const sp = this.spec, fc = this.card._hass.states[sp.price.forecast], L = this.card._lang, w = this.card._w;
     const b = priceBars(fc && fc.attributes && fc.attributes.prices, new Date(), sp.price.bands);
-    if (!b) return '<div class="chart"><div class="msg">Hinnaprognoosi pole</div></div>';
+    if (!b) return `<div class="chart"><div class="msg">${w.noForecast}</div></div>`;
     const pal = a3Palette(this.card._hass.themes && this.card._hass.themes.darkMode);
     const n = b.bars.length, slot = W / n, bw = slot * 0.74;
     const paths = { cheap: '', mid: '', high: '' };
@@ -913,30 +1018,31 @@ class Sheet {
     const cur = b.bars[b.current];
     const dot = cur ? `<span class="dot" style="left:${(((b.current + 0.5) * slot) / W * 100).toFixed(2)}%;top:${((H - 12 - Math.max(2, cur.height * (H - 26))) / H * 100).toFixed(2)}%;background:${pal.text}"></span>` : '';
     const ts = b.bars.map(x => x.t * 100), mean = ts.reduce((a, v) => a + v, 0) / ts.length;
-    const lab = b.bars.length > b.today ? ['täna 00', '12', 'homme 00', '12', '24'] : ['00', '06', '12', '18', '24'];
+    const lab = b.bars.length > b.today ? [`${w.today} 00`, '12', `${w.tomorrow} 00`, '12', '24'] : ['00', '06', '12', '18', '24'];
+    const f1 = v => formatNumber(v.toFixed(1), 1, L);
     this.point = {
       pick: f => Math.min(n - 1, Math.floor(f * n)),
-      read: i => ({ x: (i + 0.5) * slot, v: formatNumber((b.bars[i].t * 100).toFixed(1), 1), u: `senti/kWh · ${hourSpan(b.bars[i])}` })
+      read: i => ({ x: (i + 0.5) * slot, v: f1(b.bars[i].t * 100), u: `${w.cents} · ${hourSpan(b.bars[i], L)}` })
     };
-    return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Tunnihind täna${b.bars.length > b.today ? ' ja homme' : ''}">
+    return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${w.hourPrice(b.bars.length > b.today)}">
       <path d="M0 42.5H${W}M0 85H${W}M0 127.5H${W}" stroke="${pal.hair}" vector-effect="non-scaling-stroke"/>
       <path d="${paths.cheap}" fill="${pal.cheap}"/><path d="${paths.mid}" fill="${pal.midBar}"/><path d="${paths.high}" fill="${pal.highBar}"/>${SEL(pal.text)}</svg>${dot}</div>
       <div class="axis" aria-hidden="true">${lab.map(l => `<span>${l}</span>`).join('')}</div>
-      ${this.stats([['Odavaim', formatNumber(Math.min(...ts).toFixed(1), 1)], ['Keskmine', formatNumber(mean.toFixed(1), 1)], ['Kalleim', formatNumber(Math.max(...ts).toFixed(1), 1)]])}`;
+      ${this.stats([[w.cheapest, f1(Math.min(...ts))], [w.mean, f1(mean)], [w.dearest, f1(Math.max(...ts))]])}`;
   }
   seriesChart() {
-    const sp = this.spec, d = this.data;
+    const sp = this.spec, d = this.data, L = this.card._lang, w = this.card._w;
     const blank = msg => `<div class="chart"><div class="msg">${msg}</div></div><div class="axis"><span>&nbsp;</span></div>${this.stats([['', '–'], ['', '–'], ['', '–']])}`;
-    if (!d || d.loading) return blank('Laen…');
+    if (!d || d.loading) return blank(w.loading);
     const { series, range, now } = d;
-    if (series.kind === 'error') return blank('Ajalugu ei saanud lugeda');
+    if (series.kind === 'error') return blank(w.historyFailed);
     const t0 = now - RANGES[range].ms, t1 = now;
     const color = a3Color(sp.color)[0];
     const pal = a3Palette(this.card._hass.themes && this.card._hass.themes.darkMode);
     const grid = `<path d="M0 42.5H${W}M0 85H${W}M0 127.5H${W}" stroke="${pal.hair}" vector-effect="non-scaling-stroke"/>`;
-    const axis = `<div class="axis" aria-hidden="true">${axisLabels(range, t0, t1).map(l => `<span>${esc(l)}</span>`).join('')}</div>`;
-    const svg = inner => `<div class="chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(sp.title)}, ajalugu">${grid}${inner}${SEL(pal.text)}</svg></div>${axis}`;
-    const fmt = v => formatNumber(v.toFixed(sp.decimals ?? 1), sp.decimals ?? 1);
+    const axis = `<div class="axis" aria-hidden="true">${axisLabels(range, t0, t1, L).map(l => `<span>${esc(l)}</span>`).join('')}</div>`;
+    const svg = inner => `<div class="chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(w.history(sp.title))}">${grid}${inner}${SEL(pal.text)}</svg></div>${axis}`;
+    const fmt = v => formatNumber(v.toFixed(sp.decimals ?? 1), sp.decimals ?? 1, L);
     const unit = sp.unit ? (sp.unit === '°C' ? '°' : ` ${sp.unit}`) : '';
     // a bar is read at its middle, a line at its point
     if (series.kind !== 'step') {
@@ -948,29 +1054,29 @@ class Sheet {
         // a stepped line holds its value: it is read at the pointer, not where it last changed
         read: (i, f) => {
           const t = series.stepped ? t0 + f * (t1 - t0) : pts[i].t;
-          return { x: series.stepped ? f * W : xOf(t), v: sp.unit === '°C' ? `${fmt(pts[i].v)}°` : fmt(pts[i].v), u: [sp.unit === '°C' ? '' : sp.unit, whenLabel(t, range, bars, now)].filter(Boolean).join(' · ') };
+          return { x: series.stepped ? f * W : xOf(t), v: sp.unit === '°C' ? `${fmt(pts[i].v)}°` : fmt(pts[i].v), u: [sp.unit === '°C' ? '' : sp.unit, whenLabel(t, range, bars, now, L)].filter(Boolean).join(' · ') };
         }
       };
     }
     if (series.kind === 'step') {
       const p = chartPaths(series, { t0, t1, lo: 0, hi: 1 });
       const s = stepStats(series, t0, now);
-      const hrs = s.hours < 10 ? formatNumber(s.hours.toFixed(1), 1) : String(Math.round(s.hours));
-      return `${svg(`<path d="${p.bands}" fill="${color}" fill-opacity="0.55"/>`)}${this.stats([['Praegu', sp.text ? sp.text(this.card._hass.states) : stateWord(this.card._hass.states[sp.entity])], ['Kordi', String(s.times)], ['Kokku', `${hrs} h`]])}`;
+      const hrs = s.hours < 10 ? formatNumber(s.hours.toFixed(1), 1, L) : String(Math.round(s.hours));
+      return `${svg(`<path d="${p.bands}" fill="${color}" fill-opacity="0.55"/>`)}${this.stats([[w.stateNow, sp.text ? sp.text(this.card._hass.states) : stateWord(this.card._hass.states[sp.entity], L)], [w.times, String(s.times)], [w.total, `${hrs} h`]])}`;
     }
     if (series.kind === 'bars') {
       const s = barStats(series);
-      if (!s) return blank('Selle aja kohta andmeid pole');
+      if (!s) return blank(w.noData);
       const p = chartPaths(series, { t0, t1, lo: 0, hi: s.peak || 1 });
-      const per = RANGES[range].energy === 'hour' ? 'Suurim tund' : 'Suurim päev';
-      const middle = s.cost === null || s.cost === undefined ? ['Keskmine', `${fmt(s.total / series.points.length)}${unit}`] : ['Kulu', `${formatNumber(s.cost.toFixed(2), 2)} €`];
-      return `${svg(`<path d="${p.bars}" fill="${color}"/>`)}${this.stats([['Kokku', `${fmt(s.total)}${unit}`], middle, [per, `${fmt(s.peak)}${unit}`]])}`;
+      const per = RANGES[range].energy === 'hour' ? w.peakHour : w.peakDay;
+      const middle = s.cost === null || s.cost === undefined ? [w.mean, `${fmt(s.total / series.points.length)}${unit}`] : [w.cost, `${formatNumber(s.cost.toFixed(2), 2, L)} €`];
+      return `${svg(`<path d="${p.bars}" fill="${color}"/>`)}${this.stats([[w.total, `${fmt(s.total)}${unit}`], middle, [per, `${fmt(s.peak)}${unit}`]])}`;
     }
     const s = series.kind === 'line' && lineStats(series, t0, now);
-    if (!s) return blank('Selle aja kohta andmeid pole');
+    if (!s) return blank(w.noData);
     const pad = (s.hi - s.lo) * 0.08 || 0.5;
     const p = chartPaths(series, { t0, t1, lo: s.lo - pad, hi: s.hi + pad });
-    return `${svg(`<path d="${p.area}" fill="${color}" fill-opacity="0.16"/><path d="${p.line}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`)}${this.stats([['Madalaim', `${fmt(s.lo)}${unit}`], ['Keskmine', `${fmt(s.mean)}${unit}`], ['Kõrgeim', `${fmt(s.hi)}${unit}`]])}`;
+    return `${svg(`<path d="${p.area}" fill="${color}" fill-opacity="0.16"/><path d="${p.line}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`)}${this.stats([[w.lowest, `${fmt(s.lo)}${unit}`], [w.mean, `${fmt(s.mean)}${unit}`], [w.highest, `${fmt(s.hi)}${unit}`]])}`;
   }
 }
 
@@ -980,7 +1086,7 @@ class Sheet {
 const tileName = (conf, st) => conf.name || ((st || {}).attributes || {}).friendly_name || conf.entity;
 
 // what a tap on a tile with `history` opens: the tile's value now, the history entity's series
-export function tileSheet(conf, states) {
+export function tileSheet(conf, states, lang = 'et') {
   const h = conf.history;
   if (!h) return null;
   // a measurement read from another entity (the boost tile's boiler water) is also the sheet's value
@@ -998,7 +1104,7 @@ export function tileSheet(conf, states) {
     view: h.view,
     history: { ...h, entity: h.entity || conf.entity }
   };
-  if (h.source === 'history' && !h.numeric) spec.text = now => tileState(conf, now).text;
+  if (h.source === 'history' && !h.numeric) spec.text = now => tileState(conf, now, lang).text;
   return spec;
 }
 
@@ -1065,7 +1171,7 @@ h1{margin:0;font-size:34px;line-height:1.05;font-weight:700;letter-spacing:-0.02
     return [...(c.people || []), ...(c.alarms || []), ...(c.faults || []), ...(c.status ? [c.status] : [])].map(x => x.entity).concat(c.outdoor ? [c.outdoor.entity] : []);
   }
   _html(states) {
-    const c = this._config;
+    const c = this._config, w = this._w, L = this._lang;
     this._actions = new Map();
     this._sheets = new Map();
     const chip = (key, entity, cls, ic, name, word) => {
@@ -1074,30 +1180,30 @@ h1{margin:0;font-size:34px;line-height:1.05;font-weight:700;letter-spacing:-0.02
     };
     const list = [
       ...faultsOn(states, c.faults).map(f => chip(`f:${f.entity}`, f.entity, 'bad', 'alert', f.name, '')),
-      ...(c.people || []).map(p => { const s = stateOf(states, p.entity); return chip(`p:${p.entity}`, p.entity, s === 'home' ? 'ok' : '', 'person', p.name, s === 'home' ? 'kodus' : hasValue(states[p.entity]) ? 'eemal' : 'pole teada'); }),
+      ...(c.people || []).map(p => { const s = stateOf(states, p.entity); return chip(`p:${p.entity}`, p.entity, s === 'home' ? 'ok' : '', 'person', p.name, s === 'home' ? w.home : hasValue(states[p.entity]) ? w.away : w.notKnown); }),
       ...(c.alarms || []).map(a => {
         const st = states[a.entity], s = (st || {}).state || '';
         const cls = ['triggered', 'pending'].includes(s) ? 'bad' : s.startsWith('armed_') ? 'ok' : '';
-        return chip(`a:${a.entity}`, a.entity, cls, s.startsWith('armed_') ? 'shield-check' : 'shield', a.name, stateWord(st));
+        return chip(`a:${a.entity}`, a.entity, cls, s.startsWith('armed_') ? 'shield-check' : 'shield', a.name, stateWord(st, L));
       })
     ];
     let out = '';
     if (c.outdoor) {
       const st = states[c.outdoor.entity];
-      const v = hasValue(st) && formatNumber(st.state, c.outdoor.decimals ?? 1);
-      this._sheets.set('out', { title: c.outdoor.name || 'Õues', entity: c.outdoor.entity, more: c.outdoor.entity, decimals: c.outdoor.decimals ?? 1, unit: '°C', color: 'teal', history: { entity: c.outdoor.entity, ...c.outdoor.history } });
-      if (v) out = `<button type="button" class="out" data-k="out">${v}° õues</button>`;
+      const v = hasValue(st) && formatNumber(st.state, c.outdoor.decimals ?? 1, L);
+      this._sheets.set('out', { title: c.outdoor.name || w.outdoors, entity: c.outdoor.entity, more: c.outdoor.entity, decimals: c.outdoor.decimals ?? 1, unit: '°C', color: 'teal', history: { entity: c.outdoor.entity, ...c.outdoor.history } });
+      if (v) out = `<button type="button" class="out" data-k="out">${esc(w.outside(v))}</button>`;
     }
-    const line = statusLine(states, c);
+    const line = statusLine(states, c, L);
     const status = line ? `<span class="status ${line.tone}"><i></i>${esc(line.text)}</span>` : '';
-    const head = `<div class="head"><h1>${esc(c.title || 'Kodu')}</h1>${out}</div>${status}`, row = list.length ? `<div class="row">${list.join('')}</div>` : '';
+    const head = `<div class="head"><h1>${esc(c.title || w.homeTitle)}</h1>${out}</div>${status}`, row = list.length ? `<div class="row">${list.join('')}</div>` : '';
     const body = { title: head, chips: row }[c.part] ?? head + row;
     return `<div class="wrap${c.part === 'title' ? ' title' : ''}">${body}</div>`;
   }
 }
 
 // system health as dots: green while fine, red when not, orange for pending updates
-export function statusItems(states, conf) {
+export function statusItems(states, conf, lang = 'et') {
   const ok = (it, st) => {
     if (!hasValue(st)) return false;
     const o = it.ok || {};
@@ -1108,11 +1214,11 @@ export function statusItems(states, conf) {
   const out = (conf.items || []).map(it => {
     const st = states[it.entity];
     const good = ok(it, st);
-    const value = it.value && hasValue(st) ? ` ${stateWord(st)}` : '';
+    const value = it.value && hasValue(st) ? ` ${stateWord(st, lang)}` : '';
     return { entity: it.entity, text: `${it.name}${value}`, tone: good ? 'ok' : 'bad' };
   });
   const pending = (conf.updates || []).filter(u => stateOf(states, u.entity) === 'on');
-  if (pending.length) out.push({ entity: pending[0].entity, text: `Uuendus: ${joinEt(pending.map(u => u.name))}`, tone: 'mid' });
+  if (pending.length) out.push({ entity: pending[0].entity, text: words(lang).update(joinEt(pending.map(u => u.name), lang)), tone: 'mid' });
   return out;
 }
 
@@ -1134,11 +1240,11 @@ class StatusCard extends KheCard {
     const c = this._config;
     const link = actionDetail(null, c.tap_action);
     this._actions = new Map([['t', link]]);
-    const dots = statusItems(states, c).map((d, i) => {
+    const dots = statusItems(states, c, this._lang).map((d, i) => {
       this._actions.set(`d${i}`, actionDetail(d.entity, { action: 'more-info' }));
       return `<button type="button" class="d ${d.tone}" data-k="d${i}"><i></i>${esc(d.text)}</button>`;
     }).join('');
-    const title = `${esc(c.title || 'Süsteem')}${link ? icon('chevron', 16, 'currentColor') : ''}`;
+    const title = `${esc(c.title || this._w.system)}${link ? icon('chevron', 16, 'currentColor') : ''}`;
     return `<div class="glass box">${link ? `<button type="button" class="t" data-k="t">${title}</button>` : `<span class="t">${title}</span>`}<div class="dots">${dots}</div></div>`;
   }
 }
@@ -1175,18 +1281,18 @@ const PRICE_A3_CSS = `
 
 // the price card's A3 look: the price now, the 48 bars, the window lines; the use row under it
 function priceA3(card, states, pal) {
-  const c = card._config;
+  const c = card._config, L = card._lang, w = card._w;
   const level = states[c.level], fc = states[c.forecast];
   card._actions = new Map();
-  card._sheets = new Map([['price', { title: 'Elekter, kõigi tasudega', entity: c.level, more: c.level, price: { forecast: c.forecast, bands: c.bands } }]]);
+  card._sheets = new Map([['price', { title: w.priceTitle, entity: c.level, more: c.level, price: { forecast: c.forecast, bands: c.bands } }]]);
   const a = level && hasValue(level) ? level.attributes || {} : null;
-  const arvel = a && formatNumber(a.arvel, 1), senti = a && formatNumber(a.senti, 1);
-  const sub = a ? [a.hinnang, senti && `börsil ${senti} senti`].filter(Boolean).join(', ') : '';
-  const badge = a ? `<span class="badge ${levelTone(level.state)}">${esc(cap(level.state))}</span>` : '';
-  const top = `<span class="hd"><span class="l"><span class="lab">Praegu</span>${arvel ? `<span class="big"><span class="n num">${arvel}</span><span class="u">senti/kWh</span></span>` : '<span class="big"><span class="u">Hind pole teada</span></span>'}${sub ? `<span class="sub">${esc(cap(sub))}</span>` : ''}</span>${badge}</span>`;
+  const arvel = a && formatNumber(a.arvel, 1, L), senti = a && formatNumber(a.senti, 1, L);
+  const sub = a ? [a.hinnang, senti && w.exchange(senti)].filter(Boolean).join(', ') : '';
+  const badge = a ? `<span class="badge ${levelTone(level.state, L)}">${esc(cap(level.state))}</span>` : '';
+  const top = `<span class="hd"><span class="l"><span class="lab">${w.stateNow}</span>${arvel ? `<span class="big"><span class="n num">${arvel}</span><span class="u">${w.cents}</span></span>` : `<span class="big"><span class="u">${w.priceUnknown}</span></span>`}${sub ? `<span class="sub">${esc(cap(sub))}</span>` : ''}</span>${badge}</span>`;
   const b = priceBars(fc && fc.attributes && fc.attributes.prices, new Date(), c.bands);
   card._point = null;
-  let chart = '<span class="empty">Hinnaprognoosi pole</span>';
+  let chart = `<span class="empty">${w.noForecast}</span>`;
   if (b) {
     const n = b.bars.length, slot = 336 / n, bw = Math.max(1, slot - 2);
     const paths = { cheap: '', mid: '', high: '' }, past = { cheap: '', mid: '', high: '' };
@@ -1200,27 +1306,29 @@ function priceA3(card, states, pal) {
     const fill = (set, op) => Object.entries(set).map(([k, d]) => (d ? `<path d="${d}" fill="${col[k]}"${op ? ` fill-opacity="${op}"` : ''}/>` : '')).join('');
     const pct = i => `${((i * slot) / 336 * 100).toFixed(1)}%`;
     card._point = arvel && { bars: b.bars, slot, bw };
-    const marks = [`<span style="left:0">täna</span>`];
-    if (b.current >= 0 && b.current > 2 && (n <= b.today || b.current < b.today - 4)) marks.push(`<span style="left:${pct(b.current)};transform:translateX(-50%)">nüüd</span>`);
-    if (n > b.today) marks.push(`<span style="left:${pct(b.today)}">homme</span>`);
+    const marks = [`<span style="left:0">${w.today}</span>`];
+    if (b.current >= 0 && b.current > 2 && (n <= b.today || b.current < b.today - 4)) marks.push(`<span style="left:${pct(b.current)};transform:translateX(-50%)">${w.now}</span>`);
+    if (n > b.today) marks.push(`<span style="left:${pct(b.today)}">${w.tomorrow}</span>`);
     chart = `<span class="ch"><svg class="bars" viewBox="0 0 336 64" preserveAspectRatio="none" aria-hidden="true"><rect class="sel" y="0" width="${(bw + 2).toFixed(1)}" height="64" rx="2" fill="${pal.text}" fill-opacity="0.12" visibility="hidden"/>${fill(past, 0.35)}${fill(paths)}${now ? `<path d="${now}" fill="none" stroke="${pal.text}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>` : ''}</svg><span class="ax" aria-hidden="true">${marks.join('')}</span></span>`;
   }
   const line = (ic, name, text) => `<span class="ln">${icon(ic, 20, pal.sub)}<span>${name ? `<b>${esc(name)}</b> ` : ''}${esc(text)}</span></span>`;
   const windows = (c.windows || []).map(w => [w.icon || 'bolt', w.name, ((states[w.entity] || {}).attributes || {}).tekst]).filter(([, , t]) => t);
   const tm = c.tomorrow && hasValue(states[c.tomorrow]) && (!c.tomorrow_flag || stateOf(states, c.tomorrow_flag) === 'on') && (states[c.tomorrow].attributes || {}).tekst;
-  const lines = [...windows.map(([i, n, t]) => line(i, n, t)), ...(tm ? [line('moon', tm.startsWith('Homme ') ? 'Homme' : '', tm.startsWith('Homme ') ? tm.slice(6) : tm)] : [])];
-  const main = `<button type="button" class="glass press main" data-k="price" aria-label="Elektri hind, ajalugu">${top}${chart}${lines.length ? `<span class="hr"></span><span class="lines">${lines.join('')}</span>` : ''}</button>`;
+  // the tomorrow line leads with its day word in bold
+  const lead = sensorWords(L).lead, led = !!tm && tm.startsWith(`${lead} `);
+  const lines = [...windows.map(([i, n, t]) => line(i, n, t)), ...(tm ? [line('moon', led ? lead : '', led ? tm.slice(lead.length + 1) : tm)] : [])];
+  const main = `<button type="button" class="glass press main" data-k="price" aria-label="${w.priceAria}">${top}${chart}${lines.length ? `<span class="hr"></span><span class="lines">${lines.join('')}</span>` : ''}</button>`;
   let use = '';
   if ((c.usage || []).length) {
     const cells = c.usage.map(u => {
       const st = states[u.entity];
-      const n = hasValue(st) && formatNumber(st.state);
+      const n = hasValue(st) && formatNumber(st.state, undefined, L);
       const kulu = hasValue(st) && (st.attributes || {}).kulu;
       return `<span><span class="lab">${esc(u.name)}</span><span class="v num">${n ? `${n} <small>${esc((st.attributes || {}).unit_of_measurement || '')}</small>` : '–'}</span><span class="sub">${esc(kulu || '')}</span></span>`;
     }).join('');
     const h = c.usage_history;
-    if (h) card._sheets.set('use', usageSheet(c.usage[0].entity, h));
-    use = h ? `<button type="button" class="glass press use" data-k="use" aria-label="Tarbimine, ajalugu">${cells}</button>` : `<div class="glass use">${cells}</div>`;
+    if (h) card._sheets.set('use', usageSheet(c.usage[0].entity, h, L));
+    use = h ? `<button type="button" class="glass press use" data-k="use" aria-label="${w.useAria}">${cells}</button>` : `<div class="glass use">${cells}</div>`;
   }
   return `<div class="stack">${main}${use}</div>`;
 }
@@ -1255,11 +1363,11 @@ const TILE_A3_CSS = `
 
 // the tile's A3 look: small, wide with buttons, a slider or modes, or a value
 function tileA3(card, states, pal) {
-  const c = card._config;
+  const c = card._config, L = card._lang, w = card._w;
   const st = states[c.entity];
-  const ts = tileState(c, states);
+  const ts = tileState(c, states, L);
   const name = tileName(c, st);
-  const sheet = tileSheet(c, states);
+  const sheet = tileSheet(c, states, L);
   card._actions = new Map();
   card._sheets = new Map(sheet ? [['body', sheet]] : []);
   if (!sheet) card._actions.set('body', tileAction(c, 'tap'));
@@ -1267,8 +1375,8 @@ function tileA3(card, states, pal) {
   const lit = ts.lit;
   const ic = icon((lit && c.icon_on) || c.icon, 22, 'currentColor');
   if (c.layout === 'value') {
-    const label = Array.isArray(c.label) ? c.label.map(p => part(p, st, states)).filter(Boolean).join(' · ') : name;
-    const { value, unit } = splitValue(st, c.decimals);
+    const label = Array.isArray(c.label) ? c.label.map(p => part(p, st, states, L)).filter(Boolean).join(' · ') : name;
+    const { value, unit } = splitValue(st, c.decimals, L);
     return `<button type="button" class="glass press val" data-k="body" aria-label="${esc(`${name}: ${value}${unit ? ` ${unit}` : ''}`)}"><span class="lb">${icon(c.icon, 16, disc)}${esc(cap(label))}</span><span class="v num">${esc(value)}${unit ? ` ${esc(unit)}` : ''}</span><span class="sub">${esc(c.caption || '')}</span></button>`;
   }
   const iconAct = c.icon_tap_action ? tileAction(c, 'icon') : null;
@@ -1295,11 +1403,11 @@ function tileA3(card, states, pal) {
   let below = '';
   if (c.slider) {
     const pct = brightnessPct(st);
-    below = `<span class="sl" data-sl role="slider" tabindex="0" aria-label="${esc(`${name}: heledus`)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-valuetext="${pct ? `${pct} %` : 'väljas'}"><i style="width:${pct}%"></i></span>`;
+    below = `<span class="sl" data-sl role="slider" tabindex="0" aria-label="${esc(w.brightness(name))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-valuetext="${pct ? `${pct} %` : w.words.off}"><i style="width:${pct}%"></i></span>`;
   }
   if (c.modes) {
     const current = stateOf(states, c.entity);
-    below = `<span class="seg" role="group" aria-label="${esc(`${name}: režiim`)}">${c.modes.map((m, i) => {
+    below = `<span class="seg" role="group" aria-label="${esc(w.mode(name))}">${c.modes.map((m, i) => {
       card._actions.set(`m${i}`, modeAction(c.entity, m, current));
       return `<button type="button" class="press" data-k="m${i}" aria-pressed="${m.option === current}">${esc(m.name)}</button>`;
     }).join('')}</span>`;
@@ -1407,13 +1515,13 @@ export function dataCutoff(resp, id) {
 
 // one point per day, oldest first: { t, label, v, max, late }; a day the response lacks is null, a
 // day that had not ended by a delayed counter's cutoff is late
-export function dailySeries(resp, id, type, days, now, tz, cutoff = Infinity) {
+export function dailySeries(resp, id, type, days, now, tz, cutoff = Infinity, lang = 'et') {
   const key = t => { const p = zoneParts(t, tz); return `${p.y}-${p.m}-${p.d}`; };
   const rows = new Map(((resp || {})[id] || []).map(r => [key(r.start), r]));
   const starts = dayStarts(days, now, tz);
   return starts.map((t, i) => {
     const r = rows.get(key(t)), p = zoneParts(t, tz);
-    return { t, label: `${p.d}.${p.m}`, v: r ? num(r[type]) : null, max: r ? num(r.max) : null, late: (i + 1 < days ? starts[i + 1] : Infinity) > cutoff };
+    return { t, label: words(lang).dayMonth(p.d, p.m), v: r ? num(r[type]) : null, max: r ? num(r.max) : null, late: (i + 1 < days ? starts[i + 1] : Infinity) > cutoff };
   });
 }
 
@@ -1443,35 +1551,33 @@ export function monthPace(cost, cutoff, now, tz) {
   return frac > 0 ? cost / frac : null;
 }
 
-// "in <month>" in Estonian, by the month's number (1-12): the inessive is not one suffix for all
-const IN_MONTH = ['jaanuaris', 'veebruaris', 'märtsis', 'aprillis', 'mais', 'juunis', 'juulis', 'augustis', 'septembris', 'oktoobris', 'novembris', 'detsembris'];
-export const inLastMonth = (now, tz) => IN_MONTH[(zoneParts(now, tz).m + 10) % 12];
-const WEEKDAY = ['pühapäev', 'esmaspäev', 'teisipäev', 'kolmapäev', 'neljapäev', 'reede', 'laupäev'];
-// 'kolmapäev 11.11' for a day's start in HA's zone
-export function dayName(t, tz) {
-  const p = zoneParts(t, tz);
-  return `${WEEKDAY[new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay()]} ${p.d}.${p.m}`;
+// "in <month>" of last month, by the month's number (1-12)
+export const inLastMonth = (now, tz, lang = 'et') => words(lang).inMonth[(zoneParts(now, tz).m + 10) % 12];
+// 'kolmapäev 11.11' ('Wednesday 11/11') for a day's start in HA's zone
+export function dayName(t, tz, lang = 'et') {
+  const p = zoneParts(t, tz), w = words(lang);
+  return `${w.weekdays[new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay()]} ${w.dayMonth(p.d, p.m)}`;
 }
 
 const hh = n => String(n).padStart(2, '0');
 // an hour's price bar as the house says it: 'täna 18–19', 'homme 03–04'
-export const hourSpan = bar => { const h = new Date(bar.s).getHours(); return `${bar.tomorrow ? 'homme' : 'täna'} ${hh(h)}–${hh((h + 1) % 24)}`; };
+export const hourSpan = (bar, lang = 'et') => { const h = new Date(bar.s).getHours(), w = words(lang); return `${bar.tomorrow ? w.tomorrow : w.today} ${hh(h)}–${hh((h + 1) % 24)}`; };
 // when a pointed history point was, in the browser's zone like the axis: an hour's bar or a
 // moment in the 24 h range, the hour in the week, the day in a month or a day's bar
-export function whenLabel(t, range, bars, now = Date.now()) {
-  const d = new Date(t), h = d.getHours();
-  const day = `${WEEKDAY[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}`;
+export function whenLabel(t, range, bars, now = Date.now(), lang = 'et') {
+  const d = new Date(t), h = d.getHours(), w = words(lang);
+  const day = `${w.weekdays[d.getDay()]} ${w.dayMonth(d.getDate(), d.getMonth() + 1)}`;
   if (range === '24h') {
     const at = bars ? `${hh(h)}–${hh((h + 1) % 24)}` : `${hh(h)}:${hh(d.getMinutes())}`;
-    return `${dayWord(t, now) ?? day} ${at}`;
+    return `${dayWord(t, now, lang) ?? day} ${at}`;
   }
-  return range === '7d' && !bars ? `${day} kell ${hh(h)}` : day;
+  return range === '7d' && !bars ? `${day} ${w.at(hh(h))}` : day;
 }
 // 'täna' or 'eile' for a moment in the browser's zone, null for an earlier day
-function dayWord(t, now) {
-  const d = new Date(t), n = new Date(now);
+function dayWord(t, now, lang) {
+  const d = new Date(t), n = new Date(now), w = words(lang);
   const k = Math.round((new Date(n.getFullYear(), n.getMonth(), n.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / (24 * HOUR));
-  return k === 0 ? 'täna' : k === 1 ? 'eile' : null;
+  return k === 0 ? w.today : k === 1 ? w.yesterday : null;
 }
 // the index of the point with a value nearest to t, null when none has one; on a stepped line the
 // value held at t, the last point at or before it (null before the first)
@@ -1487,9 +1593,9 @@ export function nearest(points, t, stepped = false) {
 }
 
 // last month's name, Estonian ("oktoober") and as Daikin's month attributes name it ("October")
-export function lastMonthName(now, tz, lang = 'et-EE') {
+export function lastMonthName(now, tz, locale = 'et-EE') {
   const p = zoneParts(now, tz);
-  return new Intl.DateTimeFormat(lang, { month: 'long', timeZone: tz }).format(new Date(dayStart(p.y, p.m - 1, 15, tz)));
+  return new Intl.DateTimeFormat(locale, { month: 'long', timeZone: tz }).format(new Date(dayStart(p.y, p.m - 1, 15, tz)));
 }
 
 // Last month's value from a sensor's attributes: a utility meter's own one (`last_period`), or
@@ -1507,7 +1613,7 @@ export function lastMonthValue(st, key, now, tz) {
 // the split card's rows: each part's kWh this month, its share and last month's, and the rest of
 // the house. Shares are of the larger of the total and the parts, so a delayed total cannot push
 // them past 100; last month is left out on the first two days, when it may still be the one before.
-export function splitRows(states, conf, now, tz) {
+export function splitRows(states, conf, now, tz, lang = 'et') {
   const v = e => (hasValue(states[e]) ? num(states[e].state) : null);
   const last = (p, st) => lastMonthValue(st, p.last, now, tz);
   const parts = (conf.parts || []).map(p => ({ ...p, kwh: v(p.entity), last: last(p, states[p.entity]) }))
@@ -1516,13 +1622,13 @@ export function splitRows(states, conf, now, tz) {
   const rest = total === null ? null : Math.max(0, total - sum);
   const denom = Math.max(total ?? 0, sum) || 1;
   const rows = parts.map(p => ({ ...p, share: Math.round((p.kwh / denom) * 100) }));
-  if (rest !== null) rows.push({ name: (conf.rest || {}).name || 'Ülejäänud maja', icon: 'home', color: 'gray', kwh: rest, share: Math.round((rest / denom) * 100), last: null, rest: true });
+  if (rest !== null) rows.push({ name: (conf.rest || {}).name || words(lang).rest, icon: 'home', color: 'gray', kwh: rest, share: Math.round((rest / denom) * 100), last: null, rest: true });
   return { rows, stale: !!conf.fresh && stateOf(states, conf.fresh) === 'off' };
 }
 
 // A3's usage sheet: an energy entity's value now, its consumption and cost by hour and by day
-export function usageSheet(entity, history) {
-  return { title: 'Tarbimine', entity, more: entity, decimals: 1, unit: 'kWh', color: 'indigo', history };
+export function usageSheet(entity, history, lang = 'et') {
+  return { title: words(lang).use, entity, more: entity, decimals: 1, unit: 'kWh', color: 'indigo', history };
 }
 
 /* ---------- A3 Soojuspump (ADR-011): hourly lines, the shift stepper, the boiler's cells ---------- */
@@ -1548,17 +1654,15 @@ export function lineRange(stats, floor) {
 
 // three labels under a line from t0 to now: its start, its middle and 'nüüd', each as the day
 // ('täna', 'eile' or the weekday) and the hour in the browser's zone
-export function lineAxis(t0, now) {
-  const at = t => { const d = new Date(t); return `${dayWord(t, now) ?? WEEKDAY[d.getDay()]} ${hh(d.getHours())}`; };
-  return [at(t0), at((t0 + now) / 2), 'nüüd'];
+export function lineAxis(t0, now, lang = 'et') {
+  const w = words(lang);
+  const at = t => { const d = new Date(t); return `${dayWord(t, now, lang) ?? w.weekdays[d.getDay()]} ${hh(d.getHours())}`; };
+  return [at(t0), at((t0 + now) / 2), w.now];
 }
 
 // the shift as the stepper shows it and the line under its name
 export const stepText = v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v)}°`;
-export function stepNote(v) {
-  if (!v) return 'Küttevesi täpselt kõvera järgi';
-  return `Küttevesi ${Math.abs(v)}° ${v > 0 ? 'soojem' : 'jahedam'} kui kõvera järgi`;
-}
+export const stepNote = (v, lang = 'et') => words(lang).curve(v);
 // a number entity's value and its { min, max, step }
 function stepState(st) {
   const a = (st || {}).attributes || {};
@@ -1575,21 +1679,21 @@ export const stepWrite = (pending, current) => (pending === null || pending === 
 // the days card's own cells: [{ k, v, l }], a sensor's value with its unit, its share of another
 // (of the larger of the two, as splitRows does, so a delayed total cannot pass 100) or last
 // month's value by name; a last-month cell is left out on the first two days of a month
-export function dayCells(states, cells, now, tz) {
-  const out = [];
+export function dayCells(states, cells, now, tz, lang = 'et') {
+  const out = [], w = words(lang);
   for (const c of cells || []) {
     const st = states[c.entity], unit = ((st || {}).attributes || {}).unit_of_measurement || '';
-    const show = v => (v === null ? '–' : `${formatNumber(String(v))}${unit ? ` ${unit}` : ''}`);
+    const show = v => (v === null ? '–' : `${formatNumber(String(v), undefined, lang)}${unit ? ` ${unit}` : ''}`);
     if (c.last) {
       if (earlyInMonth(now, tz)) continue;
-      out.push({ k: c.name || cap(lastMonthName(now, tz)), v: show(lastMonthValue(st, c.last, now, tz)), l: c.note || '' });
+      out.push({ k: c.name || cap(lastMonthName(now, tz, w.locale)), v: show(lastMonthValue(st, c.last, now, tz)), l: c.note || '' });
       continue;
     }
     const v = hasValue(st) ? num(st.state) : null;
     let l = c.note || '';
     if (c.share_of) {
       const t = states[c.share_of], total = hasValue(t) ? num(t.state) : null, denom = Math.max(total ?? 0, v ?? 0);
-      l = v !== null && total !== null && denom > 0 ? `${Math.round((v / denom) * 100)} % majast` : '';
+      l = v !== null && total !== null && denom > 0 ? w.ofHouse(Math.round((v / denom) * 100)) : '';
     }
     out.push({ k: c.name, v: show(v), l });
   }
@@ -1597,15 +1701,15 @@ export function dayCells(states, cells, now, tz) {
 }
 
 // the chips card's status line: { tone, text }; ok only while `entity` is on and every fault reads off
-export function statusLine(states, conf) {
-  const s = conf.status;
+export function statusLine(states, conf, lang = 'et') {
+  const s = conf.status, w = words(lang);
   if (!s) return null;
   const faults = conf.faults || [];
-  if (faultsOn(states, faults).length) return { tone: 'bad', text: s.bad || 'Viga' };
+  if (faultsOn(states, faults).length) return { tone: 'bad', text: s.bad || w.fault };
   const on = stateOf(states, s.entity);
   if (on === 'on' && faults.every(f => stateOf(states, f.entity) === (f.bad === 'off' ? 'on' : 'off'))) return { tone: 'ok', text: s.ok };
-  if (on === 'off') return { tone: 'off', text: s.off || 'Väljas' };
-  return { tone: 'off', text: 'Seisund pole teada' };
+  if (on === 'off') return { tone: 'off', text: s.off || w.offState };
+  return { tone: 'off', text: w.stateUnknown };
 }
 
 // one fetch per message and HA-zone hour, shared by the cards on a page (the month and days cards
@@ -1625,8 +1729,7 @@ function fetchShared(hass, msg, hour) {
 
 const tzOf = hass => (hass && hass.config && hass.config.time_zone) || Intl.DateTimeFormat().resolvedOptions().timeZone;
 const hourKeyOf = (now, tz) => { const p = zoneParts(now, tz); return `${p.y}-${p.m}-${p.d}-${p.h}`; };
-const fmtN = (v, d) => formatNumber(v.toFixed(d), d);
-const money = v => fmtN(v, 2);
+const fmtN = (v, d, lang) => formatNumber(v.toFixed(d), d, lang);
 
 // a card that loads recorder data before it draws: the load runs when the HA-zone hour changes,
 // a result redraws the card, a newer load wins; after an error the next try waits a minute.
@@ -1683,34 +1786,34 @@ class MonthCard extends LoadingCard {
   _watched() { const c = this._config; return [c.month, c.last_month, c.today, c.yesterday].filter(Boolean); }
   _requests(now) { return this._config.consumption ? { cutoff: hourlyRequest(this._config.consumption, now) } : {}; }
   _html(states) {
-    const c = this._config, now = Date.now(), tz = tzOf(this._hass), p = zoneParts(now, tz);
+    const c = this._config, now = Date.now(), tz = tzOf(this._hass), p = zoneParts(now, tz), w = this._w, L = this._lang;
     const d = this._data && !this._data.error ? this._data : null;
     const cutoff = d && d.res.cutoff ? dataCutoff(d.res.cutoff, c.consumption) : null;
     const st = states[c.month], a = hasValue(st) ? st.attributes || {} : {};
-    const cost = parseEt(a.kulu), price = parseEt(a.hind), kwh = hasValue(st) ? formatNumber(st.state, 0) : null;
+    const cost = parseEt(a.kulu), price = parseEt(a.hind), kwh = hasValue(st) ? formatNumber(st.state, 0, L) : null;
     const lm = states[c.last_month], la = hasValue(lm) ? lm.attributes || {} : {};
-    const lastName = lastMonthName(now, tz), early = earlyInMonth(now, tz), lastPrice = early ? null : parseEt(la.hind);
+    const lastName = lastMonthName(now, tz, w.locale), early = earlyInMonth(now, tz), lastPrice = early ? null : parseEt(la.hind);
     let badge = '';
     if (price !== null && lastPrice) {
       const r = price / lastPrice;
-      const [tone, word] = r > 1.03 ? ['high', 'Kallim'] : r < 0.97 ? ['good', 'Odavam'] : ['mid', 'Sama hinnaga'];
-      badge = `<span class="badge ${tone}">${word} kui ${esc(lastName)}</span>`;
+      const tone = r > 1.03 ? 'high' : r < 0.97 ? 'good' : 'mid';
+      badge = `<span class="badge ${tone}">${esc(w.compare[tone](lastName))}</span>`;
     }
     const [m0, m1] = monthSpan(now, tz), days = Math.round((m1 - m0) / (24 * HOUR));
     const pace = monthPace(cost, cutoff, now, tz);
-    const monthName = cap(new Intl.DateTimeFormat('et-EE', { month: 'long', timeZone: tz }).format(new Date(now)));
-    this._sheets = new Map(c.usage_history ? [['m', usageSheet(c.month, c.usage_history)]] : []);
+    const monthName = cap(new Intl.DateTimeFormat(w.locale, { month: 'long', timeZone: tz }).format(new Date(now)));
+    this._sheets = new Map(c.usage_history ? [['m', usageSheet(c.month, c.usage_history, L)]] : []);
     this._actions = new Map();
     const cell = (name, e, dec, show = true) => {
       const s = states[e], ok = show && hasValue(s);
-      return `<span><span class="lab">${esc(name)}</span><span class="v num">${ok ? `${formatNumber(s.state, dec)} <small>kWh</small>` : '–'}</span><span class="sub">${ok ? esc((s.attributes || {}).kulu || '') : ''}</span></span>`;
+      return `<span><span class="lab">${esc(name)}</span><span class="v num">${ok ? `${formatNumber(s.state, dec, L)} <small>kWh</small>` : '–'}</span><span class="sub">${ok ? esc((s.attributes || {}).kulu || '') : ''}</span></span>`;
     };
-    const top = `<span class="hd"><span class="l"><span class="lab">Sel kuul</span>${cost !== null ? `<span class="big"><span class="n num">${money(cost)}</span><span class="u">€</span></span>` : '<span class="big"><span class="u">Kulu pole teada</span></span>'}${kwh ? `<span class="sub">${kwh} kWh${price !== null ? `, keskmiselt ${fmtN(price, 1)} senti/kWh` : ''}</span>` : ''}</span>${badge}</span>`;
-    const prog = `<span class="prog"><span class="track" aria-hidden="true"><i style="width:${(((now - m0) / (m1 - m0)) * 100).toFixed(1)}%"></i></span><span class="pl"><span>${p.d} päeva ${days}-st</span>${pace !== null ? `<span>Selle tempoga umbes ${Math.round(pace)} €</span>` : ''}</span></span>`;
-    const cells = `<span class="cells">${cell('Täna', c.today, 1)}${cell('Eile', c.yesterday, 1)}${cell(cap(lastName), c.last_month, 0, !early)}</span>`;
-    const inner = `${top}${prog}<span class="hr"></span>${cells}<span class="foot">Eurod ilma kuutasudeta.</span>`;
-    const main = c.usage_history ? `<button type="button" class="glass press main" data-k="m" aria-label="Sel kuul, tarbimise ajalugu">${inner}</button>` : `<div class="glass main">${inner}</div>`;
-    return `<div class="wrap"><div class="head"><h1>${esc(c.title || 'Energia')}</h1><span class="date">${esc(monthName)}, ${p.d}. päev</span></div>${main}</div>`;
+    const top = `<span class="hd"><span class="l"><span class="lab">${w.thisMonth}</span>${cost !== null ? `<span class="big"><span class="n num">${fmtN(cost, 2, L)}</span><span class="u">€</span></span>` : `<span class="big"><span class="u">${w.costUnknown}</span></span>`}${kwh ? `<span class="sub">${kwh} kWh${price !== null ? w.average(fmtN(price, 1, L)) : ''}</span>` : ''}</span>${badge}</span>`;
+    const prog = `<span class="prog"><span class="track" aria-hidden="true"><i style="width:${(((now - m0) / (m1 - m0)) * 100).toFixed(1)}%"></i></span><span class="pl"><span>${w.dayOf(p.d, days)}</span>${pace !== null ? `<span>${w.pace(Math.round(pace))}</span>` : ''}</span></span>`;
+    const cells = `<span class="cells">${cell(w.todayCell, c.today, 1)}${cell(w.yesterdayCell, c.yesterday, 1)}${cell(cap(lastName), c.last_month, 0, !early)}</span>`;
+    const inner = `${top}${prog}<span class="hr"></span>${cells}<span class="foot">${w.noFees}</span>`;
+    const main = c.usage_history ? `<button type="button" class="glass press main" data-k="m" aria-label="${w.monthAria}">${inner}</button>` : `<div class="glass main">${inner}</div>`;
+    return `<div class="wrap"><div class="head"><h1>${esc(c.title || w.energy)}</h1><span class="date">${esc(w.monthDate(monthName, p.d))}</span></div>${main}</div>`;
   }
 }
 
@@ -1758,29 +1861,29 @@ class DaysCard extends LoadingCard {
     return c.cutoff ? { ...reqs, cutoff: hourlyRequest(c.cutoff, now) } : reqs;
   }
   _html(states, pal) {
-    const c = this._config, list = c.series;
+    const c = this._config, list = c.series, w = this._w, L = this._lang;
     const i = Math.min(this._pick || 0, list.length - 1), s = list[i];
     this._actions = new Map();
     this._sheets = new Map();
-    const seg = list.length > 1 ? `<span class="seg" role="group" aria-label="Ühik">${list.map((x, j) => `<button type="button" data-p="${j}" aria-pressed="${j === i}">${esc(x.name)}</button>`).join('')}</span>` : '';
+    const seg = list.length > 1 ? `<span class="seg" role="group" aria-label="${w.unitSwitch}">${list.map((x, j) => `<button type="button" data-p="${j}" aria-pressed="${j === i}">${esc(x.name)}</button>`).join('')}</span>` : '';
     const d = this._data;
     const shell = body => `<div class="glass box">${seg}${body}</div>`;
     this._point = null;
-    if (!d) return shell('<div class="msg">Laen…</div>');
-    if (d.error) return shell('<div class="msg">Andmeid ei saanud lugeda</div>');
+    if (!d) return shell(`<div class="msg">${w.loading}</div>`);
+    if (d.error) return shell(`<div class="msg">${w.dataFailed}</div>`);
     const daily = d.res[`daily:${s.peak ? `${s.type},max` : s.type}`];
     // a delayed counter's days after its cutoff are late; a price is known ahead
     // with no hour of data in two days the cutoff is today's start: only today is late, as it is
     // for a counter without a cutoff, whose today has not ended
     const today = dayStarts(1, d.now, d.tz)[0];
     const cutoff = s.type !== 'change' ? Infinity : c.cutoff ? dataCutoff(d.res.cutoff, c.cutoff) ?? today : today;
-    const pts = dailySeries(daily, s.statistic, s.type, c.days || 31, d.now, d.tz, cutoff);
+    const pts = dailySeries(daily, s.statistic, s.type, c.days || 31, d.now, d.tz, cutoff, L);
     const scale = s.scale || 1, dec = s.decimals ?? 1;
     const stats = dayStats(pts);
     // the entity cells do not need the statistics
-    const own = c.cells ? `<span class="hr"></span><span class="stats">${dayCells(states, c.cells, d.now, d.tz).map(x => `<span><span class="k">${esc(x.k)}</span><span class="v num">${esc(x.v)}</span><span class="sub">${esc(x.l)}</span></span>`).join('')}</span>` : '';
-    if (!stats) return shell(`<div class="msg">Selle aja kohta andmeid pole</div>${own}`);
-    const fmt = v => fmtN(v * scale, dec);
+    const own = c.cells ? `<span class="hr"></span><span class="stats">${dayCells(states, c.cells, d.now, d.tz, L).map(x => `<span><span class="k">${esc(x.k)}</span><span class="v num">${esc(x.v)}</span><span class="sub">${esc(x.l)}</span></span>`).join('')}</span>` : '';
+    if (!stats) return shell(`<div class="msg">${w.noData}</div>${own}`);
+    const fmt = v => fmtN(v * scale, dec, L);
     const W = 341, H = 120, TOP = 8, BOT = 2, N = pts.length, GAP = 2, bw = (W - GAP * (N - 1)) / N;
     const hi = Math.max(...pts.map(p => Math.max(p.v ?? 0, s.peak ? p.max ?? 0 : 0))) * 1.05 || 1;
     const y = v => H - BOT - (v / hi) * (H - TOP - BOT);
@@ -1798,21 +1901,21 @@ class DaysCard extends LoadingCard {
     const bars = [...paths].map(([k, dd]) => { const [f, o] = k.split('|'); return `<path d="${dd}" fill="${f}"${o !== '1' ? ` fill-opacity="${o}"` : ''}/>`; }).join('');
     const grid = [0.25, 0.5, 0.75].map(f => `M0 ${(TOP + (H - TOP - BOT) * f).toFixed(1)}H${W}`).join('');
     // pointing at a day shows its value in the average's place (_wire)
-    this._point = { pts, fmt, unit: s.unit || '', peak: s.peak, tz: d.tz, avg: [fmt(stats.avg), s.caption || ''], step: bw + GAP, unfinished: !c.cutoff };
+    this._point = { pts, fmt, unit: s.unit || '', peak: s.peak, tz: d.tz, lang: L, avg: [fmt(stats.avg), s.caption || ''], step: bw + GAP, unfinished: !c.cutoff };
     const sel = `<rect class="sel" y="0" width="${bw.toFixed(1)}" height="${H}" fill="${pal.text}" fill-opacity="0.1" visibility="hidden"/>`;
     const svg = `<svg class="c" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(s.aria || s.name)}">${sel}<path d="${grid}" stroke="${pal.hair}" fill="none" vector-effect="non-scaling-stroke"/>${bars}${peak ? `<path d="${peak}" stroke="${pal.text}" stroke-opacity="0.55" stroke-width="1.5" fill="none" vector-effect="non-scaling-stroke"/>` : ''}</svg>`;
-    const marks = [0, Math.round(N / 4), Math.round(N / 2), Math.round((3 * N) / 4)].map(j => pts[j].label).concat('täna');
+    const marks = [0, Math.round(N / 4), Math.round(N / 2), Math.round((3 * N) / 4)].map(j => pts[j].label).concat(w.today);
     const axis = `<div class="ax" aria-hidden="true">${marks.map(l => `<span>${esc(l)}</span>`).join('')}</div>`;
-    const key = s.peak ? `<span class="key"><span><i style="width:10px;height:10px;border-radius:3px;background:${pal.sub}"></i>päeva keskmine</span><span><i style="width:12px;height:2px;background:${pal.text};opacity:.55"></i>kalleim tund</span></span>` : '';
+    const key = s.peak ? `<span class="key"><span><i style="width:10px;height:10px;border-radius:3px;background:${pal.sub}"></i>${w.dayAvg}</span><span><i style="width:12px;height:2px;background:${pal.text};opacity:.55"></i>${w.dearestHour}</span></span>` : '';
     const u = s.unit ? ` ${s.unit}` : '';
     let three;
-    if (c.cells) three = dayCells(states, c.cells, d.now, d.tz).map(x => [x.k, x.v, x.l]);
+    if (c.cells) three = dayCells(states, c.cells, d.now, d.tz, L).map(x => [x.k, x.v, x.l]);
     else if (s.peak) {
-      three = [['Odavaim päev', stats.small], ['Kalleim päev', stats.big], ['Kalleim tund', stats.peak]].map(([k, x]) => [k, x ? fmt(x.v) : '–', x ? x.label : '']);
+      three = [[w.cheapestDay, stats.small], [w.dearestDay, stats.big], [w.dearestHour, stats.peak]].map(([k, x]) => [cap(k), x]).map(([k, x]) => [k, x ? fmt(x.v) : '–', x ? x.label : '']);
     } else {
       const t = s.today && states[s.today.entity];
       const tv = t && hasValue(t) ? (s.today.attribute ? parseEt((t.attributes || {})[s.today.attribute]) : num(t.state)) : null;
-      three = [['Suurim', `${fmt(stats.big.v)}${u}`, stats.big.label], ['Väikseim', `${fmt(stats.small.v)}${u}`, stats.small.label], ['Täna seni', tv === null ? '–' : `${fmtN(tv, dec)}${u}`, 'päev pole läbi']];
+      three = [[w.largest, `${fmt(stats.big.v)}${u}`, stats.big.label], [w.smallest, `${fmt(stats.small.v)}${u}`, stats.small.label], [w.todaySoFar, tv === null ? '–' : `${fmtN(tv, dec, L)}${u}`, w.dayNotOver]];
     }
     const cells = three.map(([k, v, l]) => `<span><span class="k">${esc(k)}</span><span class="v num">${esc(v)}</span><span class="sub">${esc(l)}</span></span>`).join('');
     return shell(`<span class="avg"><span class="n num">${fmt(stats.avg)}</span><span class="u">${esc(s.caption || '')}</span></span><span>${svg}${axis}</span>${key}<span class="hr"></span><span class="stats">${cells}</span>${c.foot ? `<span class="foot">${esc(c.foot)}</span>` : ''}`);
@@ -1828,9 +1931,10 @@ class DaysCard extends LoadingCard {
       const p = P.pts[j];
       sel.setAttribute('x', (j * P.step).toFixed(1));
       const last = j === P.pts.length - 1;
-      const note = p.late ? (last && P.unfinished ? 'päev pole läbi' : last ? 'täna, andmed hilinevad' : 'andmed hilinevad') : P.peak && p.max !== null ? `kalleim tund ${P.fmt(p.max)}` : '';
+      const w = words(P.lang);
+      const note = p.late ? (last && P.unfinished ? w.dayNotOver : last ? w.todayLate : w.late) : P.peak && p.max !== null ? w.dearestHourAt(P.fmt(p.max)) : '';
       n.textContent = p.v === null ? '–' : P.fmt(p.v);
-      u.textContent = [P.unit, dayName(p.t, P.tz), note].filter(Boolean).join(' · ');
+      u.textContent = [P.unit, dayName(p.t, P.tz, P.lang), note].filter(Boolean).join(' · ');
     });
   }
   _click(ev) {
@@ -1861,20 +1965,20 @@ class SplitCard extends KheCard {
   _watched() { const c = this._config; return [c.total, c.fresh, ...(c.parts || []).map(p => p.entity)].filter(Boolean); }
   _clock() { return this._hass ? zoneParts(Date.now(), tzOf(this._hass)).d : 0; }
   _html(states) {
-    const c = this._config, { rows, stale } = splitRows(states, c, Date.now(), tzOf(this._hass));
+    const c = this._config, L = this._lang, w = this._w, { rows, stale } = splitRows(states, c, Date.now(), tzOf(this._hass), L);
     this._actions = new Map();
     this._sheets = new Map();
     const color = r => a3Color(r.color)[0];
     const bar = rows.filter(r => r.kwh > 0).map(r => `<span style="flex:${r.kwh.toFixed(2)};background:${color(r)}"></span>`).join('');
-    const kwh = v => fmtN(v, v < 100 ? 1 : 0);
+    const kwh = v => fmtN(v, v < 100 ? 1 : 0, L);
     const list = rows.map((r, i) => {
-      const note = r.rest ? (stale ? 'andmed hilinevad' : 'kõik, mida eraldi ei mõõdeta') : r.last !== null ? `${inLastMonth(Date.now(), tzOf(this._hass))} ${kwh(r.last)} kWh` : '';
+      const note = r.rest ? (stale ? w.late : w.restNote) : r.last !== null ? w.inLast(inLastMonth(Date.now(), tzOf(this._hass), L), kwh(r.last)) : '';
       const body = `<i style="background:${color(r)}">${icon(r.icon || 'bolt', 18, 'currentColor')}</i><span class="m"><span class="n">${esc(r.name)}</span><span class="sub">${esc(note)}</span></span><span class="e"><b class="num">${kwh(r.kwh)} kWh</b><span class="sub">${r.share} %</span></span>`;
       if (r.rest) return `<div class="r">${body}</div>`;
       this._sheets.set(`r${i}`, { title: r.name, entity: r.entity, more: r.entity, decimals: 1, unit: 'kWh', color: r.color, view: r.view, history: { source: 'statistics', type: 'change', entity: r.entity } });
-      return `<button type="button" class="r press" data-k="r${i}" aria-label="${esc(r.name)}, ${kwh(r.kwh)} kWh sel kuul, ajalugu">${body}</button>`;
+      return `<button type="button" class="r press" data-k="r${i}" aria-label="${esc(w.splitAria(r.name, kwh(r.kwh)))}">${body}</button>`;
     }).join('');
-    return `<div class="glass box">${bar ? `<span class="bar" aria-hidden="true">${bar}</span>` : ''}<span class="rows">${list || '<span class="sub">Andmeid pole</span>'}</span></div>`;
+    return `<div class="glass box">${bar ? `<span class="bar" aria-hidden="true">${bar}</span>` : ''}<span class="rows">${list || `<span class="sub">${w.noDataShort}</span>`}</span></div>`;
   }
 }
 
@@ -1916,19 +2020,19 @@ class ReadingCard extends LoadingCard {
   }
   _requests(now) { const l = this._config.line; return l ? { line: lineRequest(l.statistic, l.hours || 48, now) } : {}; }
   _html(states, pal) {
-    const c = this._config, now = Date.now(), st = states[c.entity];
+    const c = this._config, now = Date.now(), st = states[c.entity], w = this._w, L = this._lang;
     this._actions = new Map();
     this._sheets = new Map();
     this._point = null;
-    const { value } = splitValue(st, c.decimals);
+    const { value } = splitValue(st, c.decimals, L);
     const l = c.line, hours = (l && l.hours) || 48, floor = l ? l.floor : undefined;
     const { chart = '', key = '', range = null } = l ? this._line(states, pal, l, hours, now) : {};
     const n = c.note || {};
     let note = '';
     if (n.target) {
-      const t = attrText(states[n.target.entity], n.target.attribute);
-      note = t ? `Siht ${t}${floor != null ? `, mitte alla ${fmtN(floor, 0)}°` : ''}` : '';
-    } else if (n.range && range) note = `${hours} tunniga ${fmtN(range.lo, c.decimals ?? 1)}° kuni ${fmtN(range.hi, c.decimals ?? 1)}°`;
+      const t = attrText(states[n.target.entity], n.target.attribute, L);
+      note = t ? `${w.target(t)}${floor != null ? w.notBelow(fmtN(floor, 0, L)) : ''}` : '';
+    } else if (n.range && range) note = w.rangeNote(hours, fmtN(range.lo, c.decimals ?? 1, L), fmtN(range.hi, c.decimals ?? 1, L));
     const top = `<span class="hd"><span class="l"><span class="lab">${esc(c.label || '')}</span><span class="big"><span class="n num">${esc(value)}</span></span>${note ? `<span class="sub">${esc(note)}</span>` : ''}</span>${this._chip(states)}</span>`;
     const parts = [`${top}${chart ? `<span class="ch">${chart}</span>${key}` : ''}`];
     if ((c.cells || []).length) parts.push(this._cells(states));
@@ -1937,14 +2041,14 @@ class ReadingCard extends LoadingCard {
   }
   // the hourly line, its floor key and its { lo, hi } for the note; sets what pointing reads
   _line(states, pal, l, hours, now) {
-    const d = this._data;
-    if (!d) return { chart: '<span class="msg">Laen…</span>' };
-    if (d.error) return { chart: '<span class="msg">Andmeid ei saanud lugeda</span>' };
+    const d = this._data, w = this._w, L = this._lang;
+    if (!d) return { chart: `<span class="msg">${w.loading}</span>` };
+    if (d.error) return { chart: `<span class="msg">${w.dataFailed}</span>` };
     const lst = states[l.statistic], live = hasValue(lst) ? num(lst.state) : null;
     const series = lineSeries(d.res.line, l.statistic, live, now);
     const t0 = Math.floor(d.now / HOUR) * HOUR - hours * HOUR;
     const range = lineStats(series, t0, now), r = lineRange(range, l.floor);
-    if (!r) return { chart: '<span class="msg">Selle aja kohta andmeid pole</span>' };
+    if (!r) return { chart: `<span class="msg">${w.noData}</span>` };
     const color = a3Color(l.color)[0], dec = this._config.decimals ?? 1;
     const p = chartPaths(series, { w: LW, h: LH, top: LTOP, bot: LBOT, t0, t1: now, lo: r.lo, hi: r.hi });
     const y = v => LH - LBOT - ((v - r.lo) / (r.hi - r.lo)) * (LH - LTOP - LBOT);
@@ -1954,10 +2058,10 @@ class ReadingCard extends LoadingCard {
     const pts = series.points;
     this._point = {
       pick: f => nearest(pts, t0 + f * (now - t0)),
-      read: i => ({ x: ((pts[i].t - t0) / (now - t0)) * LW, v: `${fmtN(pts[i].v, dec)}°`, when: pts[i].live ? 'nüüd' : whenLabel(pts[i].t, '24h', true, now) })
+      read: i => ({ x: ((pts[i].t - t0) / (now - t0)) * LW, v: `${fmtN(pts[i].v, dec, L)}°`, when: pts[i].live ? w.now : whenLabel(pts[i].t, '24h', true, now, L) })
     };
-    const chart = `<svg class="ln" viewBox="0 0 ${LW} ${LH}" preserveAspectRatio="none" role="img" aria-label="${esc(l.aria || this._config.label)}"><path d="${grid}" stroke="${pal.hair}" fill="none" vector-effect="non-scaling-stroke"/>${floor}<path d="${p.area}" fill="${color}" fill-opacity="0.16"/><path d="${p.line}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>${SEL(pal.text)}</svg><span class="lx" aria-hidden="true">${lineAxis(t0, now).map(x => `<span>${esc(x)}</span>`).join('')}</span>`;
-    const key = floored ? `<span class="key"><span><i style="height:2px;background:${color}"></i>${esc(l.name || '')}</span><span><i style="border-top:1px dashed ${pal.sub}"></i>${fmtN(l.floor, 0)}° piir</span></span>` : '';
+    const chart = `<svg class="ln" viewBox="0 0 ${LW} ${LH}" preserveAspectRatio="none" role="img" aria-label="${esc(l.aria || this._config.label)}"><path d="${grid}" stroke="${pal.hair}" fill="none" vector-effect="non-scaling-stroke"/>${floor}<path d="${p.area}" fill="${color}" fill-opacity="0.16"/><path d="${p.line}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>${SEL(pal.text)}</svg><span class="lx" aria-hidden="true">${lineAxis(t0, now, L).map(x => `<span>${esc(x)}</span>`).join('')}</span>`;
+    const key = floored ? `<span class="key"><span><i style="height:2px;background:${color}"></i>${esc(l.name || '')}</span><span><i style="border-top:1px dashed ${pal.sub}"></i>${esc(w.limit(fmtN(l.floor, 0, L)))}</span></span>` : '';
     return { chart, key, range };
   }
   // Küte sees, Küte väljas, or Küte seisab while the fault is on
@@ -1973,21 +2077,21 @@ class ReadingCard extends LoadingCard {
   }
   _cells(states) {
     const list = this._config.cells.map((x, i) => {
-      const st = states[x.entity], { value } = splitValue(st, x.decimals ?? 0);
+      const st = states[x.entity], { value } = splitValue(st, x.decimals ?? 0, this._lang);
       this._sheets.set(`c${i}`, { title: x.title || x.name, entity: x.entity, more: x.entity, decimals: 1, unit: '°C', color: x.color, history: { entity: x.entity, ...x.history } });
-      return `<button type="button" class="press" data-k="c${i}" aria-label="${esc(`${x.name} ${value}, ajalugu`)}"><span class="lab">${esc(x.name)}</span><span class="v num">${esc(value)}</span><span class="sub">${esc(x.caption || '')}</span></button>`;
+      return `<button type="button" class="press" data-k="c${i}" aria-label="${esc(this._w.history(`${x.name} ${value}`))}"><span class="lab">${esc(x.name)}</span><span class="v num">${esc(value)}</span><span class="sub">${esc(x.caption || '')}</span></button>`;
     });
     return `<span class="cells">${list.join('')}</span>`;
   }
   _stepper(states) {
-    const sp = this._config.stepper, { cur, lim } = stepState(states[sp.entity]);
+    const sp = this._config.stepper, { cur, lim } = stepState(states[sp.entity]), w = this._w;
     const p = this._pend;
     // the entity reports the written value: the pending one is done
     if (p && p.sent && cur === p.v) { this._pend = null; clearTimeout(this._dropTimer); }
     const v = this._pend ? this._pend.v : cur;
-    const note = this._err ? '<span class="sub err">Ei õnnestunud</span>' : `<span class="sub">${v === null ? 'pole saadaval' : esc(stepNote(v))}</span>`;
+    const note = this._err ? `<span class="sub err">${w.failed}</span>` : `<span class="sub">${v === null ? w.words.unavailable : esc(stepNote(v, this._lang))}</span>`;
     const btn = (dir, ch, label) => `<button type="button" class="press" data-k="st${dir}" data-st="${dir}" aria-label="${label}"${v === null || stepValue(v, dir, lim) === v ? ' disabled' : ''}>${ch}</button>`;
-    return `<span class="step"><span class="t"><span class="nm">${esc(sp.name)}</span>${note}</span><span class="stp" role="group" aria-label="${esc(sp.name)}">${btn(-1, '−', 'Nihe ühe kraadi võrra alla')}<span class="sv num" aria-live="polite">${v === null ? '–' : stepText(v)}</span>${btn(1, '+', 'Nihe ühe kraadi võrra üles')}</span></span>`;
+    return `<span class="step"><span class="t"><span class="nm">${esc(sp.name)}</span>${note}</span><span class="stp" role="group" aria-label="${esc(sp.name)}">${btn(-1, '−', w.shiftDown)}<span class="sv num" aria-live="polite">${v === null ? '–' : stepText(v)}</span>${btn(1, '+', w.shiftUp)}</span></span>`;
   }
   _tap(dir) {
     const { cur, lim } = stepState(this._hass.states[this._config.stepper.entity]);
