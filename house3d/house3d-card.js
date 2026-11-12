@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 45;
+const HOUSE3D_VERSION = 46;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -571,7 +571,7 @@ export class House3dCard extends Base {
       if (reset) reset.innerHTML = mod.icon('reset');
       sr.querySelector('[data-act="layers"]').innerHTML = mod.icon('layers');
       this._view = mod.mount(sr.querySelector('.view'), this._config.model, {
-        onMarker: id => this._moreInfo(id),
+        onMarker: id => this._open(id),
         // a tap on empty space closes either sheet
         onRoom: id => (id || this._sheet !== 'layers' ? this._openRoom(id) : this._closeSheet()),
         onMode: m => {
@@ -603,7 +603,7 @@ export class House3dCard extends Base {
         if (mode) return this._view.setMode(mode.dataset.mode);
         if (ev.target.closest('[data-act="reset"]')) return this._view.reset();
         const row = ev.target.closest('[data-entity]');
-        if (row) return this._moreInfo(row.dataset.entity);
+        if (row) return this._open(row.dataset.entity);
         const sw = ev.target.closest('[data-layer]');
         if (sw) return this._switchLayer(sw.dataset.layer, sw.getAttribute('aria-checked') !== 'true');
         const st = ev.target.closest('[data-style]');
@@ -788,6 +788,15 @@ export class House3dCard extends Base {
       row.className = toMarker(d, st).state;
       row.querySelector('.st').textContent = this._stateText(st);
     });
+  }
+
+  // config.views maps an entity to the view a tap opens instead of more-info. A camera's full
+  // screen shows a still while the live stream starts and steps to the next camera, so two
+  // cameras drawn on top of each other are one tap and one arrow apart
+  _open(entityId) {
+    const path = (this._config.views || {})[entityId];
+    if (path) this.dispatchEvent(new CustomEvent('hass-action', { detail: { action: 'tap', config: { tap_action: { action: 'navigate', navigation_path: path } } }, bubbles: true, composed: true }));
+    else this._moreInfo(entityId);
   }
 
   _moreInfo(entityId) {

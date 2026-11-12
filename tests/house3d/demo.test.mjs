@@ -46,7 +46,8 @@ const noTimers = { schedule: () => 0, cancel: () => {} };
 test('the shipped data: the real views, 3D first, on the fixture model', () => {
   assert.ok(model.devices.length > 0 && model.car && model.car.entity);
   assert.deepEqual(dashboard.views.slice(0, 2).map(v => v.path), ['maja-3d', 'kodu']);
-  assert.deepEqual(dashboard.views[0].cards, [{ type: 'custom:house3d-card' }]);
+  const cams = Object.fromEntries(dashboard.views.filter(v => v.path.startsWith('kaamera-')).map(v => [v.path.replace('kaamera-', 'camera.'), `/lovelace/${v.path}`]));
+  assert.deepEqual(dashboard.views[0].cards, [{ type: 'custom:house3d-card', views: cams }]);
   for (const p of ['energia', 'soojuspump', 'ventilatsioon', 'pergola', 'valve', 'kaamerad', 'teler']) assert.ok(dashboard.views.some(v => v.path === p), p);
   assert.ok(dashboard.views.some(v => v.subview && v.path.startsWith('kaamera-')));
 });

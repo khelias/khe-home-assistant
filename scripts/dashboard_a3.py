@@ -297,6 +297,7 @@ def build(house, people, model):
             {
                 "type": "custom:house3d-card",
                 "model": model,
+                "views": dc.camera_views(h),
                 "height": HERO_HEIGHT,
                 "stretch": True,
                 "grid_options": {"columns": "full"},

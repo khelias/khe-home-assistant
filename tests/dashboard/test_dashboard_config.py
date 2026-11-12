@@ -57,6 +57,29 @@ class Build(unittest.TestCase):
         self.assertEqual(paths(dc.build({}, [], fixture_model()))[:2], ["maja-3d", "kodu"])
         self.assertEqual(paths(dc.build({}, [], None))[0], "kodu")
 
+    def test_a_camera_tap_in_the_3d_card_opens_its_own_subview(self):
+        house = {"cams": [["test_a", "A"], ["test_b", "B"]]}
+        config = dc.build(house, [], fixture_model())
+        (card,) = [v for v in config["views"] if v["path"] == "maja-3d"][0]["cards"]
+        self.assertEqual(
+            card["views"],
+            {
+                "camera.test_a": "/lovelace/kaamera-test_a",
+                "camera.test_b": "/lovelace/kaamera-test_b",
+            },
+        )
+        for path in card["views"].values():
+            self.assertIn(path.removeprefix("/lovelace/"), paths(config))
+
+    def test_a_cameras_subview_steps_to_the_nearest_camera_first(self):
+        h = dc.House({"cams": [["a", "A"], ["b", "B"], ["c", "C"], ["d", "D"]]}, [])
+        pos = {"camera.a": [0, 2, 0], "camera.b": [9, 2, 0], "camera.c": [1, 2, 1]}
+        order = [c["camera_entity"] for c in dc.cam_view(h, "a", "A", pos)["cards"][0]["cameras"]]
+        # d has no position and goes last
+        self.assertEqual(order, ["camera.a", "camera.c", "camera.b", "camera.d"])
+        no_model = dc.cam_view(h, "b", "B")["cards"][0]["cameras"]
+        self.assertEqual([c["title"] for c in no_model], ["B", "A", "C", "D"])
+
     def test_cameras_become_subviews(self):
         house = {"cams": [["test_a", "A"], ["test_b", "B"]]}
         p = paths(dc.build(house, [], None))

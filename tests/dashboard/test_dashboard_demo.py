@@ -56,6 +56,7 @@ def is_id(s):
 
 MODEL = fixture_model()
 CONFIG = dd.demo_config(MODEL)
+DEMO_CAMERAS = dc.camera_views(dc.House(dd.DEMO_HOUSE, dd.DEMO_PEOPLE))
 STATES = dd.demo_states(MODEL)["states"]
 SERIES = dd.demo_series()
 FIXTURE_IDS = {d["entity"] for d in MODEL["devices"]} | {MODEL["car"]["entity"]}
@@ -92,7 +93,7 @@ class DemoConfig(unittest.TestCase):
         for bad in ("{{", "{%", "data_generator", "callWS"):
             self.assertNotIn(bad, text)
         house3d = [c for c in cards(CONFIG) if c["type"] == "custom:house3d-card"]
-        self.assertEqual(house3d, [{"type": "custom:house3d-card"}])
+        self.assertEqual(house3d, [{"type": "custom:house3d-card", "views": DEMO_CAMERAS}])
 
     def test_every_id_the_generator_emits_is_catalogued(self):
         # without the model: the 3D card carries it inline, fixture ids and all
@@ -206,7 +207,9 @@ class DemoEnglish(unittest.TestCase):
 
     def test_the_3d_card_is_english(self):
         house3d = [c for c in cards(CONFIG_EN) if c["type"] == "custom:house3d-card"]
-        self.assertEqual(house3d, [{"type": "custom:house3d-card", "language": "en"}])
+        self.assertEqual(
+            house3d, [{"type": "custom:house3d-card", "views": DEMO_CAMERAS, "language": "en"}]
+        )
 
     def test_series_cover_every_english_chart(self):
         wanted = set()

@@ -8,6 +8,7 @@ that repo is private because the plan names the house's devices and addresses.
 """
 
 import copy
+import math
 
 FORECAST = "sensor.elektri_hinna_prognoos"
 DHW = "water_heater.hot_water_tank_domestic_hot_water_tank"
@@ -1034,6 +1035,10 @@ energy = {
 }
 
 
+def cam_path(slug):
+    return "kaamera-" + slug
+
+
 # One subview per camera behind the grid above. The grid stays on cheap still images
 # (0.3 s, 1080p from the NVR); a live stream is only opened when a camera is tapped.
 # Advanced Camera Card because the stock cards cannot zoom: here ctrl+wheel or pinch
@@ -1047,17 +1052,27 @@ energy = {
 # card lets you swipe on to the next camera. So nothing outside the card names a camera:
 # the view title stays "Kaamerad" and the card's own status bar carries the name, since
 # dashboard chrome cannot follow a selection made inside a card. Per-camera state stays on the
-# grid behind and the motion switches on Kaamerate seaded, for the same reason.
+# grid behind and the motion switches on Kaamerate seaded, for the same reason. The
+# others follow nearest first where the 3D model places them, so two cameras that share
+# a corner (and overlap in the 3D view) are one arrow apart.
 #
 # Panel, not sections: a sections column stops at 500 px, which left a 2.7K stream
 # as a thumbnail on a desktop. In a panel the card takes the whole area under the
 # header and letterboxes the stream inside it (card `dimensions` do not apply there),
 # so a desktop gets the full width and a phone gets full width with dark bands.
-def cam_view(h, slug, name):
-    others = [{"camera_entity": "camera." + s, "title": t} for s, t in h.cams if s != slug]
+def cam_view(h, slug, name, pos=None):
+    pos = pos or {}
+    here = pos.get("camera." + slug)
+
+    def dist(s):
+        there = pos.get("camera." + s)
+        return math.dist(here, there) if here and there else math.inf
+
+    near = sorted((c for c in h.cams if c[0] != slug), key=lambda c: dist(c[0]))
+    others = [{"camera_entity": "camera." + s, "title": t} for s, t in near]
     return {
         "title": "Kaamerad",
-        "path": "kaamera-" + slug,
+        "path": cam_path(slug),
         "icon": "mdi:cctv",
         "type": "panel",
         "subview": True,
@@ -1151,7 +1166,7 @@ def cameras(h):
                         "title": n,
                         "camera_view": "auto",
                         "entities": [{"entity": "binary_sensor." + slug + "_liikumine"}],
-                        **nav("/lovelace/kaamera-" + slug),
+                        **nav("/lovelace/" + cam_path(slug)),
                     }
                     for slug, n in h.cams
                 ],
@@ -2106,13 +2121,26 @@ soojuspump_seaded = {
 # The 3D view: the house3d card (house3d/) fed with every model layer
 # but the standalone viewer's showcase. A panel view, because a sections column stops at 500 px.
 # The merged model, with the family's room names, then lives only in HA's .storage.
-def house3d_view(model):
+def house3d_view(h, model):
     return {
         "title": "3D",
         "path": "maja-3d",
         "icon": "mdi:floor-plan",
         "type": "panel",
-        "cards": [{"type": "custom:house3d-card", "model": model}],
+        "cards": [{"type": "custom:house3d-card", "model": model, "views": camera_views(h)}],
+    }
+
+
+# Where a camera tap in the 3D card goes: that camera's full screen (cam_view).
+def camera_views(h):
+    return {"camera." + s: "/lovelace/" + cam_path(s) for s, _ in h.cams}
+
+
+def camera_positions(model):
+    return {
+        d["entity"]: d["pos"]
+        for d in (model or {}).get("devices", [])
+        if d["entity"].startswith("camera.") and d.get("pos")
     }
 
 
@@ -2126,7 +2154,7 @@ def build(house, people, model):
         # 3D first, then Kodu: the demo's order; the house saves another (ADR-007). Without a
         # model, Kodu first.
         "views": [
-            *([house3d_view(model)] if model is not None else []),
+            *([house3d_view(h, model)] if model is not None else []),
             home(h),
             energy,
             soojuspump,
@@ -2141,7 +2169,7 @@ def build(house, people, model):
             pergola_seaded,
             kaamerad_seaded(h),
         ]
-        + [cam_view(h, s, n) for s, n in h.cams],
+        + [cam_view(h, s, n, camera_positions(model)) for s, n in h.cams],
     }
     config = copy.deepcopy(config)
     # A badge row that runs out of width scrolls sideways instead of wrapping to a second line.

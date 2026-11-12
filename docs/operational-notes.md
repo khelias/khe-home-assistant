@@ -430,6 +430,11 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   returns to the overview with the camera left where it is (Lähtesta vaade
   frames home). The standalone viewer keeps the plain selection
   (`setSelection`) for its rooms and feature markers.
+- **Camera taps:** a camera's marker or sheet row opens its full screen
+  (`kaamera-<slug>`, the card config's `views`), not more-info: it shows a
+  still while the stream starts and steps to the next camera, nearest
+  first, so two cameras on top of each other in the view are a tap and an
+  arrow apart.
 - **Markers and taps:** markers are drawn over the canvas but take no
   pointer, so a drag that starts on one orbits and never scrolls the page; a
   tap (no drag past 6 px) tests the shown markers' and chips' rectangles
