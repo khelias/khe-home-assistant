@@ -123,6 +123,19 @@ class Actions(unittest.TestCase):
                     self.assertIn(got, kodu.get(key, {json.dumps(None)}))
                     self.assertEqual(len(kodu.get(key, {got})), 1)
 
+    def test_every_confirmed_kodu_action_is_on_the_first_page(self):
+        def confirmed(node):
+            return {
+                (card.get("entity"), json.dumps(act, sort_keys=True))
+                for card in walk(node)
+                for act in card_actions(card)
+                if "confirmation" in act
+            }
+
+        kodu = confirmed(dc.home(dc.House(HOUSE, PEOPLE)))
+        self.assertTrue(kodu)
+        self.assertLessEqual(kodu, confirmed(first_page(view())))
+
     def test_bubble_buttons_act_alike_on_icon_and_body(self):
         for card in walk(view()):
             if card.get("type") == trial.BUBBLE and card["card_type"] in ("button", "cover"):

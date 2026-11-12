@@ -159,7 +159,8 @@ the operator first; an approval covers that task only.
 - **REST** for states, service calls, `POST /api/template`, diagnostics and
   `POST /api/services/homeassistant/restart` (back in ~10 s; wait another
   ~40 s before trusting a state read). **WebSocket** (`/api/websocket`) for
-  the entity and device registries, config entries, dashboards and HACS,
+  the entity and device registries, config entries, dashboards and the
+  Marketplace (`marketplace/*`, HACS until HA 2026.11),
   sent with `scripts/ha-ws.py '{"type": "..."}'`, which handles auth and ids.
   Host and port are in `scripts/ha-dashboard.py` and `scripts/ha-ws.py`.
 - **Config lives in git, not on the VM.** Edit `config/packages/*.yaml`,
