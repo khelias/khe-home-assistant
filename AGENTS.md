@@ -47,7 +47,9 @@ house3d/           3D house view: engine (core house3d.js, scene/ layer
                    modules, kit and sun), HA card, standalone viewer,
                    placement page, vendored three.js
 scripts/           dashboard_config.py (the HA Overview as data, no I/O),
-                   ha-dashboard.py (reads the private inputs, saves it),
+                   dashboard_trial.py (the Bubble Card trial dashboard
+                   kodu-katse from the same views, ADR-004),
+                   ha-dashboard.py (reads the private inputs, saves either),
                    dashboard_demo.py (the demo's made-up entities, texts and
                    series for the same config), dashboard_demo_en.py (its
                    English, ADR-003), dashboard_scenarios.py (the demo's
@@ -175,7 +177,9 @@ the operator first; an approval covers that task only.
 - **Helpers come up at their minimum.** Set the first value through the API;
   `initial:` would overwrite the household's choice on every restart.
 - **The dashboard is generated**: `dashboard_config.build()` makes it and
-  `scripts/ha-dashboard.py` saves it, and HA adds sections to the stored
+  `scripts/ha-dashboard.py` saves it; `dashboard_trial.build()` makes the
+  trial dashboard `kodu-katse` and `ha-dashboard.py --trial` saves that
+  ([notes](docs/operational-notes.md#bubble-card-trial-kodu-katse)). HA adds sections to the stored
   config by itself when a new device appears. Before rerunning, diff the
   generator's output against the live config: load `ha-dashboard.py` with
   `importlib` (it needs no `websockets` until it saves), dump
