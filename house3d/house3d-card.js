@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 41;
+const HOUSE3D_VERSION = 42;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -378,6 +378,9 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .credit { position: absolute; top: 10px; left: 12px; max-width: calc(100% - 24px); font-size: 11px; line-height: 1.3; color: var(--muted); opacity: .8; pointer-events: none; }
 /* narrow follows the card's own width: a panel view on a wide screen can still be narrow */
 .narrow .bar { top: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: 50%; transform: translateX(50%); }
+/* a hero keeps its one button in the corner and drops its sheet from it */
+:host([hero]) .narrow .bar { top: 12px; bottom: auto; right: 12px; transform: none; }
+:host([hero]) .narrow .sheet { top: 60px; bottom: 8px; max-height: none; }
 /* the sheet ends above the bar, so its buttons stay in reach */
 .narrow .sheet { top: auto; left: 8px; right: 8px; bottom: calc(66px + env(safe-area-inset-bottom, 0px)); width: auto;
   max-height: calc(100% - 82px - env(safe-area-inset-bottom, 0px)); }
@@ -483,11 +486,10 @@ export class House3dCard extends Base {
   _render() {
     if (!this._config || !this.isConnected || this._view || this._mounting) return;
     const sr = this.shadowRoot, t = this._t;
+    // a hero is the page's picture: one corner button, the view's controls in its sheet
     sr.innerHTML = `<style>${STYLE}</style><ha-card class="wrap"><div class="view"></div>
-      <div class="bar"><div class="seg" role="group" aria-label="${t.view}">
-        <button type="button" data-mode="roof" aria-pressed="true">${t.roof}</button>
-        <button type="button" data-mode="open" aria-pressed="false">${t.open}</button></div>
-        <button type="button" class="icon-btn" data-act="reset" aria-label="${t.resetView}" title="${t.resetView}"></button>
+      <div class="bar">${this._isHero ? '' : `${this._modeSeg('roof')}
+        <button type="button" class="icon-btn" data-act="reset" aria-label="${t.resetView}" title="${t.resetView}"></button>`}
         <button type="button" class="icon-btn" data-act="layers" aria-label="${t.layersTitle}" title="${t.layersTitle}" aria-expanded="false"></button></div>
       <aside class="sheet" hidden aria-live="polite"></aside>${this._isHero ? '' : this._credit()}</ha-card>`;
     this._sheet = null;
@@ -506,7 +508,8 @@ export class House3dCard extends Base {
       this._mounting = null;
       this._keep = null;
       this._mod = mod;
-      sr.querySelector('[data-act="reset"]').innerHTML = mod.icon('reset');
+      const reset = sr.querySelector('.bar [data-act="reset"]');
+      if (reset) reset.innerHTML = mod.icon('reset');
       sr.querySelector('[data-act="layers"]').innerHTML = mod.icon('layers');
       this._view = mod.mount(sr.querySelector('.view'), this._config.model, {
         onMarker: id => this._moreInfo(id),
@@ -530,10 +533,16 @@ export class House3dCard extends Base {
         onCar: () => { if (this._carHome) this._view.setCar('arrive'); },
         noWebGL: t.noWebGL
       });
-      sr.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => this._view.setMode(b.dataset.mode)));
-      sr.querySelector('[data-act="reset"]').addEventListener('click', () => this._view.reset());
+      sr.querySelector('.bar').addEventListener('click', ev => {
+        const mode = ev.target.closest('[data-mode]');
+        if (mode) this._view.setMode(mode.dataset.mode);
+        else if (ev.target.closest('[data-act="reset"]')) this._view.reset();
+      });
       sr.querySelector('[data-act="layers"]').addEventListener('click', () => (this._sheet === 'layers' ? this._closeSheet() : this._openLayers()));
       sr.querySelector('.sheet').addEventListener('click', ev => {
+        const mode = ev.target.closest('[data-mode]');
+        if (mode) return this._view.setMode(mode.dataset.mode);
+        if (ev.target.closest('[data-act="reset"]')) return this._view.reset();
         const row = ev.target.closest('[data-entity]');
         if (row) return this._moreInfo(row.dataset.entity);
         const sw = ev.target.closest('[data-layer]');
@@ -800,6 +809,12 @@ export class House3dCard extends Base {
     el.hidden = false;
   }
 
+  // the roof on and off, pressed for mode
+  _modeSeg(mode) {
+    const t = this._t, b = (m, label) => `<button type="button" data-mode="${m}" aria-pressed="${mode === m}">${label}</button>`;
+    return `<div class="seg" role="group" aria-label="${t.view}">${b('roof', t.roof)}${b('open', t.open)}</div>`;
+  }
+
   _openLayers() {
     const sheet = this.shadowRoot.querySelector('.sheet');
     this._room = null;
@@ -807,7 +822,7 @@ export class House3dCard extends Base {
     const t = this._t;
     sheet.innerHTML = `<div class="head"><div><h2>${t.layersTitle}</h2></div>
       <button type="button" class="close" data-act="close" aria-label="${t.close}">${this._mod.icon('close')}</button></div>
-      ${this._isHero ? '' : `<div class="row"><span>${t.style}</span><div class="seg" role="group" aria-label="${t.style}">
+      ${this._isHero ? `<div class="row">${this._modeSeg(this._view.mode)}<button type="button" class="now" data-act="reset">${t.resetView}</button></div>` : `<div class="row"><span>${t.style}</span><div class="seg" role="group" aria-label="${t.style}">
         <button type="button" data-style="simple" aria-pressed="${this._style === 'simple'}">${t.simple}</button>
         <button type="button" data-style="real" aria-pressed="${this._style === 'real'}">${t.real}</button></div></div>`}
       ${this._style === 'real' ? this._timeRows() : this._time ? `<button type="button" class="now" data-act="now" aria-pressed="false">${t.now}</button>` : ''}

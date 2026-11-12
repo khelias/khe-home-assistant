@@ -408,7 +408,9 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   kept from the real style shows a Praegu button there too. Escape closes any sheet, and so
   does a tap on empty canvas. Below 600 px of the card's own width (not the
   screen's) the bar moves to the bottom and a sheet opens just above it, so
-  the bar's buttons stay in reach.
+  the bar's buttons stay in reach. A hero has one button in its top right
+  corner at every width: its sheet holds the roof switch and Lähtesta vaade
+  above the time and the layers.
 - **Leaving and coming back:** HA disconnects the card when the view is
   left; the card keeps its camera and roof mode on the element and the next
   mount starts from them. A new model starts from the home view.
