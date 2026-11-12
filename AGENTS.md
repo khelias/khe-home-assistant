@@ -22,9 +22,11 @@ This file holds rules and pointers; the reference lives in:
   A3 in the Overview with the other views to follow ([ADR-007](docs/decisions/007-a3-in-the-overview.md)),
   page cards reading daily statistics ([ADR-008](docs/decisions/008-a3-page-cards-read-statistics.md)),
   the hero with its surroundings ([ADR-009](docs/decisions/009-hero-shows-the-surroundings.md)),
-  the hero beside the cards on wide screens ([ADR-010](docs/decisions/010-a3-landscape-hero-beside-the-cards.md))
-  and page lines from hourly statistics with a stepper that writes the
+  the hero beside the cards on wide screens ([ADR-010](docs/decisions/010-a3-landscape-hero-beside-the-cards.md)),
+  page lines from hourly statistics with a stepper that writes the
   heating shift ([ADR-011](docs/decisions/011-a3-hourly-lines-and-a-written-setpoint.md))
+  and the demo as the house's Overview, the cards in both languages
+  ([ADR-012](docs/decisions/012-the-demo-is-the-houses-overview.md))
 - [ROADMAP.md](ROADMAP.md) - house automation, near-term and the long form
 
 House documentation (HA rollout, dashboard layout, HVAC protocols, energy)
@@ -39,18 +41,21 @@ own.
 cards/             the dashboard's own Lovelace cards (khe-cards.js, ADR-002,
                    ADR-005, ADR-008, ADR-011): summary, price, tile, chips,
                    heading, status, Energia's month, days and split, and
-                   Soojuspump's reading, with the history sheet; A3 draws
-                   with them; deploy copies them to www/khe-cards/
+                   Soojuspump's reading, with the history sheet, their
+                   words in Estonian and English by their `language`
+                   config (ADR-012); A3 draws with them; deploy copies
+                   them to www/khe-cards/
 config/            what deploy copies into HA's /config
   configuration.yaml
   packages/        one package per device or concern
   tuya_local_devices/  device definitions copied into tuya-local at HA start
-demo/              the public demo: the real dashboard's views on made-up
-                   data, 3D first, on a simulated hass (sim.js); the sections
-                   view and its cards in cards.js, charts.js, icons.js, the
-                   page in demo.js and index.html, its UI strings in both
-                   languages in strings.js, its scenarios' player in
-                   scenario.js; not deployed to HA
+demo/              the public demo: the house's Overview on made-up data,
+                   A3 first and 3D last (ADR-012), on a simulated hass
+                   (sim.js) with a simulated recorder (recorder.js); the
+                   sections view and its cards in cards.js, charts.js,
+                   icons.js, the page in demo.js and index.html, its UI
+                   strings in both languages in strings.js, its scenarios'
+                   player in scenario.js; not deployed to HA
 docs/              operational notes and the README screenshot
   decisions/       ADRs: NNN-slug.md, numbered from 001
 house3d/           3D house view: engine (core house3d.js, scene/ layer
@@ -61,8 +66,9 @@ scripts/           dashboard_config.py (the HA Overview as data, no I/O),
                    look from the same entities, and overview(), what the
                    house saves, ADR-005, ADR-007, ADR-008, ADR-011),
                    ha-dashboard.py (reads the private inputs, saves either),
-                   dashboard_demo.py (the demo's made-up entities, texts and
-                   series for the same config), dashboard_demo_en.py (its
+                   dashboard_demo.py (the demo's made-up entities, texts,
+                   series and recorder profiles for the same config),
+                   dashboard_demo_en.py (its
                    English, ADR-003), dashboard_scenarios.py (the demo's
                    scenarios),
                    ha-ws.py (HA WebSocket commands from the CLI),
@@ -73,7 +79,7 @@ scripts/           dashboard_config.py (the HA Overview as data, no I/O),
                    the Estfeed hourly load), check.sh, install-hooks.sh
 tests/house3d/     3D view tests on a made-up fixture house: model and build
                    (Python unittest), engine, simple-style snapshot, demo
-                   dashboard and scenario player (node:test)
+                   dashboard, its recorder and scenario player (node:test)
 tests/dashboard/   dashboard config, demo catalogue and scenario tests
                    (Python unittest)
 tests/cards/       the dashboard cards' pure helpers (node:test), on recorder
@@ -94,9 +100,10 @@ tests/cards/       the dashboard cards' pure helpers (node:test), on recorder
 - `ruff check --fix scripts && ruff format scripts` before committing Python.
 - `python3 -I scripts/house3d-build.py --demo OUTDIR` builds the demo from the
   made-up test house only (`tests/house3d/fixture-model.md`): the card, the
-  engine, the dashboard cards, `demo/` and the generated dashboard, states
-  and series, in Estonian and as `*.en.json` in English, which the demo
-  shows with `?lang=en` ([ADR-003](docs/decisions/003-demo-in-english.md)). khe-sites
+  engine, the dashboard cards, `demo/` and the generated dashboard, states,
+  series and recorder profiles, in Estonian and as `*.en.json` in English,
+  which the demo shows with `?lang=en` ([ADR-003](docs/decisions/003-demo-in-english.md),
+  [ADR-012](docs/decisions/012-the-demo-is-the-houses-overview.md)). khe-sites
   runs it and publishes the result at <https://khe.ee/ha/> on its next
   deploy: a push to khe-sites, its weekly schedule, or
   `gh workflow run deploy.yml -R khelias/khe-sites`.
@@ -197,13 +204,16 @@ the operator first; an approval covers that task only.
   generator's output against the live config: load `ha-dashboard.py` with
   `importlib` (it needs no `websockets` until it saves), dump
   `local_config()`, compare with a WebSocket `lovelace/config` read. The
-  public demo is `dashboard_config.build()` on made-up inputs (Kodu, 3D
-  first, until the demo moves to A3), so a new entity id
-  needs an entry in `dashboard_demo.CATALOGUE` (the dashboard tests name it)
-  and a new templated card a sample text in `TEXTS`. The demo is English
-  too, so a new visible string needs its English line in
+  public demo is the same `overview()` on made-up inputs
+  ([ADR-012](docs/decisions/012-the-demo-is-the-houses-overview.md)), so a
+  new entity id needs an entry in `dashboard_demo.CATALOGUE` (the dashboard
+  tests name it), a statistic an A3 card reads a profile in
+  `demo_recorder()`, and a new templated card a sample text in `TEXTS`. The
+  demo is English too, so a new visible string needs its English line in
   `scripts/dashboard_demo_en.py` (`EN`, a state word in `WORDS`, a sample
-  text in `TEXTS_EN`); the demo build's `KeyError` names it.
+  text in `TEXTS_EN`, a template's `tekst` or `hinnang` in `ATTRS`); the
+  demo build's `KeyError` names it. A card's own words need both of the
+  card's language tables; the card tests fail on a missing key.
 - **A demo scenario labels a step as an automation only for what a real
   automation does.** `scripts/dashboard_scenarios.py` may tell any story with
   the demo's devices, but a step that carries an alias touches only entities

@@ -1,14 +1,16 @@
-"""The public demo's dashboard: the real generator's config on made-up data.
+"""The public demo's dashboard: the house's own Overview on made-up data (ADR-012).
 
-demo_config(model) runs dashboard_config.build() with made-up inputs and rewrites the copy it
-gets back: every entity id to a demo id (CATALOGUE), every statistic id to a demo one, the six
-labels that name the house's own devices (LABELS), every templated markdown card to sample text
-(TEXTS), and every apexcharts data_generator away; the charts take series() instead. An id the
-catalogue does not know fails the build, so a new entity in the generator needs an entry here.
-house3d-build.py --demo writes the result, demo_states() and demo_series() next to the demo.
-demo_config_en() and its siblings are the same demo in English (ADR-003): they walk the Estonian
-output and look every visible string and state word up in dashboard_demo_en, and one it lacks
-fails the build as an uncatalogued id does.
+demo_config(model) runs dashboard_a3.overview() with made-up inputs, so the demo opens on A3 and
+shows 3D last as the house does, and rewrites the copy it gets back: every entity id to a demo id
+(CATALOGUE), every statistic id to a demo one, the labels that name the house's own devices
+(LABELS), every templated markdown card to sample text (TEXTS), and every apexcharts
+data_generator away; the charts take series() instead. An id the catalogue does not know fails
+the build, so a new entity in the generator needs an entry here. house3d-build.py --demo writes
+the result, demo_states(), demo_series() and demo_recorder(), the profiles the demo's recorder
+answers history from, next to the demo. demo_config_en() and its siblings are the same demo in
+English (ADR-003, ADR-012): they walk the Estonian output and look every visible string and state
+word up in dashboard_demo_en, and one it lacks fails the build as an uncatalogued id does; the
+house's own cards get `language: en` and draw their own words.
 
 Stdlib only and no I/O: khe-sites runs the demo build in CI without a venv or khe-meta. The real
 ids that name the house's own devices are spelled once, in dashboard_config, and taken from
@@ -19,6 +21,7 @@ import copy
 import math
 import re
 
+import dashboard_a3 as a3
 import dashboard_config as dc
 import dashboard_demo_en as en
 
@@ -34,7 +37,9 @@ LABELS = {
     dc.NET[0][1]: "Lüüs",
     dc.SMOKE_GROUP: "Suitsuandur",
     dict(dc.BASE_UPDATES)["update.komfovent_update"]: "Ventilatsiooniseade",
+    dc.ROOF_NAME: "Terrassi katus",
 }
+
 
 # the inputs build() gets: the fixture's two cameras, a made-up family, no NVR app
 DEMO_HOUSE = {
@@ -568,7 +573,7 @@ entry(
     "286",
     "Sel kuul",
     kulu="41,30 €",
-    hind="0,144 €/kWh",
+    hind="14,4 c/kWh",
     **KWH,
 )
 entry(
@@ -577,7 +582,7 @@ entry(
     "612",
     "Eelmine kuu",
     kulu="84,12 €",
-    hind="0,137 €/kWh",
+    hind="13,7 c/kWh",
     **KWH,
 )
 entry(dc.FORECAST, "sensor.demo_price_forecast", "36", "Prognoos katab", unit_of_measurement="h")
@@ -591,6 +596,53 @@ entry(
     "sensor.nord_pool_ee_madalaim_hind", "sensor.demo_spot_low", "0.032", "Täna madalaim", **PRICE
 )
 entry("sensor.nord_pool_ee_korgeim_hind", "sensor.demo_spot_high", "0.214", "Täna kõrgeim", **PRICE)
+# the price level's state, arvel and senti follow the forecast's hour at load (demo/recorder.js)
+entry(
+    dc.PRICE_LEVEL,
+    "sensor.demo_price_level",
+    "odav",
+    "Elektri hinna tase",
+    arvel=13.9,
+    senti=8.8,
+    hinnang="Praegu alla päeva keskmise",
+)
+entry(
+    dc.WASH,
+    "sensor.demo_window_wash",
+    "22:00",
+    "Odavaim aken pesu",
+    tekst="Täna 22:00–02:00, 11,2 s/kWh, 38% odavam kui päeva kalleim algus.",
+)
+entry(
+    dc.SAUNA,
+    "sensor.demo_window_sauna",
+    "20:00",
+    "Odavaim aken saun",
+    tekst="Täna 20:00–22:00, 12,4 s/kWh, 31% odavam kui päeva kalleim algus.",
+)
+entry(
+    dc.TOMORROW,
+    "sensor.demo_tomorrow_price",
+    "12.8",
+    "Homne elekter",
+    tekst="Homme keskmiselt 12,8 senti, 9% odavam kui täna, parim 4 h aken 03:00–07:00, "
+    "8,1 s/kWh; kalleim tund 18:00, 21,5 s/kWh.",
+)
+# the level sensor's words by the price with all fees, €/kWh, as the house's template bands them
+LEVELS = [
+    [0.08, "väga odav"],
+    [0.15, "odav"],
+    [0.2, "tavaline"],
+    [0.25, "kõrgevõitu"],
+    [0.32, "kallis"],
+    [None, "väga kallis"],
+]
+# the level sensor's hinnang by the price now against the day's average (below, near, above)
+HINNANG = {
+    "below": "Praegu alla päeva keskmise",
+    "near": "Praegu päeva keskmise lähedal",
+    "above": "Praegu üle päeva keskmise",
+}
 
 # the TV and its watch time
 entry(dc.TV, "media_player.demo_tv", "playing", "Teler", app_name="YouTube", device_class="tv")
@@ -652,6 +704,7 @@ for (real, label), state in zip(DEMO_PEOPLE, ["home", "not_home"], strict=True):
 STATISTICS = {
     "estfeed:estfeed_consumption_642b": "demo:consumption",
     "estfeed:estfeed_cost_642b": "demo:cost",
+    dc.PRICE_STAT: "demo:price",
 }
 
 # a select shown through an Estonian label sensor follows its select, as the real template does
@@ -700,14 +753,6 @@ MIRRORS = {
 
 # sample text for each templated markdown card, in the subset demo/cards.js renders
 TEXTS = {
-    dc.price_now["content"]: (
-        '<ha-alert alert-type="success">Odav tund. Praegu 8,8 senti kilovatt-tunni eest, '
-        "kõigi tasudega 13,9 senti.</ha-alert>\n\n"
-        '<ha-icon icon="mdi:washing-machine"></ha-icon> **Pesu 4 h:** täna 22.00–02.00, '
-        "keskmiselt 11,2 senti\n\n"
-        '<ha-icon icon="mdi:hot-tub"></ha-icon> **Saun 2 h:** täna 20.00–22.00, keskmiselt 12,4 senti\n\n'
-        '<ha-icon icon="mdi:weather-night"></ha-icon> Homme keskmiselt 12,8 senti, odavaim aeg 03.00–05.00.'
-    ),
     dc.tv_today["content"]: (
         "# 1 t 25 min\n\n"
         '<ha-icon icon="mdi:youtube"></ha-icon> **YouTube** 52 min\n\n'
@@ -751,8 +796,8 @@ def _walk(o, key=None):
 
 
 def demo_config(model):
-    """The real generator's config for the demo house, every id and private label replaced."""
-    return _walk(dc.build(DEMO_HOUSE, DEMO_PEOPLE, model))
+    """The house's Overview for the demo house, every id and private label replaced."""
+    return _walk(a3.overview(DEMO_HOUSE, DEMO_PEOPLE, model))
 
 
 # A starting state per fixture device the catalogue does not cover, varied by position in the
@@ -812,30 +857,99 @@ def demo_states(model):
             "state": "not_home",
             "attributes": {"friendly_name": car.get("name") or car["entity"], "arrived_at": None},
         }
-    return {"states": states, "mirrors": copy.deepcopy(MIRRORS)}
+    return {
+        "states": states,
+        "mirrors": copy.deepcopy(MIRRORS),
+        "levels": copy.deepcopy(LEVELS),
+        "hinnang": dict(HINNANG),
+    }
+
+
+# ---------- the simulated recorder (ADR-012) ----------
+
+# What demo/recorder.js answers recorder and history requests from, and the states it computes at
+# load: per statistic or entity a profile, never a stored series, so any day of any month has
+# data. wave: a measurement around `level`, `amp` either side of its daily `peak` hour, drifting by
+# `drift` over a few days. counter: kWh per hour, its state the sum since the day's or the month's
+# start; `last` names last month's attribute (a utility meter's `last_period`, Daikin's month
+# names). cost: a counter's kWh times the price. price: € per kWh with all fees, with a morning
+# and an evening peak. duty: an on/off entity's daily hours on.
+RECORDER_ZONE = "Europe/Tallinn"
+
+
+def _wave_profile(level, amp, peak, drift=0.0, decimals=1):
+    return {
+        "kind": "wave",
+        "level": level,
+        "amp": amp,
+        "peak": peak,
+        "drift": drift,
+        "decimals": decimals,
+    }
+
+
+def _counter(base, amp, peak, state=None, last=None):
+    return {"kind": "counter", "base": base, "amp": amp, "peak": peak, "state": state, "last": last}
+
+
+def demo_recorder():
+    """recorder.json: {zone, profiles, house, forecast}, every id the demo's own."""
+    ids = {real: e["id"] for real, e in CATALOGUE.items()}
+    consumption, cost, price = (STATISTICS[k] for k in (dc.CONSUMPTION, dc.COST, dc.PRICE_STAT))
+    boiler = (0.1, 0.06, 6)
+    profiles = {
+        ids[dc.OUTDOOR]: _wave_profile(7.5, 2.5, 15, 2.0),
+        ids[dc.PUMP_OUTDOOR]: _wave_profile(7.1, 2.5, 15, 2.0),
+        ids[dc.SUPPLY]: _wave_profile(19.6, 1.0, 16, 0.4),
+        ids[dc.EXTRACT]: _wave_profile(21.4, 0.4, 19, 0.2),
+        ids[dc.HUMIDITY]: _wave_profile(41, 3, 20, 2.0, 0),
+        ids[dc.PANEL_TEMP]: _wave_profile(21.2, 0.5, 18, 0.2),
+        ids[dc.BOILER_TEMP]: _wave_profile(51, 3, 7, 1.0, 0),
+        ids[dc.LEAVING]: _wave_profile(32.5, 2.5, 5, 1.5),
+        consumption: _counter(0.9, 0.45, 19),
+        cost: {"kind": "cost", "of": consumption, "price": price},
+        price: {
+            "kind": "price",
+            "base": 0.14,
+            "morning": 0.05,
+            "evening": 0.09,
+            "night": 0.05,
+            "drift": 0.03,
+        },
+        ids[dc.BOILER_TODAY]: _counter(*boiler, state="day"),
+        ids[dc.BOILER_MONTH]: _counter(*boiler, state="month", last="month"),
+        ids[dc.VENT_MONTH]: _counter(0.04, 0.01, 12, state="month", last="last_period"),
+        ids[dc.HEATER_MONTH]: _counter(0, 0, 0, state="month", last="last_period"),
+        ids[dc.PERGOLA_LIGHT]: {"kind": "duty", "on": [[17, 23]], "states": ["off", "on"]},
+        ids[dc.TV]: {"kind": "duty", "on": [[7, 8], [19, 22]], "states": ["off", "playing"]},
+        ids[dc.MODE]: {"kind": "duty", "on": [[18, 19]], "states": ["normal", "kitchen"]},
+    }
+    return {
+        "zone": RECORDER_ZONE,
+        "profiles": profiles,
+        # the house's counters: kWh and their cost (kulu) and average price (hind) since a start
+        "house": {
+            "consumption": consumption,
+            "cost": cost,
+            "today": ids[dc.TODAY],
+            "yesterday": ids[dc.YESTERDAY],
+            "month": ids[dc.MONTH],
+            "last_month": ids[dc.LAST_MONTH],
+        },
+        # today's and tomorrow's prices, and the level sensor's word, price and spot price now;
+        # the spot price is the price less `fees`
+        "forecast": {
+            "entity": ids[dc.FORECAST],
+            "price": price,
+            "level": ids[dc.PRICE_LEVEL],
+            "fees": 0.05,
+        },
+    }
 
 
 # Made-up series, the same on every build: a smooth daily shape plus a fixed ripple.
 def _wave(i, period, phase=0.0):
     return math.sin(2 * math.pi * (i + phase) / period)
-
-
-def _spot(h):
-    """Spot price in €/kWh at hour h of today (h may run into tomorrow): low at night, a
-    morning and an evening peak, tomorrow a little dearer."""
-    hour = h % 24
-    morning = math.exp(-(((hour - 8) / 2.0) ** 2))
-    evening = math.exp(-(((hour - 19) / 2.5) ** 2))
-    return round(
-        0.03 + 0.11 * morning + 0.15 * evening + 0.01 * _wave(h, 7) + (0.015 if h >= 24 else 0), 4
-    )
-
-
-def _total(h):
-    """The billed price: spot with VAT, plus the day or night grid fee."""
-    hour = h % 24
-    grid = 0.0602 if 7 <= hour < 22 else 0.0347
-    return round(_spot(h) * 1.24 + grid, 4)
 
 
 def _days(n, base, amp, ripple, period=7, decimals=1):
@@ -863,33 +977,6 @@ def demo_series():
         s[key] = {"step": step, "points": points}
 
     ids = {real: e["id"] for real, e in CATALOGUE.items()}
-    put(f"{ids[dc.FORECAST]}|Kokku", "hour_of_today", [[h, _total(h)] for h in range(48)])
-    put(f"{ids[dc.FORECAST]}|Börs", "hour_of_today", [[h, _spot(h)] for h in range(48)])
-    hour = ids["sensor.elektri_hind_see_tund"]
-    put(
-        f"{hour}|Keskmine",
-        "day",
-        [
-            [d, round(sum(_total(h) for h in range(24)) / 24 + 0.02 * _wave(d, 9), 3)]
-            for d in range(-29, 1)
-        ],
-    )
-    put(
-        f"{hour}|Kõrgeim tund",
-        "day",
-        [
-            [d, round(max(_total(h) for h in range(24)) + 0.04 * _wave(d, 6, 2), 3)]
-            for d in range(-29, 1)
-        ],
-    )
-    put(f"{ids['sensor.boiler_energy_today']}|kWh", "day", _days(15, 2.5, 1.0, 0.4, decimals=0))
-    months = [
-        [m, round(55 + 30 * math.cos(2 * math.pi * (m + 9) / 12) + 3 * _wave(m, 5), 0)]
-        for m in range(-23, 1)
-    ]
-    put(f"{ids['sensor.boiler_energy_month']}|kWh", "month", months)
-    put(STATISTICS["estfeed:estfeed_consumption_642b"], "day", _days(31, 15, 4, 2.5))
-    put(STATISTICS["estfeed:estfeed_cost_642b"], "day", _days(31, 2.2, 0.7, 0.4, decimals=2))
     put(ids["sensor.komfovent_total_recovered_energy"], "day", _days(31, 9, 3, 1.5))
     put(ids["sensor.komfovent_total_ahu_energy"], "day", _days(31, 0.95, 0.12, 0.05, decimals=2))
     for i, real in enumerate(TV_WEEK):
@@ -901,9 +988,6 @@ def demo_series():
                 for d, v in _days(7, 0.8 - 0.12 * i, 0.5, 0.3, period=4 + i)
             ],
         )
-    put(ids["sensor.space_heating_leaving_water_temperature"], "hour", _hours(32, 3, 0.6, 2))
-    put(ids["sensor.space_heating_outdoor_temperature"], "hour", _hours(7, 3.5, 0.4, 9))
-    put(ids["sensor.boileri_vee_temperatuur"], "hour", _hours(50, 3, 1.2, 4))
     put(ids["sensor.komfovent_supply_temperature"], "hour", _hours(19.5, 1.2, 0.3, 3))
     put(ids["sensor.komfovent_extract_temperature"], "hour", _hours(21.4, 0.5, 0.2, 1))
     put(ids[dc.OUTDOOR], "hour", _hours(7.5, 3.5, 0.3, 9))
@@ -938,7 +1022,10 @@ def demo_series():
 
 # ---------- the demo in English (ADR-003) ----------
 
-VISIBLE = ("title", "heading", "name", "text", "label")
+VISIBLE = (
+    *("title", "heading", "name", "text", "label", "caption", "aria", "state_text", "icon_label"),
+    *("confirm", "ok", "on", "off", "fault_text", "note", "foot", "unit"),
+)
 RAW = re.compile(r"^[a-z0-9_]*$")
 NUMBER = re.compile(r"^-?\d+(\.\d+)?$")
 WHEN = re.compile(r"^(\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?|\d{2}:\d{2}(:\d{2})?)$")
@@ -955,6 +1042,9 @@ def _en(s):
 
 def _word(s):
     """English for a state value or select option; a raw HA key, a number or a time passes."""
+    # a word the house writes in lower case (a price level) reads as a raw key otherwise
+    if s in en.WORDS:
+        return en.WORDS[s]
     if RAW.match(s) or NUMBER.match(s) or WHEN.match(s) or s in en.SAME:
         return s
     if s not in en.WORDS:
@@ -964,7 +1054,8 @@ def _word(s):
 
 def _walk_en(o, key=None):
     if isinstance(o, dict):
-        if o.get("type") == "custom:house3d-card":
+        # the 3D card and the house's own cards take their words from their language (ADR-012)
+        if o.get("type") == "custom:house3d-card" or str(o.get("type")).startswith("custom:khe-"):
             o = {**o, "language": "en"}
         md = o.get("type") == "markdown"
         return {k: _walk_en(v, "markdown" if md and k == "content" else k) for k, v in o.items()}
@@ -973,6 +1064,9 @@ def _walk_en(o, key=None):
     if isinstance(o, str):
         if key == "markdown":
             return en.TEXTS_EN[o] if o in en.TEXTS_EN else _en(o)
+        # a tile's state_text list names its parts by attribute or entity
+        if key == "state_text" and (RAW.match(o) or ID.match(o)):
+            return o
         if key in VISIBLE:
             return _en(o)
         if key in ("state", "state_not"):
@@ -986,8 +1080,9 @@ def demo_config_en(model):
 
 
 def demo_states_en(model):
-    """demo_states() in English: names, state words, options, mirrors, and a decimal point in
-    every other text attribute (the cost and price texts)."""
+    """demo_states() in English: names, state words, options, mirrors, the price level's words,
+    the sentences the house's templates write (en.ATTRS), and a decimal point in every other text
+    attribute (the cost and price texts)."""
     data = demo_states(model)
     for st in data["states"].values():
         a = st["attributes"]
@@ -996,10 +1091,16 @@ def demo_states_en(model):
         if "options" in a:
             a["options"] = [_word(o) for o in a["options"]]
         for k, v in a.items():
-            if k != "friendly_name" and isinstance(v, str):
+            if k in ("tekst", "hinnang"):
+                if v not in en.ATTRS:
+                    raise KeyError(f"no English for the {k} text {v!r} (add it to en.ATTRS)")
+                a[k] = en.ATTRS[v]
+            elif k != "friendly_name" and isinstance(v, str):
                 a[k] = re.sub(r"(\d),(\d)", r"\1.\2", v)
     for m in data["mirrors"].values():
         m["map"] = {k: _word(v) for k, v in m["map"].items()}
+    data["levels"] = [[at, _word(w)] for at, w in data["levels"]]
+    data["hinnang"] = {k: en.ATTRS[v] for k, v in data["hinnang"].items()}
     return data
 
 

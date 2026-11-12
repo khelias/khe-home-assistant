@@ -21,6 +21,7 @@ node --test tests/house3d/engine.test.mjs || fail "engine tests"
 node --test tests/house3d/demo.test.mjs || fail "demo tests"
 node --test tests/house3d/demo-en.test.mjs || fail "English demo tests"
 node --test tests/house3d/scenario.test.mjs || fail "scenario tests"
+node --test tests/house3d/recorder.test.mjs || fail "recorder tests"
 node --test tests/cards/cards.test.mjs || fail "card tests"
 
 engine=house3d

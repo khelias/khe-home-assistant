@@ -199,10 +199,15 @@ serves them as `/local/khe-cards/`, and a change arrives without a restart.
   `handleAction` runs it, confirmation dialogs included. A frontend change
   there would leave the tiles dead, so after each HA bump tap an A3 tile,
   a mode button and the light's slider and see HA act.
+- **Language:** every card takes `language` in its config, `et` by default;
+  the demo's English sets `en`. The words are in the module's two tables,
+  never from the HA profile ([ADR-012](decisions/012-the-demo-is-the-houses-overview.md)),
+  and the English expects the demo's English sensor words for the price
+  level and the tomorrow line (`sensorWords('en')`).
 - **Demo:** the demo mounts the same module on its simulated hass and runs
   each `hass-action` through its action runner; `?light` shows the light
-  palette. It does not show the A3 elements; the house's first view is A3,
-  the demo's is still Kodu.
+  palette. It shows the house's Overview with A3, its recorder answering
+  the cards' statistics and history (`demo/recorder.js`, ADR-012).
 
 ## A3, the Overview's first view
 
@@ -218,8 +223,8 @@ behind every value and device. It replaced the Bubble Card trial of
 - **Saving:** `ha-dashboard.py` saves `dashboard_a3.overview()`:
   `dashboard_config.build()`'s views with A3's in place of Kodu's at the same
   paths (`kodu` and, since 2026-11-12, `energia` and `soojuspump`) and the 3D view
-  (`maja-3d`) last. Kodu stays in `dashboard_config.py` for the demo and as
-  A3's source of entities and confirmations.
+  (`maja-3d`) last. Kodu stays in `dashboard_config.py` as the fallback and as
+  A3's source of entities and confirmations; the demo builds `overview()` too.
 - **Undo:** revert the commit and run `ha-dashboard.py` for the Overview
   with Kodu and 3D first. The earlier separate dashboard (ADR-006) also needs
   `ha-dashboard.py --a3` from that reverted code and HA's frontend data
@@ -542,25 +547,36 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   lets a test house device name that matches a real one, judged generic,
   stay in that file. The same script builds the standalone viewer from the shareable
   layers only, and with `--demo` the public demo on the test fixture
-  (khe.ee/ha/, published by khe-sites), which reads no model: the real
-  dashboard from `dashboard_config.build()`, rewritten by
+  (khe.ee/ha/, published by khe-sites), which reads no model: the house's
+  Overview from `dashboard_a3.overview()`, rewritten by
   `scripts/dashboard_demo.py` (every entity id to a demo or fixture entity,
   templated cards to sample text, charts to made-up series), drawn by
-  `demo/cards.js` on a simulated hass, 3D first and with Kodu, where the
-  house has A3 first and 3D last ([ADR-007](decisions/007-a3-in-the-overview.md)). With `?lang=en` it is in
+  `demo/cards.js` on a simulated hass, A3 first and 3D last as in the house
+  ([ADR-012](decisions/012-the-demo-is-the-houses-overview.md)). The A3 cards
+  read a simulated recorder: `recorder.json` holds a profile per statistic
+  and `demo/recorder.js` answers statistics and history from it relative to
+  the moment asked, in Europe/Tallinn, and computes at load the states that
+  follow the date (today's and the month's use and cost, last month, the
+  prices and the level), so a month total equals its days. The renderer
+  imitates what A3 uses of HA's sections view: `row_span`, the `screen`
+  condition, the view background, `.content`/`.section` and window
+  scrolling for the hero's stretch; a link to a page the demo lacks
+  (`/energy`) shows a note. With `?lang=en` it is in
   English ([ADR-003](decisions/003-demo-in-english.md)): `demo.js` loads the
   `*.en.json` files, which `dashboard_demo.demo_config_en` and its siblings
   make from the Estonian ones through `scripts/dashboard_demo_en.py`,
   `demo/strings.js` holds the page's own strings in both languages, and the
-  3D card turns English with `language: en` in its config (only the demo sets
-  it). khe.ee's header keeps `?lang` current and reloads the page on a switch.
+  3D card and the house's own cards turn English with `language: en` in their
+  config (only the demo sets it). khe.ee's header keeps `?lang` current and
+  reloads the page on a switch.
   Its bars and views start below `--host-h`, 0 here, where khe-sites puts the
   khe.ee site header. Every `demo/` file and the
   generated JSON are versioned by one hash (`__DEMO_VERSION__`), the card and
   engine by `HOUSE3D_VERSION`. The toolbar's scenarios (`scenarios.json` from
   `scripts/dashboard_scenarios.py`, played by `demo/scenario.js`) reset the
-  simulated hass to their start and apply their steps on time; a 3D one shows
-  the card's real style at a fixed November instant through the card's
+  simulated hass to their start and apply their steps on time; one told in
+  the 3D house plays on A3, whose hero shows the card's real style at a
+  fixed November instant through the card's
   `setScene()`, which stores nothing, and `clearScene()` returns to the
   visitor's own style and live time. The generator names the real house's devices,
   so `check.sh` scans the whole demo build and the test house with the real
@@ -573,7 +589,9 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   style's materials and shadow flags, the scene import rule), the demo
   dashboard's tests (`tests/house3d/demo.test.mjs`: every card type, feature
   and icon drawn, every perform-action through the simulation, visibility
-  conditions, no fixture name in `demo/`), the scenario player's tests
+  conditions, no fixture name in `demo/`), the demo recorder's tests
+  (`tests/house3d/recorder.test.mjs`: the house's response shapes, counters
+  equal to their days, the zone's days, the prices), the scenario player's tests
   (`tests/house3d/scenario.test.mjs`: every built scenario plays to its end in
   both languages, the scene times' sun) and a syntax
   check of every engine module, all on a made-up house,

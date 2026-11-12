@@ -13,6 +13,7 @@ The keys are the demo's own strings, already public in dashboard.json; the priva
 """
 
 SAME = {
+    "°C",
     "3D",
     "Advanced Camera Card",
     "ApexCharts Card",
@@ -41,6 +42,49 @@ SAME = {
 }
 
 EN = {
+    # A3 (ADR-012)
+    "Boileri elekter": "Boiler electricity",
+    "Boileri elekter päevade kaupa": "Boiler electricity by day",
+    "Boileri vesi 48 tundi": "Boiler water, 48 hours",
+    "Boileris": "In the boiler",
+    "Elektri hinna päeva keskmine ja kalleim tund": "Electricity price, the day's average and dearest hour",
+    "Elektri hinna tase": "Electricity price level",
+    "Eurod": "Euros",
+    "Hind 30 päeva": "Price, 30 days",
+    "Homne elekter": "Tomorrow's electricity",
+    "Kes võtab sel kuul": "Who uses it this month",
+    "Kliima": "Climate",
+    "Korras, küte ja boiler töötavad": "All well, heating and boiler running",
+    "Kulu päevade kaupa": "Cost by day",
+    "Käib, lõpeb ise, kui vesi on soe": "Running, stops by itself once the water is hot",
+    "Küte oma elektrit ei mõõda; kogu maja on Energias.": "Heating has no meter of its own; the whole house is in Energy.",
+    "Küte sees": "Heating on",
+    "Küte seisab": "Heating stopped",
+    "Küte välja, kütte režiim, boileri siht": "Heating off, heating mode, boiler target",
+    "Küte väljas": "Heating off",
+    "Odavaim aken pesu": "Cheapest laundry window",
+    "Odavaim aken saun": "Cheapest sauna window",
+    "Terrassi katus": "Terrace roof",
+    "Pergola valgus sisse või välja": "Pergola light on or off",
+    "Pesu 4 h": "Laundry 4 h",
+    "Päevad": "Days",
+    "Saun 2 h": "Sauna 2 h",
+    "Tarbimine päevade kaupa": "Use by day",
+    "Toatemperatuur 48 tundi": "Room temperature, 48 hours",
+    "kWh päevas keskmiselt": "kWh a day on average",
+    "küttevesi": "heating water",
+    "pumba andur": "the pump's sensor",
+    "pumbast välja": "leaving the pump",
+    "päev pole läbi": "day not over",
+    "senti/kWh": "cents/kWh",
+    "senti/kWh keskmiselt, kõigi tasudega": "cents/kWh on average, all fees included",
+    "terve kuu": "the whole month",
+    "toast väljuv õhk": "air leaving the rooms",
+    "toaõhk": "indoor air",
+    "tuppa tulev õhk": "air coming in",
+    "vesi": "water",
+    "Õues": "Outdoors",
+    "€ päevas keskmiselt, ilma kuutasudeta": "€ a day on average, without monthly fees",
     # the dashboard: views, sections, tiles, badges, charts
     "Aiakaamera": "Garden camera",
     "Ainult kui kodus": "Only when home",
@@ -425,6 +469,13 @@ EN = {
 }
 
 WORDS = {
+    # the price level sensor's words, as the English cards' sensor table names them (khe-cards.js)
+    "väga odav": "very cheap",
+    "odav": "cheap",
+    "tavaline": "normal",
+    "kõrgevõitu": "fairly high",
+    "kallis": "expensive",
+    "väga kallis": "very expensive",
     "Automaatne": "Auto",
     "Eemal": "Away",
     "Intensiivne": "Intensive",
@@ -447,21 +498,6 @@ WORDS = {
 
 # keyed by the Estonian sample text, so a reworded sample needs its English here too
 TEXTS_EN = {
-    '<ha-alert alert-type="success">Odav tund. Praegu 8,8 senti kilovatt-tunni eest, '
-    "kõigi tasudega 13,9 senti.</ha-alert>\n\n"
-    '<ha-icon icon="mdi:washing-machine"></ha-icon> **Pesu 4 h:** täna 22.00–02.00, '
-    "keskmiselt 11,2 senti\n\n"
-    '<ha-icon icon="mdi:hot-tub"></ha-icon> **Saun 2 h:** täna 20.00–22.00, keskmiselt 12,4 senti\n\n'
-    '<ha-icon icon="mdi:weather-night"></ha-icon> Homme keskmiselt 12,8 senti, odavaim aeg 03.00–05.00.': (
-        '<ha-alert alert-type="success">Cheap hour. Now 8.8 cents per kilowatt-hour, '
-        "13.9 cents with all fees.</ha-alert>\n\n"
-        '<ha-icon icon="mdi:washing-machine"></ha-icon> **Laundry 4 h:** today 22:00–02:00, '
-        "11.2 cents on average\n\n"
-        '<ha-icon icon="mdi:hot-tub"></ha-icon> **Sauna 2 h:** today 20:00–22:00, '
-        "12.4 cents on average\n\n"
-        '<ha-icon icon="mdi:weather-night"></ha-icon> Tomorrow 12.8 cents on average, '
-        "cheapest 03:00–05:00."
-    ),
     "# 1 t 25 min\n\n"
     '<ha-icon icon="mdi:youtube"></ha-icon> **YouTube** 52 min\n\n'
     '<ha-icon icon="mdi:television-play"></ha-icon> **Jupiter** 33 min\n\n': (
@@ -477,5 +513,24 @@ TEXTS_EN = {
         "| 19:40–now | YouTube | 22 min |\n"
         "| 18:05–18:38 | Jupiter | 33 min |\n"
         "| 16:10–16:40 | YouTube | 30 min |"
+    ),
+}
+
+
+# the sentences the house's templates write into tekst and hinnang, keyed by the demo's Estonian
+ATTRS = {
+    "Praegu alla päeva keskmise": "Below the day's average now",
+    "Praegu päeva keskmise lähedal": "Near the day's average now",
+    "Praegu üle päeva keskmise": "Above the day's average now",
+    "Täna 22:00–02:00, 11,2 s/kWh, 38% odavam kui päeva kalleim algus.": (
+        "Today 22:00–02:00, 11.2 c/kWh, 38% cheaper than the day's dearest start."
+    ),
+    "Täna 20:00–22:00, 12,4 s/kWh, 31% odavam kui päeva kalleim algus.": (
+        "Today 20:00–22:00, 12.4 c/kWh, 31% cheaper than the day's dearest start."
+    ),
+    "Homme keskmiselt 12,8 senti, 9% odavam kui täna, parim 4 h aken 03:00–07:00, "
+    "8,1 s/kWh; kalleim tund 18:00, 21,5 s/kWh.": (
+        "Tomorrow 12.8 cents on average, 9% cheaper than today, best 4 h window 03:00–07:00, "
+        "8.1 c/kWh; dearest hour 18:00, 21.5 c/kWh."
     ),
 }

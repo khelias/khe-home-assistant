@@ -1,6 +1,6 @@
 # ADR-007: A3 is the Overview's first view, Kodu goes, the 3D view moves last
 
-- **Status:** Accepted (2026-11-12)
+- **Status:** Accepted (2026-11-12); decision 2's demo half superseded by [ADR-012](012-the-demo-is-the-houses-overview.md): the demo builds `overview()`, A3 first and 3D last
 - **Related:** [ADR-002](002-own-dashboard-cards.md), [ADR-005](005-a3-glass-cards-history-sheet.md), [ADR-006](006-a3-front-page-live-hero.md)
 
 ## Context

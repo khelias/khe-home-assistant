@@ -17,7 +17,9 @@ const nf1 = nf(1);
 const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
 const dtf = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-export const CARD_TYPES = ['tile', 'heading', 'horizontal-stack', 'vertical-stack', 'entities', 'markdown', 'button', 'statistics-graph', 'history-graph', 'custom:apexcharts-card', 'weather-forecast', 'picture-glance', 'custom:advanced-camera-card', 'custom:house3d-card', 'custom:khe-summary-card', 'custom:khe-price-card', 'custom:khe-tile-card'];
+// the house's own cards (cards/khe-cards.js), drawn by themselves as HA mounts a custom: type
+const KHE_TYPES = ['summary', 'price', 'tile', 'chips', 'heading', 'status', 'month', 'days', 'split', 'reading'].map(k => `custom:khe-${k}-card`);
+export const CARD_TYPES = ['tile', 'heading', 'horizontal-stack', 'vertical-stack', 'entities', 'markdown', 'button', 'statistics-graph', 'history-graph', 'custom:apexcharts-card', 'weather-forecast', 'picture-glance', 'custom:advanced-camera-card', 'custom:house3d-card', ...KHE_TYPES];
 export const FEATURE_TYPES = ['cover-open-close', 'light-brightness', 'select-options', 'numeric-input', 'target-temperature', 'bar-gauge', 'alarm-modes'];
 export const ACTIONS = ['more-info', 'toggle', 'navigate', 'perform-action', 'url', 'none'];
 
@@ -120,6 +122,8 @@ export function visible(conditions, states) {
         if (s === '' || !Number.isFinite(n)) return false;
         return (c.above === undefined || n > c.above) && (c.below === undefined || n < c.below);
       }
+      // HA's screen condition; without a window (the tests) every query matches
+      case 'screen': return typeof matchMedia !== 'function' || matchMedia(c.media_query).matches;
       case 'or': return (c.conditions || []).some(x => visible([x], states));
       case 'and': return visible(c.conditions, states);
       default: return true;
@@ -509,7 +513,7 @@ const CARDS = {
   markdown: markdownCard, button: buttonCard, 'statistics-graph': chartCard, 'history-graph': chartCard,
   'custom:apexcharts-card': chartCard, 'weather-forecast': chartCard, 'picture-glance': pictureGlance,
   'custom:advanced-camera-card': cameraCard, 'custom:house3d-card': (conf, ctx) => ctx.house3d(conf),
-  'custom:khe-summary-card': kheCard, 'custom:khe-price-card': kheCard, 'custom:khe-tile-card': kheCard
+  ...Object.fromEntries(KHE_TYPES.map(k => [k, kheCard]))
 };
 
 export function card(conf, ctx) {
@@ -536,11 +540,13 @@ export function renderSections(view, ctx) {
     el.append(row);
     parts.push(...badges);
   }
+  // HA's structure, which the 3D hero's stretch looks for: .section elements in .content
   const grid = document.createElement('div');
-  grid.className = 'columns';
+  grid.className = 'content';
   const secs = (view.sections || []).map(s => {
     const sec = document.createElement('section');
     sec.className = 'section';
+    if (s.row_span > 1) sec.style.gridRow = `span ${s.row_span}`;
     for (const c of s.cards) {
       const k = card(c, ctx);
       place(k.el, c);
@@ -552,6 +558,9 @@ export function renderSections(view, ctx) {
     return [s, sec];
   });
   el.append(grid);
+  let last = null;
+  const update = hass => { last = hass; parts.forEach(p => p.update(hass)); };
+  let cols = 0;
   const layout = width => {
     const n = columnsFor(width, view.max_columns);
     el.style.setProperty('--n', String(n));
@@ -561,10 +570,13 @@ export function renderSections(view, ctx) {
       sec.style.setProperty('--cols', String(12 * span));
       for (const c of sec.children) if (c.dataset.span && c.dataset.span !== 'full') c.style.gridColumn = `span ${Math.min(Number(c.dataset.span), 12 * span)}`;
     }
+    // a screen condition answers anew at a new column count, where A3's queries change
+    if (last && n !== cols) update(last);
+    cols = n;
   };
   // measured on the view, not on this box, whose width follows the column count
   ctx.resize(el, () => layout((el.parentElement || el).clientWidth - 32));
-  return { el, update: hass => parts.forEach(p => p.update(hass)), layout };
+  return { el, update, layout };
 }
 
 // a panel view: its one card fills the area under the bar

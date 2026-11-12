@@ -2,8 +2,8 @@
 
 overview(house, people, model) is the Overview the house saves: dashboard_config.build()'s views
 with A3's views in place of Kodu's at the same paths (`kodu`, `energia`, `soojuspump`) and the 3D
-view moved last. dashboard_config.build() itself stays Kodu with 3D first, which the public demo
-builds. energia() is Energia: the month, the days, who used what and the price, from daily
+view moved last, which the public demo builds too (ADR-012). dashboard_config.build() itself
+stays Kodu with 3D first, the house's fallback. energia() is Energia: the month, the days, who used what and the price, from daily
 statistics. soojuspump(h) is Soojuspump: the status, the indoor and boiler temperatures as 48-hour
 lines from hourly statistics, the heating shift as a stepper, the boost and the boiler's
 electricity by the day.

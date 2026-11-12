@@ -2151,8 +2151,8 @@ def build(house, people, model):
     h = House(house, people)
     config = {
         "title": "Kodu",
-        # 3D first, then Kodu: the demo's order; the house saves another (ADR-007). Without a
-        # model, Kodu first.
+        # 3D first, then Kodu; the house and the demo use overview()'s order (ADR-007, ADR-012).
+        # Without a model, Kodu first.
         "views": [
             *([house3d_view(h, model)] if model is not None else []),
             home(h),

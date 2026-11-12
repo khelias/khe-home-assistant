@@ -1,7 +1,7 @@
 """The demo's scenarios: short stories a visitor plays on the demo house (demo/scenario.js).
 
-A scenario is {id, title, summary, view, time, start, steps}: the view's path, for the 3D view
-the instant its sky shows (a fixed November date with the Tallinn offset, so the sun is the same
+A scenario is {id, title, summary, view, time, start, steps}: the view's path (A3's, whose
+hero plays it, for a story told in the 3D house), for the 3D house the instant its sky shows (a fixed November date with the Tallinn offset, so the sun is the same
 for every visitor), the states it starts from as overrides of demo_states(), and its steps. A
 step is {at, caption?, automation?} with one action: set [entity, state], service
 [domain, service, entity or entities, data], time (an ISO instant for the 3D view's sky) or car
@@ -78,7 +78,7 @@ SCENARIOS = [
         "id": "koju",
         "title": "Koju jõudmine",
         "summary": "Auto jõuab õhtul koju ja inimene läheb majja.",
-        "view": "maja-3d",
+        "view": "kodu",
         "time": at("18:30"),
         "start": {ALARM: {"state": "armed_away"}},
         "steps": [
@@ -107,7 +107,7 @@ SCENARIOS = [
         "id": "hommik",
         "title": "Hommik",
         "summary": "Inimene ärkab ja liigub magamistoast kööki.",
-        "view": "maja-3d",
+        "view": "kodu",
         "time": at("06:45"),
         "start": {},
         "steps": [
@@ -138,7 +138,7 @@ SCENARIOS = [
         "id": "sissetung",
         "title": "Öine sissetung",
         "summary": "Öösel, kui valve on peal, avaneb terrassi uks.",
-        "view": "maja-3d",
+        "view": "kodu",
         "time": at("02:30"),
         "start": {ALARM: {"state": "armed_away"}},
         "steps": [
@@ -159,7 +159,7 @@ SCENARIOS = [
         "id": "tulekahju",
         "title": "Tulekahju",
         "summary": "Õhtul tunneb eeskoja suitsuandur suitsu.",
-        "view": "maja-3d",
+        "view": "kodu",
         "time": at("21:00"),
         "start": {},
         "steps": [
@@ -203,7 +203,7 @@ SCENARIOS = [
         "id": "loojang",
         "title": "Loojang",
         "summary": "Pool tundi enne loojangut süttivad pergola tuled õhtuse tooniga.",
-        "view": "maja-3d",
+        "view": "kodu",
         "time": at("14:55"),
         "start": {
             TONE: {"state": DAYTIME},

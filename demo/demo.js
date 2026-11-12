@@ -1,14 +1,16 @@
-// A mock Home Assistant dashboard on the made-up test house. The views are the house's real
-// dashboard, made by the same generator (dashboard.json, scripts/dashboard_demo.py), drawn by
-// demo/cards.js on one simulated hass (demo/sim.js, starting from states.json); the 3D view is
-// the real house3d card and Kodu's real cards (khe-cards.js). Taps run as HA runs them: more-info
+// A mock Home Assistant dashboard on the made-up test house. The views are the house's own
+// Overview, made by the same generator (dashboard.json, scripts/dashboard_demo.py), drawn by
+// demo/cards.js on one simulated hass (demo/sim.js, starting from states.json) with a simulated
+// recorder (demo/recorder.js, recorder.json, ADR-012); A3's hero and the 3D view are the real
+// house3d card, A3's cards the house's own (khe-cards.js). Taps run as HA runs them: more-info
 // opens a dialog like HA's, toggles and service calls change the simulated states, navigate opens
 // a view or a subview. This file names no entity: the data names them, so it works for any
 // generated dashboard. ?light shows HA's light theme, which the dashboard cards follow; ?lang=en
 // shows the English demo, the .en.json files and demo/strings.js (ADR-003). The toolbar's
 // scenarios (scenarios.json, played by scenario.js) tell short stories on the same simulated hass.
 import './house3d-card.js?v=__HOUSE3D_VERSION__';
-import './khe-cards.js?v=__KHE_CARDS_VERSION__';
+import { zoneParts, dayStart, lastMonthName } from './khe-cards.js?v=__KHE_CARDS_VERSION__';
+import { createRecorder } from './recorder.js?v=__DEMO_VERSION__';
 import { svg, entityIcon } from './icons.js?v=__DEMO_VERSION__';
 import { createSim } from './sim.js?v=__DEMO_VERSION__';
 import { play } from './scenario.js?v=__DEMO_VERSION__';
@@ -43,9 +45,9 @@ document.querySelectorAll('[data-t-aria]').forEach(el => { el.setAttribute('aria
 
 const load = name => fetch(`./${name}?v=__DEMO_VERSION__`).then(r => { if (!r.ok) throw new Error(name); return r.json(); });
 const suffix = lang === 'en' ? '.en.json' : '.json';
-let model, dashboard, data, series, scenarios;
+let model, dashboard, data, series, scenarios, recorderSpec;
 try {
-  [model, dashboard, data, series, scenarios] = await Promise.all(['model', 'dashboard', 'states', 'series', 'scenarios'].map(n => load(n + suffix)));
+  [model, dashboard, data, series, scenarios, recorderSpec] = await Promise.all([...['model', 'dashboard', 'states', 'series', 'scenarios'].map(n => load(n + suffix)), load('recorder.json')]);
 } catch (e) {
   viewsEl.innerHTML = `<div class="fallback">${esc(t.loadFailed)}</div>`;
   throw e;
@@ -53,13 +55,28 @@ try {
 
 const light = new URLSearchParams(location.search).has('light');
 document.documentElement.classList.toggle('light', light);
+// the states that follow the date (today's use, this month's, the prices) start from the
+// recorder's own data, so the cards' numbers agree with their history on any day
+const recorder = createRecorder(recorderSpec, { zoneParts, dayStart, lastMonthName });
+for (const [e, s] of Object.entries(recorder.dated(Date.now(), { comma: lang !== 'en', levels: data.levels, hinnang: data.hinnang }))) {
+  const s0 = data.states[e];
+  if (s0) data.states[e] = { ...s0, state: s.state, attributes: { ...s0.attributes, ...(s.attributes || {}) } };
+}
 const sim = createSim(data);
 const byEntity = new Map((model.devices || []).map(d => [d.entity, d]));
 const roomName = id => (id === 'oues' ? t.outdoors : ((model.rooms || []).find(r => r.id === id) || {}).name || '');
 const nameOf = e => (sim.states[e] && sim.states[e].attributes.friendly_name) || (byEntity.get(e) || {}).name || e;
 const areaOf = e => (byEntity.has(e) ? roomName(byEntity.get(e).room) : '');
 const carEntity = model.car && model.car.entity;
-const hass = () => ({ states: sim.states, config: { latitude: 58.6, longitude: 25.0 }, themes: { darkMode: !light }, formatEntityState: formatState });
+// HA's hass as the cards use it: the recorder over WebSocket, a service call as a Promise
+const hass = () => ({
+  states: sim.states,
+  config: { latitude: 58.6, longitude: 25.0, time_zone: recorderSpec.zone },
+  themes: { darkMode: !light },
+  formatEntityState: formatState,
+  callWS: msg => recorder.callWS(msg),
+  callService: (d, s, dt, t) => Promise.resolve().then(() => sim.callService(d, s, dt, t))
+});
 
 /* ---------- confirmation, as HA asks before an action that has one ---------- */
 
@@ -105,7 +122,10 @@ const panes = dashboard.views.map(view => {
 const linksTo = (view, path) => JSON.stringify(view).includes(`"navigation_path":"/lovelace/${path}"`);
 const parentOf = pane => panes.find(p => !p.view.subview && linksTo(p.view, pane.view.path)) || panes.find(p => p.view.subview && p !== pane && linksTo(p.view, pane.view.path)) || panes[0];
 
-let current = null, cameFrom = null, card3d = null;
+// the 3D cards: A3's hero and the 3D view's; scenarios and the car's drive-in take the one shown
+let current = null, cameFrom = null;
+const cards3d = [];
+const shown3d = () => (current && cards3d.find(el => current.el.contains(el))) || null;
 
 const resizers = new Map();
 const ro = new ResizeObserver(entries => entries.forEach(en => { const fn = resizers.get(en.target); if (fn && en.contentRect.width) fn(); }));
@@ -120,7 +140,7 @@ const ctx = {
     const el = document.createElement('house3d-card');
     el.setAttribute('aria-label', t.house3d);
     el.setConfig({ ...conf, model });
-    card3d = el;
+    cards3d.push(el);
     return { el, update: h => { el.hass = h; } };
   },
   // a dashboard card from khe-cards.js, as HA mounts a custom: type
@@ -135,7 +155,11 @@ const api = {
   moreInfo: openInfo,
   toggle: e => sim.toggle(e),
   callService: (d, s, dt, t) => sim.callService(d, s, dt, t),
-  navigate: nav => { const p = pathOf(nav); if (p && panes.some(x => x.view.path === p)) location.hash = p; },
+  navigate: nav => {
+    const p = pathOf(nav);
+    if (p && panes.some(x => x.view.path === p)) location.hash = p;
+    else note(t.noPage);
+  },
   openUrl: url => window.open(url, '_blank', 'noopener')
 };
 
@@ -154,11 +178,29 @@ function show(pane) {
     pane.rendered = v.type === 'panel' ? renderPanel(v, ctx) : renderSections(v, ctx);
     pane.el.append(pane.rendered.el);
   }
-  if (isHouse3d(v) && card3d) card3d.isPanel = true;
+  const c3 = shown3d();
+  if (isHouse3d(v) && c3) c3.isPanel = true;
+  // a view's own background, as HA draws it behind the view
+  document.body.style.background = v.background || '';
+  document.body.style.backgroundAttachment = v.background ? 'fixed' : '';
   pane.rendered.update(hass());
   if (pane.tab) pane.tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  pane.el.scrollTop = 0;
-  carOnFirstShow(isHouse3d(v));
+  window.scrollTo(0, 0);
+  carOnFirstShow(!!c3);
+}
+
+// a short line at the bottom, as HA's toast, for a link the demo cannot follow
+const toast = document.createElement('div');
+toast.className = 'toast';
+toast.setAttribute('role', 'status');
+toast.hidden = true;
+document.body.append(toast);
+let toastTimer = null;
+function note(text) {
+  toast.textContent = text;
+  toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.hidden = true; }, 3000);
 }
 
 // the hash is matched against the views' paths, never used as a selector; anything else is the first view
@@ -194,14 +236,14 @@ tabs.addEventListener('keydown', ev => {
 sim.subscribe(() => {
   const h = hass();
   if (current && current.rendered) current.rendered.update(h);
-  // the 3D card follows every change, also while another view is current, so it sees each arrival
-  if (card3d && !(current && isHouse3d(current.view))) card3d.hass = h;
+  // a 3D card follows every change, also while another view is current, so it sees each arrival
+  for (const el of cards3d) if (!(current && current.el.contains(el))) el.hass = h;
   if (dialog.open && sim.states[openEntity] !== shownState) renderInfo();
 });
 
-// The car drives in by itself once, on the 3D view's first show and not at page load: a card
-// that is hidden would take the arrival without the drive. Leaving the view before it comes
-// puts it off to the next show; driving it from its dialog first cancels it.
+// The car drives in by itself once, on the first show of a view with a 3D card (the hero) and not
+// at page load: a card that is hidden would take the arrival without the drive. Leaving the view
+// before it comes puts it off to the next show; driving it from its dialog first cancels it.
 let carDone = !carEntity;
 let carTimer = null;
 // a tap on the car's dialog or a scenario takes the car over: the first show's drive-in is off
@@ -432,7 +474,7 @@ sceneDlg.querySelector('.sc-list').innerHTML = scenarios.map((s, i) => `<button 
 const fitScene = () => {
   if (!sceneBar.hidden && sceneBar.offsetHeight > (parseFloat(sceneBar.style.minHeight) || 0)) sceneBar.style.minHeight = `${sceneBar.offsetHeight}px`;
   document.documentElement.style.setProperty('--scene-h', sceneBar.hidden ? '0px' : `${sceneBar.offsetHeight}px`);
-  if (card3d && card3d.hasAttribute('panel')) card3d.isPanel = true;
+  for (const el of cards3d) if (el.hasAttribute('panel')) el.isPanel = true;
 };
 new ResizeObserver(fitScene).observe(sceneBar);
 
@@ -458,17 +500,19 @@ function startScenario(s) {
   const pane = panes.find(p => p.view.path === s.view) || panes[0];
   show(pane);
   if (location.hash.slice(1) !== pane.view.path) location.hash = pane.view.path;
+  // the scenario's sky is the shown view's 3D card's for the whole story, also while the visitor
+  // looks at another view; every other card returns to its own style and time
+  const c3 = s.time ? shown3d() : null;
   // play() checks the scenario before anything changes, so one it rejects leaves no bar or scene
   stopScene = play(s, sim, {
     car: carEntity,
     onStep: st => { if (st.caption) beat(s.title, st.automation, st.caption); },
-    onTime: at => { if (card3d) card3d.setScene({ time: at }); },
+    onTime: at => { if (c3) c3.setScene({ time: at }); },
     onEnd: () => sceneDone(true)
   });
-  if (card3d) {
-    if (s.time) card3d.setScene({ style: 'real', time: s.time });
-    else card3d.clearScene();
-  }
+  for (const el of cards3d) if (el !== c3) el.clearScene();
+  if (c3) c3.setScene({ style: 'real', time: s.time });
+
   sceneBar.style.minHeight = '';
   beat(s.title, null, s.summary);
   sceneDone(false);
@@ -485,7 +529,7 @@ function endScenario(restart) {
   sceneBar.hidden = true;
   if (!restart) return;
   sim.reset();
-  if (card3d) card3d.clearScene();
+  for (const el of cards3d) el.clearScene();
 }
 
 sceneBtn.addEventListener('click', () => sceneDlg.showModal());

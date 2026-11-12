@@ -29,12 +29,14 @@ try {
   rmSync(out, { recursive: true, force: true });
 }
 
-// every object with a type, nested cards, features and badges included
+// every object with a type, nested cards, features and badges included; a khe card's history,
+// usage_history and series say what the recorder holds, not a card
+const NOT_CARDS = new Set(['history', 'usage_history', 'series']);
 function typed(o, found = []) {
   if (Array.isArray(o)) o.forEach(x => typed(x, found));
   else if (o && typeof o === 'object') {
     if (typeof o.type === 'string') found.push(o);
-    Object.values(o).forEach(x => typed(x, found));
+    Object.entries(o).forEach(([k, x]) => { if (!NOT_CARDS.has(k)) typed(x, found); });
   }
   return found;
 }
@@ -43,18 +45,21 @@ const cardsOf = types => all.filter(c => types.includes(c.type));
 const actions = all.flatMap(c => [c.tap_action, c.icon_tap_action]).filter(Boolean);
 const noTimers = { schedule: () => 0, cancel: () => {} };
 
-test('the shipped data: the real views, 3D first, on the fixture model', () => {
+test("the shipped data: the house's Overview, A3 first and 3D last, on the fixture model", () => {
   assert.ok(model.devices.length > 0 && model.car && model.car.entity);
-  assert.deepEqual(dashboard.views.slice(0, 2).map(v => v.path), ['maja-3d', 'kodu']);
   const cams = Object.fromEntries(dashboard.views.filter(v => v.path.startsWith('kaamera-')).map(v => [v.path.replace('kaamera-', 'camera.'), `/lovelace/${v.path}`]));
-  assert.deepEqual(dashboard.views[0].cards, [{ type: 'custom:house3d-card', views: cams }]);
+  const [first, last] = [dashboard.views[0], dashboard.views.at(-1)];
+  assert.deepEqual([first.path, last.path], ['kodu', 'maja-3d']);
+  assert.deepEqual(last.cards, [{ type: 'custom:house3d-card', views: cams }]);
+  assert.equal(typed(first).filter(c => c.type === 'custom:house3d-card').length, 1, 'the hero');
+  assert.ok(first.background && first.sections[0].row_span === 2);
   for (const p of ['energia', 'soojuspump', 'ventilatsioon', 'pergola', 'valve', 'kaamerad', 'teler']) assert.ok(dashboard.views.some(v => v.path === p), p);
   assert.ok(dashboard.views.some(v => v.subview && v.path.startsWith('kaamera-')));
 });
 
 test('every card type and tile feature in the dashboard has a renderer', () => {
   // views, sections, badges, entities rows, tile features and apexcharts series carry a type too
-  const notCards = new Set(['panel', 'sections', 'grid', 'entity', 'section', 'column', 'line', ...FEATURE_TYPES]);
+  const notCards = new Set(['panel', 'sections', 'grid', 'entity', 'section', ...FEATURE_TYPES]);
   const cardTypes = new Set(all.filter(c => !notCards.has(c.type)).map(c => c.type));
   assert.deepEqual([...cardTypes].filter(t => !CARD_TYPES.includes(t)), []);
   const feats = new Set(all.filter(c => c.type === 'tile').flatMap(c => (c.features || []).map(f => f.type)));
@@ -174,12 +179,17 @@ test('visibility: state and state_not single and listed, numeric_state, or, and'
 
 test('every visibility condition in the dashboard evaluates on the starting states', () => {
   for (const c of all.filter(c => c.visibility)) assert.equal(typeof visible(c.visibility, createSim(data, noTimers).states), 'boolean');
-  // Kodu's system section shows either the pending updates or "all is well", never both
-  const states = createSim(data, noTimers).states;
-  const ok = all.find(c => c.type === 'markdown' && c.content === 'Kõik korras.');
-  const updates = all.find(c => c.type === 'entities' && c.visibility);
-  assert.ok(ok && updates);
-  assert.notEqual(visible(ok.visibility, states), visible(updates.visibility, states));
+  // A3's title and chips: one way under the hero, another beside it, by HA's screen condition
+  const screens = all.flatMap(c => (c.visibility || []).filter(v => v.condition === 'screen'));
+  assert.ok(screens.length >= 3);
+  const matchMedia = q => ({ matches: q === screens[0].media_query });
+  globalThis.matchMedia = matchMedia;
+  try {
+    assert.equal(visible([screens[0]], {}), true);
+    assert.equal(visible([{ condition: 'screen', media_query: '(min-width: 99999px)' }], {}), false);
+  } finally {
+    delete globalThis.matchMedia;
+  }
 });
 
 test("a nowrite tile's icon tap and body tap change nothing", async () => {
@@ -281,7 +291,9 @@ test('every relative import in the demo files carries a version', () => {
 test('the dashboard cards ship with the demo and the page knows their types', () => {
   assert.ok(built.files.includes('khe-cards.js'));
   assert.match(built.demoJs, /khe-cards\.js\?v=\d+'/);
-  for (const t of ['custom:khe-summary-card', 'custom:khe-price-card', 'custom:khe-tile-card']) assert.ok(CARD_TYPES.includes(t), t);
+  for (const t of new Set(all.map(c => c.type).filter(t => t.startsWith('custom:khe-')))) assert.ok(CARD_TYPES.includes(t), t);
+  assert.ok(built.files.includes('recorder.js') && built.files.includes('recorder.json'));
+
 });
 
 // The cards hand HA a hass-action; the demo runs its config through runAction as HA's

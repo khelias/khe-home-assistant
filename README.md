@@ -8,9 +8,10 @@ YAML packages, a generator for the dashboard, small tools for HA's API, and a
 
 **[Try the dashboard](https://khe.ee/ha/)**: the house's own dashboard,
 made by the same generator, on a made-up test house with simulated devices
-and made-up charts. The 3D view comes first, then home, energy, heat pump,
-ventilation, pergola, alarm, cameras and TV; tap a tile to control it as in
-Home Assistant, and watch the car drive in through the gate. The toolbar's
+and made-up history. It opens on home with the 3D house on top, then energy,
+heat pump, ventilation, pergola, alarm, cameras and TV, with the full 3D view
+last, in Estonian or English; tap a tile to control it as in Home Assistant,
+and watch the car drive in through the gate. The toolbar's
 scenarios play short stories on it, such as coming home, a break-in at night
 or rain on the pergola, and mark what the house's real automations do.
 

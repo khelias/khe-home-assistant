@@ -460,7 +460,8 @@ class Demo(unittest.TestCase):
             out = self.build(tmp)
             data = {n: json.loads((out / n).read_text(encoding="utf-8")) for n in self.DATA_FILES}
             for lang in ("", ".en"):
-                self.assertEqual(data[f"dashboard{lang}.json"]["views"][0]["path"], "maja-3d")
+                views = data[f"dashboard{lang}.json"]["views"]
+                self.assertEqual((views[0]["path"], views[-1]["path"]), ("kodu", "maja-3d"))
                 self.assertIn("states", data[f"states{lang}.json"])
                 self.assertTrue(data[f"series{lang}.json"])
             self.assertIn("walls", data["model.en.json"])

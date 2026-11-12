@@ -1,6 +1,6 @@
 # ADR-003: The demo's English is a demo-only translation
 
-- **Status:** Accepted (2026-10-20)
+- **Status:** Accepted (2026-10-20); decision 1 narrowed by [ADR-012](012-the-demo-is-the-houses-overview.md): the dashboard cards carry their own words in both languages and take `language: en` from their config
 - **Related:** [ADR-001](001-own-3d-engine.md), [estate ADR-015](https://github.com/khelias/khe-architecture/blob/main/decisions/015-family-design-layer.md)
 
 ## Context

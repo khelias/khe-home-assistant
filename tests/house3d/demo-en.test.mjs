@@ -55,7 +55,8 @@ test('every English chart draws from series.en.json', () => {
   const charts = [];
   const walk = o => { if (Array.isArray(o)) o.forEach(walk); else if (o && typeof o === 'object') { if (CHARTS[o.type]) charts.push(o); Object.values(o).forEach(walk); } };
   walk(dashboard.views);
-  assert.ok(charts.some(c => c.type === 'custom:apexcharts-card'));
+  assert.ok(charts.length > 0);
+
   for (const c of charts) assert.doesNotMatch(CHARTS[c.type](c, series, new Date(), 400, e => e), /No data|No forecast/, c.type);
 });
 

@@ -12,12 +12,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
+import dashboard_a3 as a3
 import dashboard_config as dc
 import dashboard_demo as dd
 import dashboard_demo_en as en
 import house3d_model
 
 FIXTURE = ROOT / "tests/house3d/fixture-model.md"
+# the A3 hero without its inline model, which the demo loads from model.json
+HERO = {
+    "type": "custom:house3d-card",
+    "height": a3.HERO_HEIGHT,
+    "stretch": True,
+    "grid_options": {"columns": "full"},
+}
 
 
 def fixture_model():
@@ -93,11 +101,14 @@ class DemoConfig(unittest.TestCase):
         for bad in ("{{", "{%", "data_generator", "callWS"):
             self.assertNotIn(bad, text)
         house3d = [c for c in cards(CONFIG) if c["type"] == "custom:house3d-card"]
-        self.assertEqual(house3d, [{"type": "custom:house3d-card", "views": DEMO_CAMERAS}])
+        self.assertEqual(
+            house3d,
+            [{**HERO, "views": DEMO_CAMERAS}, {"type": "custom:house3d-card", "views": DEMO_CAMERAS}],
+        )
 
     def test_every_id_the_generator_emits_is_catalogued(self):
         # without the model: the 3D card carries it inline, fixture ids and all
-        raw = dc.build(dd.DEMO_HOUSE, dd.DEMO_PEOPLE, None)
+        raw = a3.overview(dd.DEMO_HOUSE, dd.DEMO_PEOPLE, None)
         missing = sorted(
             {
                 s
@@ -107,11 +118,12 @@ class DemoConfig(unittest.TestCase):
         )
         self.assertEqual(missing, [])
 
-    def test_every_real_view_in_order_3d_first(self):
-        real = [v["path"] for v in dc.build(dd.DEMO_HOUSE, dd.DEMO_PEOPLE, MODEL)["views"]]
+    def test_the_houses_views_in_its_order_a3_first_3d_last(self):
+        real = [v["path"] for v in a3.overview(dd.DEMO_HOUSE, dd.DEMO_PEOPLE, MODEL)["views"]]
         demo = [v["path"] for v in CONFIG["views"]]
         self.assertEqual(demo, real)
-        self.assertEqual(demo[:2], ["maja-3d", "kodu"])
+        self.assertEqual((demo[0], demo[-1]), ("kodu", "maja-3d"))
+        self.assertEqual(CONFIG["views"][0]["sections"][0]["row_span"], 2)
         for path in ("energia", "soojuspump", "ventilatsioon", "pergola", "valve", "kaamerad"):
             self.assertIn(path, demo)
         self.assertIn("teler", demo)
@@ -208,15 +220,31 @@ class DemoEnglish(unittest.TestCase):
     def test_the_3d_card_is_english(self):
         house3d = [c for c in cards(CONFIG_EN) if c["type"] == "custom:house3d-card"]
         self.assertEqual(
-            house3d, [{"type": "custom:house3d-card", "views": DEMO_CAMERAS, "language": "en"}]
+            house3d,
+            [
+                {**HERO, "views": DEMO_CAMERAS, "language": "en"},
+                {"type": "custom:house3d-card", "views": DEMO_CAMERAS, "language": "en"},
+            ],
         )
+
+    def test_the_houses_own_cards_are_english(self):
+        khe = [c for c in cards(CONFIG_EN) if c["type"].startswith("custom:khe-")]
+        self.assertGreater(len(khe), 20)
+        self.assertEqual({c.get("language") for c in khe}, {"en"})
+        self.assertNotIn("language", json.dumps(CONFIG))
+
+    def test_the_price_level_words_are_english_and_ordered(self):
+        levels = STATES_EN["levels"]
+        self.assertEqual([w for _, w in levels], [en.WORDS[w] for _, w in dd.LEVELS])
+        bounds = [at for at, _ in levels]
+        self.assertEqual(bounds[-1], None)
+        self.assertEqual(bounds[:-1], sorted(bounds[:-1]))
 
     def test_series_cover_every_english_chart(self):
         wanted = set()
         for c in cards(CONFIG_EN):
             if c["type"] == "custom:apexcharts-card":
                 wanted |= {f"{x['entity']}|{x['name']}" for x in c["series"]}
-        self.assertTrue(wanted)
         self.assertEqual(sorted(wanted - set(SERIES_EN)), [])
         self.assertEqual(len(SERIES_EN), len(SERIES))
 
@@ -230,7 +258,7 @@ class DemoEnglish(unittest.TestCase):
 
     def test_costs_take_a_decimal_point(self):
         a = STATES_EN["states"][dd.CATALOGUE["sensor.maja_sel_kuul"]["id"]]["attributes"]
-        self.assertEqual((a["kulu"], a["hind"]), ("41.30 €", "0.144 €/kWh"))
+        self.assertEqual((a["kulu"], a["hind"]), ("41.30 €", "14.4 c/kWh"))
         self.assertIsNone(re.search(r"\d,\d", json.dumps(STATES_EN, ensure_ascii=False)))
 
     def test_no_private_label_survives(self):
@@ -243,6 +271,12 @@ class DemoEnglish(unittest.TestCase):
         dd.demo_config_en(MODEL)
         dd.demo_model_en(MODEL)
         self.assertEqual(json.dumps(dc.build({}, [], MODEL), ensure_ascii=False), before)
+
+    def test_the_houses_overview_is_unchanged_by_the_demo(self):
+        before = json.dumps(a3.overview({}, [], MODEL), ensure_ascii=False)
+        dd.demo_config(MODEL)
+        dd.demo_config_en(MODEL)
+        self.assertEqual(json.dumps(a3.overview({}, [], MODEL), ensure_ascii=False), before)
 
 
 if __name__ == "__main__":

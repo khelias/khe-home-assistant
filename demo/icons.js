@@ -15,6 +15,7 @@ const P = {
   'gesture-tap-button': '<rect x="3" y="4" width="18" height="8" rx="2"/><path d="M11 9v8.5l-1.6-1.4a1.2 1.2 0 0 0-1.7 1.7L10.5 21h7l1-4.5-4.5-1.5V9a1.5 1.5 0 0 0-3 0z"/>',
   'heat-pump': '<rect x="3" y="5" width="18" height="14" rx="1.5"/><circle cx="10" cy="12" r="4.5"/><path d="M10 9.5v5M7.5 12h5M17 8.5v7"/>',
   home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/>',
+  'home-heart': '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M12 17.5l-2.6-2.5a1.6 1.6 0 0 1 2.6-1.9 1.6 1.6 0 0 1 2.6 1.9z"/>',
   'home-assistant': '<path d="M12 3 3 11h2.5v9.5h13V11H21z"/><circle cx="12" cy="10.5" r="1.4"/><circle cx="9" cy="14.5" r="1.1"/><circle cx="15" cy="13.5" r="1.1"/><path d="M12 11.9V20.5M9.9 15.3 12 17.5M14.1 14.4 12 16"/>',
   'hot-tub': '<circle cx="7" cy="5" r="1.6"/><path d="M3 12h18v4.5a3.5 3.5 0 0 1-3.5 3.5h-11A3.5 3.5 0 0 1 3 16.5zM5.5 12V9.5a1.5 1.5 0 0 1 3 0V12M12 3.5c-1 1.5 1 2.5 0 4M15.5 3.5c-1 1.5 1 2.5 0 4M19 3.5c-1 1.5 1 2.5 0 4"/>',
   'lightning-bolt': '<path d="M13 2 5 13.5h6L10 22l9-12h-6.2z"/>',

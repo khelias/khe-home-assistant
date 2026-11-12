@@ -101,6 +101,12 @@ class Scenarios(unittest.TestCase):
             self.assertTrue(s["steps"], s["id"])
             ats = [st["at"] for st in s["steps"]]
             self.assertEqual(ats, sorted(set(ats)), f"{s['id']}: at rises")
+        # a story told in the 3D house plays on A3, where the hero shows it (ADR-012)
+        views = {v["path"]: v for v in dd.demo_config(self.model)["views"]}
+        for s in self.scenarios:
+            if s["time"] or any("car" in st for st in s["steps"]):
+                self.assertEqual(s["view"], "kodu", s["id"])
+                self.assertIn("custom:house3d-card", json.dumps(views[s["view"]]))
 
     def test_every_entity_and_state_is_the_demos(self):
         for s in self.scenarios:
