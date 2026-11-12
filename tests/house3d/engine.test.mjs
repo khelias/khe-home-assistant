@@ -27,7 +27,7 @@ const BUILDERS = await Promise.all(LAYERS.map(id => import(new URL(`scene/layers
 const { modelFrame, buildLayer, guardLayer, syncCamera, toScreen, hitRect, releaseVelocity, coast, homeBox, homeDir, homeView, collide, inChip, pvNow, roofNormal, roofTop, tapAction } = await import(new URL('house3d.js', E));
 const card = await import(new URL('house3d-card.js', E));
 const { OrbitControls } = await import(new URL('vendor/three-0.186.1/examples/jsm/controls/OrbitControls.js', E));
-const { sunPosition, gridBearing, sunDirection, sunGlow } = await import(new URL('scene/sun.js', E));
+const { sunPosition, gridBearing, sunDirection, sunGlow, realLight } = await import(new URL('scene/sun.js', E));
 const { cornerBoards } = await import(new URL('scene/layers/building.js', E));
 const { panelGrid } = await import(new URL('scene/layers/future.js', E));
 
@@ -970,6 +970,32 @@ test('sunGlow: hidden below the horizon, fading in, warm when low', () => {
   assert.ok(low.visible && low.opacity > 0 && low.opacity < 1);
   assert.equal(low.warm, 1);
   assert.deepEqual(sunGlow(30), { visible: true, opacity: 1, warm: 0 });
+});
+
+test('realLight: the sun by day, the moon at night, dark at the horizon where they swap', () => {
+  const lum = c => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  const day = realLight(30), low = realLight(10), dusk = realLight(2), noon = realLight(0), night = realLight(-20);
+  assert.equal(day.key.dir, null);
+  assert.equal(low.key.intensity, day.key.intensity, 'a low winter sun is not dimmed twice');
+  assert.ok(lum(low.key.color) < lum(day.key.color), 'a low sun is warm');
+  assert.ok(dusk.key.intensity > 0 && dusk.key.intensity < day.key.intensity);
+  assert.equal(noon.key.intensity, 0);
+  assert.ok(Array.isArray(night.key.dir) && night.key.dir[0] < 0 && night.key.dir[2] < 0, 'the moon shines from the home view\'s side');
+  assert.ok(night.key.intensity > 0 && realLight(-3).key.intensity < night.key.intensity);
+  assert.ok(lum(night.zenith) < lum(night.horizon) && lum(night.horizon) < lum(day.horizon));
+  assert.deepEqual([day.night, noon.night, night.night], [0, 1, 1]);
+  assert.ok(night.env.intensity < day.env.intensity);
+});
+
+test('real style: the land beyond the lot darkens with the night', () => {
+  const { ctx } = makeCtx({ ...options, style: 'real' });
+  const L = buildLayer(BUILDERS[LAYERS.indexOf('ground')], 'ground', ctx);
+  const out = L.group.children[0], day = out.material.color.clone();
+  assert.ok(!L.update(0, 1), "the darkening is no animation");
+  assert.ok(out.material.color.equals(day));
+  ctx.state.night = 1;
+  L.update(0, 1);
+  assert.ok(out.material.color.r < day.r * 0.5);
 });
 
 // OrbitControls on a stub canvas: listeners and a style are all it touches outside a gesture

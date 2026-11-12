@@ -64,7 +64,9 @@ export function createKit(THREE, style = 'simple') {
   const surface = style === 'real'
     ? (name, o = {}) => keep(new THREE.MeshStandardMaterial({
       color: new THREE.Color(REAL[name]), roughness: 0.85, metalness: 0,
-      ...(name === 'glass' ? { transparent: true, opacity: GLASS_OPACITY, roughness: 0.15, side: THREE.DoubleSide } : {}), ...o
+      ...(name === 'glass' ? { transparent: true, opacity: GLASS_OPACITY, roughness: 0.15, side: THREE.DoubleSide } : {}),
+      // the standing seam takes a soft sheen of the sky
+      ...(name === 'roof' ? { roughness: 0.7, metalness: 0.1 } : {}), ...o
     }))
     : undefined;
   const basic = o => keep(new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, ...o }));

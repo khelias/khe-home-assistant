@@ -318,10 +318,18 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   card config) and the model's `georef.x_axis_bearing_deg`, the plan's
   L-EST97 grid bearing. Sun azimuths are from true north; `sun.js` turns them
   to grid azimuths with the projection's convergence, 0.854 x (lon - 24)
-  degrees. Without a location the real style uses a fixed afternoon sun. The
-  sky follows the sun's altitude: day, dusk below 8 degrees, night below 0
-  with the sun off. Through dusk a cool moon and sky light come up, so the
-  walls, roofs and fences still read at night, and a room glows while a
+  degrees. Without a location the real style uses a fixed afternoon sun. Its
+  whole look per altitude is `realLight()` in `sun.js`, tuned by eye on
+  renders of the real house on 12 November and 21 June (the round
+  ADR-006 left open): a sky gradient from horizon to zenith, day above 8
+  degrees, dusk to the horizon and night from 6 degrees under it; the same
+  sky, half desaturated, as the environment the surfaces reflect (rebuilt
+  only when its colours change); the sun at full strength from 3 degrees
+  up and warm below about 22, since the beam's own angle already dims a low
+  sun. Below the horizon the same shadow-casting light is the moon, which
+  is invented: it shines from the home view's side so the walls the camera
+  sees read at night. The fog starts at the lot's farthest corner, so the
+  lot is always clear, and the land beyond darkens at night. A room glows while a
   light there is on or its motion sensor is on or went off less than 15
   minutes ago: its floor and its windows take a warm emissive scaled by the
   light's level, or 0.8 for motion. The card owns the 15 minutes (it sets

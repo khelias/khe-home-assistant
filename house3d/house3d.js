@@ -67,7 +67,7 @@ const QUERY = new URL(import.meta.url).search;
 const [KIT, SUN, ...LOADED] = await Promise.allSettled(['kit', 'sun', ...LAYERS.map(id => `layers/${id}`)].map(p => import(`./scene/${p}.js${QUERY}`)));
 [KIT, SUN].forEach(r => { if (r.status === 'rejected') throw r.reason; });
 const { createKit } = KIT.value;
-const { sunPosition, gridBearing, sunDirection, sunGlow } = SUN.value;
+const { sunPosition, gridBearing, sunDirection, sunGlow, realLight, LOW_SUN } = SUN.value;
 const BUILDERS = LOADED.map((r, i) => {
   if (r.status === 'fulfilled') return r.value;
   console.error(`house3d: layer ${LAYERS[i]} failed to load`, r.reason);
@@ -78,14 +78,10 @@ const D2R = Math.PI / 180;
 const ROOF_GAP = 0.06; // walls stop just under the roof so the two outlines do not z-fight
 const BLOOM_MIN_WIDTH = 720;
 const FOCUS_SPAN = 7; // metres: the least a focused room's framing spans
-// the real style's sky: day, blended to dusk below DUSK_ALT degrees of sun, night below 0
-const SKY = { day: '#a9c4dc', dusk: '#e8b98a', night: '#0b1430' };
-const DUSK_ALT = 8;
-const LOW_SUN = '#ffcf9e';
-// the real style at night: a cool moon from high in the south-west and a cool sky light, so
-// walls, roofs and fences read as silhouettes; tuned by eye on an October evening
-const MOON = { color: '#a9bcff', intensity: 0.55, dir: [-0.45, 0.75, 0.5] };
-const NIGHT_SKY = { sky: '#7d90c8', ground: '#3a4152', intensity: 0.55 };
+// the real style's sky texture, SKY_PX rows from the horizon, below SKY_HORIZON of the view's
+// height, to the zenith at its top
+const SKY_PX = 128, SKY_HORIZON = 0.25;
+const LOT_FOG = 1.5; // fitFog()
 // without a place the real style lights the street side from the left, like an afternoon sun
 const FIXED_SUN = [-0.62, 0.62, -0.48];
 // pvNow(): clear-sky beam by Meinel's formula, the diffuse share of it, the system's losses and
@@ -688,11 +684,14 @@ export function mount(element, model, options = {}) {
   const bloomOn = () => !real && options.bloom !== false && width >= BLOOM_MIN_WIDTH;
 
   /* ---------- the real style's sun, sky and shadows ---------- */
-  let sun = null, hemi = null, moon = null, glow = null, sunPlace = null, sunTime = null, sunTimer = 0, liftCasts = true;
+  // sun is the one shadow-casting light: the sun while it is up, the moon below the horizon
+  let sun = null, hemi = null, glow = null, sunPlace = null, sunTime = null, sunTimer = 0, liftCasts = true;
+  // the sky behind the scene, and the same sky as the environment the surfaces reflect, both
+  // redrawn only when their colours move by a 40th (skyKey), not on every minute or slider step
+  let skyTex = null, pmrem = null, envScene = null, envMat = null, envTarget = null, skyKey = '';
   // towards the sun, unit length, at every altitude (sunV is set only while it is up)
   const sunDir = new THREE.Vector3();
-  const sky = Object.fromEntries(Object.entries(SKY).map(([k, v]) => [k, new THREE.Color(v)]));
-  const lowSun = new THREE.Color(LOW_SUN), nightSky = new THREE.Color(NIGHT_SKY.sky), nightGround = new THREE.Color(NIGHT_SKY.ground);
+  const lowSun = new THREE.Color(LOW_SUN), horizon = new THREE.Color(), zenith = new THREE.Color(), px = new THREE.Color();
   if (real) {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -702,20 +701,29 @@ export function mount(element, model, options = {}) {
     renderer.shadowMap.needsUpdate = true;
     // neutral keeps the specification's colours closest
     renderer.toneMapping = THREE.NeutralToneMapping;
-    scene.background = sky.day.clone();
-    scene.fog.color.copy(sky.day);
+    skyTex = kit.keep(new THREE.DataTexture(new Uint8Array(SKY_PX * 4), 1, SKY_PX));
+    skyTex.colorSpace = THREE.SRGBColorSpace;
+    skyTex.magFilter = THREE.LinearFilter;
+    scene.background = skyTex;
     // the ground bounces light onto the walls: a shaded wall in the photos is a little darker than
     // a sunlit one, not near black
-    hemi = new THREE.HemisphereLight('#dfe8f0', '#9a9c8c', 1);
+    hemi = new THREE.HemisphereLight('#ffffff', '#ffffff', 1);
     sun = new THREE.DirectionalLight('#ffffff', 2.5);
     sun.castShadow = true;
     sun.shadow.radius = 3;
     sun.shadow.bias = -0.0005;
     sun.shadow.normalBias = 0.02; // the walls are DoubleSide, both faces go into the map
-    moon = new THREE.DirectionalLight(MOON.color, 0);
-    moon.position.set(...MOON.dir);
-    moon.visible = false;
-    scene.add(hemi, sun, sun.target, moon);
+    scene.add(hemi, sun, sun.target);
+    pmrem = new THREE.PMREMGenerator(renderer);
+    envMat = kit.keep(new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite: false,
+      uniforms: { zenith: { value: new THREE.Color() }, horizon: { value: new THREE.Color() }, ground: { value: new THREE.Color() } },
+      vertexShader: 'varying vec3 vP; void main() { vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform vec3 zenith; uniform vec3 horizon; uniform vec3 ground; varying vec3 vP;'
+        + ' void main() { float y = normalize(vP).y; gl_FragColor = vec4(y > 0.0 ? mix(horizon, zenith, pow(y, 0.6)) : mix(horizon, ground, min(1.0, -y * 4.0)), 1.0); }'
+    }));
+    envScene = new THREE.Scene();
+    envScene.add(new THREE.Mesh(kit.keep(new THREE.SphereGeometry(1, 32, 16)), envMat));
     // the sun's disc and glow, far out along its direction; buildings and trees hide it through
     // the depth test
     glow = new THREE.Sprite(kit.keep(new THREE.SpriteMaterial({
@@ -729,6 +737,17 @@ export function mount(element, model, options = {}) {
   const shadowTop = 0.5 + Math.max(model.ceiling || 0, ...Object.values(model.roofs || {}).map(r => r.high_y + (r.thick || 0)),
     ...(msite.trees || []).map(t => t.height), msite.garage_roof && msite.garage_roof.y ? msite.garage_roof.y[1] : 0,
     msite.pergola ? msite.pergola.height : 0);
+  // the sky texture: the horizon colour up to SKY_HORIZON of the view, blending to the zenith's at
+  // its top (row 0 is the bottom)
+  function paintSky() {
+    const d = skyTex.image.data;
+    for (let j = 0; j < SKY_PX; j++) {
+      const t = Math.min(1, Math.max(0, (j / (SKY_PX - 1) - SKY_HORIZON) / (1 - SKY_HORIZON)));
+      px.copy(horizon).lerp(zenith, Math.pow(t, 0.8)).convertLinearToSRGB();
+      d.set([px.r * 255, px.g * 255, px.b * 255, 255], j * 4);
+    }
+    skyTex.needsUpdate = true;
+  }
   const sunV = new THREE.Vector3(), corner = new THREE.Vector3(), shadowCentre = new THREE.Vector3();
   function placeSun(dir) {
     const [x0, z0, x1, z1] = modelBox.lotBox;
@@ -772,27 +791,35 @@ export function mount(element, model, options = {}) {
       dir = FIXED_SUN;
       alt = Math.asin(dir[1] / Math.hypot(...dir)) / D2R;
     }
-    if (alt >= DUSK_ALT) scene.background.copy(sky.day);
-    else if (alt >= 0) scene.background.copy(sky.dusk).lerp(sky.day, alt / DUSK_ALT);
-    else scene.background.copy(sky.night);
-    scene.fog.color.copy(scene.background);
-    const high = Math.min(1, Math.max(0, alt / 25));
-    sun.visible = alt > 0;
-    sun.intensity = 1 + 2 * high;
-    sun.color.set('#ffffff').lerp(lowSun, Math.max(0, 1 - alt / DUSK_ALT));
-    // night ramps through dusk as the sky does
-    night = alt >= DUSK_ALT ? 0 : alt <= 0 ? 1 : 1 - alt / DUSK_ALT;
-    hemi.intensity = alt < 0 ? NIGHT_SKY.intensity : 0.5 + 1.9 * high;
-    hemi.color.set('#dfe8f0').lerp(nightSky, night);
-    hemi.groundColor.set('#9a9c8c').lerp(nightGround, night);
-    moon.visible = night > 0;
-    moon.intensity = MOON.intensity * night;
+    const L = realLight(alt);
+    night = L.night;
+    horizon.setRGB(...L.horizon);
+    zenith.setRGB(...L.zenith);
+    scene.fog.color.copy(horizon);
+    sun.visible = L.key.intensity > 0;
+    sun.intensity = L.key.intensity;
+    sun.color.setRGB(...L.key.color);
+    hemi.intensity = L.hemi.intensity;
+    hemi.color.setRGB(...L.hemi.sky);
+    hemi.groundColor.setRGB(...L.hemi.ground);
+    const key = [...L.zenith, ...L.horizon, ...L.env.ground].map(v => Math.round(v * 40)).join();
+    if (key !== skyKey) {
+      skyKey = key;
+      paintSky();
+      envMat.uniforms.zenith.value.setRGB(...L.env.zenith);
+      envMat.uniforms.horizon.value.setRGB(...L.env.horizon);
+      envMat.uniforms.ground.value.setRGB(...L.env.ground);
+      if (envTarget) envTarget.dispose();
+      envTarget = pmrem.fromScene(envScene, 0, 0.1, 10);
+      scene.environment = envTarget.texture;
+    }
+    scene.environmentIntensity = L.env.intensity;
     sunDir.set(dir[0], dir[1], dir[2]).normalize();
     const g = sunGlow(alt);
     glow.visible = g.visible;
     glow.material.opacity = g.opacity;
     glow.material.color.set('#ffffff').lerp(lowSun, g.warm);
-    if (alt > 0) placeSun(dir);
+    if (sun.visible) placeSun(L.key.dir || dir);
     shadowsDirty();
     invalidate();
   }
@@ -1054,9 +1081,20 @@ export function mount(element, model, options = {}) {
     return home;
   }
   const homeDistance = () => homeFor().distance;
-  // the fog starts just past the orbit target, never nearer than from the home view: fixed to the
-  // home distance, a zoom-out sank the house itself into it
+  // the simple style's fog starts just past the orbit target, never nearer than from the home
+  // view: fixed to the home distance, a zoom-out sank the house itself into it. The real style's
+  // starts at the lot's farthest corner from the camera, so the lot stays clear and only the land
+  // beyond fades, out by LOT_FOG times that distance
+  const fogCorner = new THREE.Vector3();
   function fitFog() {
+    if (real) {
+      const [x0, z0, x1, z1] = modelBox.lotBox;
+      let far = 0;
+      for (const x of [x0, x1]) for (const z of [z0, z1]) far = Math.max(far, camera.position.distanceTo(fogCorner.set(x, 0, z)));
+      scene.fog.near = far;
+      scene.fog.far = far * LOT_FOG;
+      return;
+    }
     const d = Math.max(homeDistance(), camera.position.distanceTo(controls.target));
     scene.fog.near = d * 0.95;
     scene.fog.far = d * 2.2;
@@ -1279,6 +1317,8 @@ export function mount(element, model, options = {}) {
     disposed = true;
     clearInterval(sunTimer);
     if (sun) sun.dispose();
+    if (envTarget) envTarget.dispose();
+    if (pmrem) pmrem.dispose();
     cancelAnimationFrame(raf);
     raf = 0;
     if (ro) ro.disconnect();
