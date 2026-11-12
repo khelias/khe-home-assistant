@@ -1,6 +1,6 @@
 # ADR-004: A two-week trial dashboard may use Bubble Card
 
-- **Status:** Accepted (2026-11-12). Narrows [ADR-002](002-own-dashboard-cards.md) for the trial dashboard only; ADR-002 stays for Kodu.
+- **Status:** Deprecated (2026-11-12). The trial was dropped for A3, [ADR-005](005-a3-glass-cards-history-sheet.md); Bubble Card is removed.
 - **Related:** [ADR-002](002-own-dashboard-cards.md), [estate ADR-007](https://github.com/khelias/khe-architecture/blob/main/decisions/007-automated-writers.md), [estate ADR-021](https://github.com/khelias/khe-architecture/blob/main/decisions/021-family-shell-and-design-check.md)
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR-002: A redesigned view draws with our own Lovelace cards
 
-- **Status:** Accepted (2026-10-17). Kodu, the first view drawn with the cards, went back to stock cards on 2026-10-18: the operator rejected the A2 direction, not the cards. The next design round decides which view uses them. A two-week Bubble Card trial on a second dashboard is allowed by [ADR-004](004-bubble-card-trial.md), which narrows this ADR for that dashboard only.
+- **Status:** Accepted (2026-10-17). Kodu, the first view drawn with the cards, went back to stock cards on 2026-10-18: the operator rejected the A2 direction, not the cards. The next design round decides which view uses them. A two-week Bubble Card trial on a second dashboard is allowed by [ADR-004](004-bubble-card-trial.md), which narrows this ADR for that dashboard only. Narrowed by [ADR-005](005-a3-glass-cards-history-sheet.md): the A3 dashboard draws the cards as glass boxes over a view background, with a history sheet, and is not mounted in the demo.
 - **Related:** [ADR-001](001-own-3d-engine.md), [estate ADR-007](https://github.com/khelias/khe-architecture/blob/main/decisions/007-automated-writers.md)
 
 ## Context

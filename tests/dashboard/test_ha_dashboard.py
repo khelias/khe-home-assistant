@@ -70,16 +70,26 @@ class CarEntity(unittest.TestCase):
         self.assertEqual(card_car(self.ha.local_config())["entity"], "switch.test_stand_in")
 
 
-class Trial(unittest.TestCase):
-    def test_trial_config_reads_only_the_house_files(self):
+class A3(unittest.TestCase):
+    def test_a3_config_reads_the_house_files_and_the_model(self):
         ha = load_ha_dashboard()
         read = []
-        files = {"ha-house.json": {}, "ha-people.json": []}
+        files = {"ha-house.json": {"car_entity": "switch.test_stand_in"}, "ha-people.json": []}
         ha._local = lambda name, default: read.append(name) or files.get(name, default)
-        ha.house3d_card_model = lambda: self.fail("the trial has no 3D view")
-        config = ha.trial_config()
+        ha.house3d_card_model = model_without_car_entity
+        config = ha.a3_config()
         self.assertEqual(sorted(read), ["ha-house.json", "ha-people.json"])
-        self.assertEqual(config["title"], "Kodu katse")
+        self.assertEqual(config["title"], "Kodu A3")
+        hero = config["views"][0]["sections"][0]["cards"][0]
+        self.assertEqual(hero["type"], "custom:house3d-card")
+        self.assertEqual(hero["model"]["car"]["entity"], "switch.test_stand_in")
+
+    def test_without_a_model_the_hero_is_left_out(self):
+        ha = load_ha_dashboard()
+        ha._local = lambda name, default: default
+        ha.house3d_card_model = lambda: None
+        cards = ha.a3_config()["views"][0]["sections"][0]["cards"]
+        self.assertNotIn("custom:house3d-card", [c["type"] for c in cards])
 
 
 if __name__ == "__main__":

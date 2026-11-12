@@ -1486,3 +1486,38 @@ test('card: featureText in English', () => {
   assert.equal(card.featureText(pv, null, { kw: 4.236, alt: 54, time: day, live: false }, 'en').pv, '21 June at 13:00 up to 4.2 kW under a clear sky');
   assert.equal(card.featureText(pv, null, { kw: 0, alt: -3, time: night, live: false }, 'en').pv, '21 June at 23:45 the sun has set');
 });
+
+test('card: heroSize keeps the default without a height and sizes the rows for one', () => {
+  assert.deepEqual(card.heroSize({}), { height: null, rows: 8 });
+  assert.deepEqual(card.heroSize(undefined), { height: null, rows: 8 });
+  assert.deepEqual(card.heroSize({ height: 'tall' }), { height: null, rows: 8 });
+  assert.deepEqual(card.heroSize({ height: 300 }), { height: 300, rows: 5 });
+  assert.deepEqual(card.heroSize({ height: 248 }), { height: 248, rows: 4 });
+  assert.deepEqual(card.heroSize({ height: 249.6 }), { height: 250, rows: 5 });
+});
+
+// _fit on a stand-in element: Node has no DOM, so only the sizing logic runs
+function fitted(attrs, hero) {
+  const el = Object.create(card.House3dCard.prototype);
+  const props = {};
+  el.style = { height: '', setProperty: (k, v) => { props[k] = v; }, removeProperty: k => { delete props[k]; } };
+  Object.defineProperty(el, 'isConnected', { value: true });
+  el.hasAttribute = a => attrs.includes(a);
+  el.getBoundingClientRect = () => ({ top: 100 });
+  if (hero) el.style.setProperty('--house3d-height', `${hero}px`);
+  globalThis.window = { innerHeight: 900 };
+  try { el._fit(); } finally { delete globalThis.window; }
+  return { height: el.style.height, props };
+}
+
+test('card: a hero keeps its height outside a panel view, and a panel view still fills the screen', () => {
+  assert.deepEqual(fitted(['hero'], 300), { height: '', props: { '--house3d-height': '300px' } });
+  assert.equal(fitted(['panel'], null).height, '800px');
+  assert.equal(fitted(['panel', 'hero'], 300).height, '800px');
+});
+
+test('card: the hero rule lets vertical swipes scroll the page only outside a panel view', () => {
+  const src = readFileSync(new URL('house3d-card.js', E), 'utf-8');
+  assert.match(src, /:host\(\[hero\]:not\(\[panel\]\)\) canvas \{ touch-action: pan-y !important; \}/);
+  assert.match(src, /:host \{ display: block; height: var\(--house3d-height, 480px\); \}/);
+});

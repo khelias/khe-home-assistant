@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 38;
+const HOUSE3D_VERSION = 39;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -304,8 +304,19 @@ export function roomChips(markers, rooms, lang = 'et') {
   });
 }
 
+// heroSize(config) -> { height, rows }: a card with `height` (px) is a dashboard's hero at that
+// height; HA's sections grid gives a row 56 px plus an 8 px gap, so it asks for enough rows.
+// Without one it keeps the 480 px default and its 8 rows. A panel view fills the screen either way.
+export function heroSize(config) {
+  const h = Number(config && config.height);
+  if (!Number.isFinite(h) || h <= 0) return { height: null, rows: 8 };
+  return { height: Math.round(h), rows: Math.ceil((Math.round(h) + 8) / 64) };
+}
+
 const STYLE = `
-:host { display: block; height: 480px; }
+:host { display: block; height: var(--house3d-height, 480px); }
+/* a hero leaves vertical swipes to the page; the important beats OrbitControls' inline none */
+:host([hero]:not([panel])) canvas { touch-action: pan-y !important; }
 .wrap { display: block; position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: var(--ha-card-border-radius, 12px);
   --ink: #e4ecff; --muted: #8a9bc2; --line: #6fe3ff; --amber: #ffc56e; --alert: #ff8b7b; --bg: #060c1b;
   --panel: rgba(10, 18, 38, 0.9); --edge: rgba(111, 227, 255, 0.18); --chip: rgba(111, 227, 255, 0.08);
@@ -365,7 +376,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 // the helpers above are imported by the Node tests, where there is no DOM to define the card in
 const Base = typeof HTMLElement === 'function' ? HTMLElement : class {};
 
-class House3dCard extends Base {
+export class House3dCard extends Base {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -381,6 +392,11 @@ class House3dCard extends Base {
     this._config = config;
     this._lang = langOf(config.language);
     this._t = TEXT[this._lang];
+    // a custom property, not the inline height _fit() clears outside a panel view
+    this._hero = heroSize(config);
+    if (this._hero.height) this.style.setProperty('--house3d-height', `${this._hero.height}px`);
+    else this.style.removeProperty('--house3d-height');
+    this.toggleAttribute('hero', !!this._hero.height);
     this._devices = config.model.devices || [];
     this._car = config.model.car && config.model.car.profile && config.model.car.path ? config.model.car : null;
     // another model starts from its own home view; another language redraws the card's text
@@ -414,8 +430,8 @@ class House3dCard extends Base {
     const top = Math.max(0, this.getBoundingClientRect().top);
     this.style.height = `${Math.max(320, Math.floor(vh - top))}px`;
   }
-  getCardSize() { return 8; }
-  getGridOptions() { return { columns: 'full', rows: 8 }; }
+  getCardSize() { return (this._hero || heroSize(this._config)).rows; }
+  getGridOptions() { return { columns: 'full', rows: (this._hero || heroSize(this._config)).rows }; }
 
   connectedCallback() {
     this._onResize = this._onResize || (() => this._fit());
@@ -461,6 +477,8 @@ class House3dCard extends Base {
       <aside class="sheet" hidden aria-live="polite"></aside>${this._credit()}</ha-card>`;
     this._sheet = null;
     const wrap = sr.querySelector('.wrap');
+    // a hero lets the wheel scroll the page, where OrbitControls on the canvas would zoom the house
+    wrap.addEventListener('wheel', ev => { if (this.hasAttribute('hero') && !this.hasAttribute('panel')) ev.stopPropagation(); }, { capture: true });
     if (this._ro) this._ro.disconnect();
     if (typeof ResizeObserver === 'function') {
       this._ro = new ResizeObserver(() => wrap.classList.toggle('narrow', wrap.clientWidth < 600));

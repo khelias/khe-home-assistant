@@ -35,8 +35,32 @@ SMOKE = "binary_sensor.suitsuandurid"
 SMOKE_GROUP = "Suitsuandurid"
 ALARMS = [("alarm_control_panel.maja", "Maja"), ("alarm_control_panel.garaaz", "Garaaž")]
 ROOF = "cover.pergola_katus"
+ROOF_NAME = "Pergola katus"
 PERGOLA_LIGHT = "light.pergola_valgustus"
 OUTDOOR = "sensor.komfovent_outdoor_temperature"
+# The first page's own sensors, named once so that the A3 dashboard (dashboard_a3.py) takes them
+# from here.
+PRICE_LEVEL = "sensor.elektri_hinna_tase"
+WASH = "sensor.odavaim_aken_pesu"
+SAUNA = "sensor.odavaim_aken_saun"
+TOMORROW = "sensor.homme_elekter"
+TOMORROW_READY = "binary_sensor.nord_pool_ee_homne_hind_on_saadaval"
+STALE = "binary_sensor.maja_andmed_varsked"
+USAGE = [
+    ("sensor.maja_tana", "Täna"),
+    ("sensor.maja_eile", "Eile"),
+    ("sensor.maja_sel_kuul", "Sel kuul"),
+]
+CONSUMPTION = "estfeed:estfeed_consumption_642b"
+COST = "estfeed:estfeed_cost_642b"
+HEATING = "switch.space_heating_climate_control"
+LEAVING = "sensor.space_heating_leaving_water_temperature"
+BOILER_TEMP = "sensor.boileri_vee_temperatuur"
+SUPPLY = "sensor.komfovent_supply_temperature"
+EXTRACT = "sensor.komfovent_extract_temperature"
+HUMIDITY = "sensor.komfovent_panel_1_humidity"
+TV_APP = "sensor.teleri_app"
+NVR = "sensor.nvr_ketas"
 
 
 # What the two local files carry, as build() gets them (the format is in ha-dashboard.py).
@@ -167,7 +191,7 @@ def nav(path):
 # verdict as a coloured ha-alert (the colour follows the current hour's band, so a
 # glance is enough), one icon per decision, tomorrow set off on its own line.
 ALERT = (
-    "{% set t = states('sensor.elektri_hinna_tase') %}"
+    "{% set t = states('" + PRICE_LEVEL + "') %}"
     "{{ 'success' if t in ['väga odav', 'odav'] else 'info' if t in ['tavaline', 'kõrgevõitu']"
     " else 'warning' if t == 'kallis' else 'error' }}"
 )
@@ -175,15 +199,15 @@ price_now = {
     "type": "markdown",
     "content": (
         f'<ha-alert alert-type="{ALERT}">'
-        "{{ state_attr('sensor.elektri_hinna_tase', 'hinnang') }}. "
-        "{{ state_attr('sensor.elektri_hinna_tase', 'tekst') }}</ha-alert>\n\n"
+        "{{ state_attr('" + PRICE_LEVEL + "', 'hinnang') }}. "
+        "{{ state_attr('" + PRICE_LEVEL + "', 'tekst') }}</ha-alert>\n\n"
         '<ha-icon icon="mdi:washing-machine"></ha-icon> **Pesu 4 h:** '
-        "{{ state_attr('sensor.odavaim_aken_pesu', 'tekst') }}\n\n"
+        "{{ state_attr('" + WASH + "', 'tekst') }}\n\n"
         '<ha-icon icon="mdi:hot-tub"></ha-icon> **Saun 2 h:** '
-        "{{ state_attr('sensor.odavaim_aken_saun', 'tekst') }}"
-        "{% if has_value('sensor.homme_elekter') %}\n\n"
+        "{{ state_attr('" + SAUNA + "', 'tekst') }}"
+        "{% if has_value('" + TOMORROW + "') %}\n\n"
         '<ha-icon icon="mdi:weather-night"></ha-icon> '
-        "{{ state_attr('sensor.homme_elekter', 'tekst') }}{% endif %}"
+        "{{ state_attr('" + TOMORROW + "', 'tekst') }}{% endif %}"
     ),
     "grid_options": {"columns": "full"},
 }
@@ -658,55 +682,53 @@ def home(h):
                         "grid_options": {"columns": "full"},
                         "cards": [
                             nowrite(
-                                "sensor.maja_tana",
+                                USAGE[0][0],
                                 "Täna",
                                 state_content=["state", "kulu"],
                                 vertical=True,
                             ),
                             nowrite(
-                                "sensor.maja_eile",
+                                USAGE[1][0],
                                 "Eile",
                                 state_content=["state", "kulu"],
                                 vertical=True,
                             ),
                             nowrite(
-                                "sensor.maja_sel_kuul",
+                                USAGE[2][0],
                                 "Sel kuul",
                                 state_content=["state", "kulu"],
                                 vertical=True,
                             ),
                         ],
                     },
-                    bars(
-                        "Tarbimine 7 päeva, kWh", [("estfeed:estfeed_consumption_642b", "kWh")], 7
-                    ),
-                    bars("Kulu 7 päeva, €", [("estfeed:estfeed_cost_642b", "€")], 7),
+                    bars("Tarbimine 7 päeva, kWh", [(CONSUMPTION, "kWh")], 7),
+                    bars("Kulu 7 päeva, €", [(COST, "€")], 7),
                 ],
                 column_span=2,
                 badges=[
                     {
                         "type": "entity",
-                        "entity": "binary_sensor.nord_pool_ee_homne_hind_on_saadaval",
+                        "entity": TOMORROW_READY,
                         "name": "Homne hind olemas",
                         "state_content": "name",
                         "visibility": [
                             {
                                 "condition": "state",
-                                "entity": "binary_sensor.nord_pool_ee_homne_hind_on_saadaval",
+                                "entity": TOMORROW_READY,
                                 "state": "on",
                             }
                         ],
                     },
                     {
                         "type": "entity",
-                        "entity": "binary_sensor.maja_andmed_varsked",
+                        "entity": STALE,
                         "name": "Estfeedi andmed hilinevad",
                         "state_content": "name",
                         "color": "red",
                         "visibility": [
                             {
                                 "condition": "state",
-                                "entity": "binary_sensor.maja_andmed_varsked",
+                                "entity": STALE,
                                 "state": "off",
                             }
                         ],
@@ -717,8 +739,8 @@ def home(h):
             section(
                 "Küte",
                 [
-                    nowrite("switch.space_heating_climate_control", "Küte (Daikin)"),
-                    tile("sensor.space_heating_leaving_water_temperature", "Küttevee temp"),
+                    nowrite(HEATING, "Küte (Daikin)"),
+                    tile(LEAVING, "Küttevee temp"),
                     when_on("binary_sensor.space_heating_unit_state", "Soojuspumba viga"),
                 ],
                 **nav("/lovelace/soojuspump"),
@@ -743,11 +765,9 @@ def home(h):
                     *mode_button("Tavaline", "mdi:fan", "normal", "green", vertical=True),
                     *mode_button("Köök", "mdi:stove", "kitchen", "orange", vertical=True),
                     *mode_button("Boost", "mdi:fan-plus", "boost", "purple", vertical=True),
-                    third(tile("sensor.komfovent_supply_temperature", "Sissepuhe", vertical=True)),
-                    third(
-                        tile("sensor.komfovent_extract_temperature", "Väljatõmme", vertical=True)
-                    ),
-                    third(tile("sensor.komfovent_panel_1_humidity", "Niiskus", vertical=True)),
+                    third(tile(SUPPLY, "Sissepuhe", vertical=True)),
+                    third(tile(EXTRACT, "Väljatõmme", vertical=True)),
+                    third(tile(HUMIDITY, "Niiskus", vertical=True)),
                     when_on("binary_sensor.komfovent_status_alarm_fault", "Ventilatsiooni viga"),
                     when_on(
                         "binary_sensor.komfovent_status_alarm_warning", "Ventilatsiooni hoiatus"
@@ -799,12 +819,10 @@ def home(h):
                         ],
                     },
                     tile(
-                        "sensor.nvr_ketas",
+                        NVR,
                         "NVR ketas",
                         color="red",
-                        visibility=[
-                            {"condition": "state", "entity": "sensor.nvr_ketas", "state_not": "OK"}
-                        ],
+                        visibility=[{"condition": "state", "entity": NVR, "state_not": "OK"}],
                     ),
                     *[
                         tile(
@@ -854,7 +872,7 @@ def home(h):
                                 "conditions": [
                                     {
                                         "condition": "state",
-                                        "entity": "sensor.nvr_ketas",
+                                        "entity": NVR,
                                         "state": "OK",
                                     }
                                 ]
