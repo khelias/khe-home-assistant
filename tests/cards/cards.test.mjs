@@ -1558,7 +1558,7 @@ test('Valve: a reading card of cells alone draws no big value, its cells with th
 
 /* ---------- Kaamerad (ADR-016): the stills, the slots, the count cell ---------- */
 
-const PROXY = '/api/camera_proxy/camera.tee_alamvoog?token=abc';
+const PROXY = '/api/camera_proxy/camera.cam_one_alamvoog?token=abc';
 
 test('Kaamerad: the still URL carries the token and a time, and none without a picture', () => {
   assert.equal(V.cameraUrl(st('idle', { entity_picture: PROXY }), 1700000000000), `${PROXY}&t=1700000000000`);
@@ -1588,14 +1588,14 @@ test('Kaamerad: a thumbnail becomes the hero and the others keep their order', (
 });
 
 test('Kaamerad: a count cell counts, names the missing ones, is red while one is, and has no sheet', () => {
-  const cams = [{ entity: 'camera.a', name: 'Tee' }, { entity: 'camera.b', name: 'Lasteaed' }, { entity: 'camera.c', name: 'Naabrid' }];
+  const cams = [{ entity: 'camera.a', name: 'Üks' }, { entity: 'camera.b', name: 'Kaks' }, { entity: 'camera.c', name: 'Kolm' }];
   const cell = { name: 'Kaamerad', count: { entities: cams, state: '*' }, note: { missing: 'kõik vastavad' } };
   const s = (a, b, c) => ({ 'camera.a': st(a), 'camera.b': st(b), ...(c ? { 'camera.c': st(c) } : {}) });
   assert.deepEqual(V.countCell(cell, s('idle', 'idle', 'idle')), { value: '3 / 3', tone: '', note: 'kõik vastavad' });
-  assert.deepEqual(V.countCell(cell, s('idle', 'unavailable', 'unknown')), { value: '1 / 3', tone: 'bad', note: 'Lasteaed ja Naabrid' });
-  assert.deepEqual(V.countCell(cell, s('unavailable', 'unavailable'), 'en'), { value: '0 / 3', tone: 'bad', note: 'Tee, Lasteaed and Naabrid' }, 'a missing entity is not counted');
+  assert.deepEqual(V.countCell(cell, s('idle', 'unavailable', 'unknown')), { value: '1 / 3', tone: 'bad', note: 'Kaks ja Kolm' });
+  assert.deepEqual(V.countCell(cell, s('unavailable', 'unavailable'), 'en'), { value: '0 / 3', tone: 'bad', note: 'Üks, Kaks and Kolm' }, 'a missing entity is not counted');
   const on = { name: 'Tuvastus', count: { entities: cams.slice(0, 2), state: 'on' }, note: { missing: 'sees' } };
-  assert.equal(V.countCell(on, { 'camera.a': st('on'), 'camera.b': st('off') }).note, 'Lasteaed');
+  assert.equal(V.countCell(on, { 'camera.a': st('on'), 'camera.b': st('off') }).note, 'Kaks');
   assert.deepEqual(V.countCell(on, { 'camera.a': st('on'), 'camera.b': st('on') }), { value: '2 / 2', tone: '', note: 'sees' });
   const nvr = { entity: 'sensor.nvr', name: 'NVR ketas', words: { OK: 'korras', '*': 'viga' } };
   const conf = { cells: [nvr, cell, on] };
@@ -1603,7 +1603,7 @@ test('Kaamerad: a count cell counts, names the missing ones, is red while one is
   const m = V.readingA3Markup(conf, { 'sensor.nvr': st('OK'), ...s('idle', 'idle', 'idle'), 'camera.a': st('on'), 'camera.b': st('off') }, null, 'et', { config: { time_zone: 'Europe/Tallinn' } });
   assert.deepEqual([...m.sheets.keys()], ['c0'], 'only the NVR cell opens a sheet');
   assert.match(m.html, /<span class="cell"><span class="lab">Kaamerad<\/span><span class="v num">3 \/ 3<\/span><span class="sub">kõik vastavad<\/span><\/span>/);
-  assert.match(m.html, /<span class="cell"><span class="lab">Tuvastus<\/span><span class="v num bad">1 \/ 2<\/span><span class="sub">Lasteaed<\/span><\/span>/);
+  assert.match(m.html, /<span class="cell"><span class="lab">Tuvastus<\/span><span class="v num bad">1 \/ 2<\/span><span class="sub">Kaks<\/span><\/span>/);
 });
 
 test('Kaamerad: a cell word by the exact state first, then the first matching pattern', () => {
