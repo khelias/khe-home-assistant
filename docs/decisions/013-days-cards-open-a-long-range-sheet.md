@@ -32,8 +32,9 @@ heat from August, each with a partial first month.
    the dense list of days or months, not by time, and a slot without data
    stays empty. Axis and pointer labels are formatted in HA's zone. This
    extends ADR-008 decision 1 with the month period.
-3. **Only finished, whole slots count.** The last slot, the first day or
-   month with data inside the window (a statistic may begin mid-period),
+3. **Only finished, whole slots count.** The last slot, a statistic's
+   first day or month (it may begin mid-period; the sheet reads one slot
+   before the window to tell),
    and for a delayed counter
    the slots past ADR-008 decision 2's cutoff are drawn lighter and kept
    out of the numbers. The big value is the average per counted day or

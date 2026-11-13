@@ -8,7 +8,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 14;
+export const KHE_CARDS_VERSION = 15;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -1638,29 +1638,29 @@ export function dayStats(points) {
 // The days sheet's ranges (ADR-013): slots of HA's calendar days or months, the last one now
 export const DAYS_RANGES = { '30d': { days: 30 }, '90d': { days: 90 }, '12m': { months: 12 } };
 
-// { period, starts, end } of a days sheet's range in HA's zone: the slots' starts, oldest first,
-// and the end of the last one
+// { period, before, starts, end } of a days sheet's range in HA's zone: the start of the slot
+// before the window, the slots' starts, oldest first, and the end of the last one
 export function daysRange(range, now, tz) {
-  const r = DAYS_RANGES[range] || DAYS_RANGES['30d'], p = zoneParts(now, tz);
-  if (!r.months) return { period: 'day', starts: dayStarts(r.days, now, tz), end: dayStart(p.y, p.m, p.d + 1, tz) };
-  const at = i => dayStart(p.y, p.m - r.months + 1 + i, 1, tz);
-  return { period: 'month', starts: Array.from({ length: r.months }, (_, i) => at(i)), end: at(r.months) };
+  const r = DAYS_RANGES[range] || DAYS_RANGES['30d'], p = zoneParts(now, tz), n = r.months || r.days;
+  const at = i => (r.months ? dayStart(p.y, p.m - n + 1 + i, 1, tz) : dayStart(p.y, p.m, p.d - n + 1 + i, tz));
+  return { period: r.months ? 'month' : 'day', before: at(-1), starts: r.months ? Array.from({ length: n }, (_, i) => at(i)) : dayStarts(n, now, tz), end: at(n) };
 }
 
-// the WebSocket message for a days sheet (daysSheet's spec) over a range
+// the WebSocket message for a days sheet (daysSheet's spec) over a range, from the slot before it:
+// whether that one has data tells whether the first slot may be a statistic's partial first
 export function daysSheetRequest(spec, range, now, tz) {
   const r = daysRange(range, now, tz);
-  return { type: 'recorder/statistics_during_period', start_time: new Date(r.starts[0]).toISOString(), statistic_ids: [spec.statistic], period: r.period, types: [spec.type] };
+  return { type: 'recorder/statistics_during_period', start_time: new Date(r.before).toISOString(), statistic_ids: [spec.statistic], period: r.period, types: [spec.type] };
 }
 
 // a days sheet's slots, { period, end, pts, stats }: pts are { t, v, out } with v scaled, null
 // without data; out says why a slot is kept out of the numbers: 'open' for the last, unfinished
-// one, 'partial' for the first day or month with data after the window's start (a statistic
-// begins mid-period), 'late' past a delayed
+// one, 'partial' for a statistic's first day or month (it begins mid-period: the slot before it
+// has no data), 'late' past a delayed
 // counter's cutoff. stats over the counted slots, { avg, total, small, big, last } with the
 // last three slots, or null when none counts.
 export function slotSeries(resp, spec, range, now, tz, cutoff = Infinity) {
-  const { period, starts, end } = daysRange(range, now, tz);
+  const { period, before, starts, end } = daysRange(range, now, tz);
   const key = t => { const p = zoneParts(t, tz); return period === 'month' ? `${p.y}-${p.m}` : `${p.y}-${p.m}-${p.d}`; };
   const rows = new Map(((resp || {})[spec.statistic] || []).map(r => [key(r.start), r]));
   const scale = spec.scale || 1;
@@ -1669,7 +1669,7 @@ export function slotSeries(resp, spec, range, now, tz, cutoff = Infinity) {
     return { t, v: v === null ? null : v * scale, out: i === starts.length - 1 ? 'open' : e > cutoff ? 'late' : false };
   });
   const first = pts.findIndex(p => p.v !== null);
-  if (first > 0 && !pts[first].out) pts[first].out = 'partial';
+  if (first >= 0 && !pts[first].out && (first > 0 || !rows.has(key(before)))) pts[first].out = 'partial';
   const counted = pts.filter(p => p.v !== null && !p.out);
   if (!counted.length) return { period, end, pts, stats: null };
   const total = counted.reduce((a, p) => a + p.v, 0);

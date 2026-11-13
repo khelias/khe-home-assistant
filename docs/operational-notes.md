@@ -276,7 +276,8 @@ behind every value and device. It replaced the Bubble Card trial of
   a days card's headline opens the picked series (Energia's kWh or Eurod)
   as daily statistics for 30 and 90 days and `period: "month"` for 12
   months, counted in HA's calendar with today or this month the last slot.
-  The last slot, the first day or month with data inside the window and Estfeed's
+  The last slot, a statistic's first day or month (the sheet reads one slot
+  before the window to tell) and Estfeed's
   days past its cutoff are lighter and out of the numbers; the big value is
   the average per counted day or month. The series' `title` names the sheet
   and its `more` is the entity "Rohkem" opens, since an `estfeed:`

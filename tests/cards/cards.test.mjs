@@ -877,8 +877,9 @@ test('days sheet: 90 days across the October change start at HA midnight, today 
   // the day of the change is 25 hours long
   const i = r.starts.indexOf(day(2026, 10, 25));
   assert.equal((r.starts[i + 1] - r.starts[i]) / 3600e3, 25);
+  assert.equal(iso(r.before), '2026-08-14T21:00:00.000Z');
   const msg = A3.daysSheetRequest({ statistic: 'sensor.a', type: 'change' }, '90d', now, TZ);
-  assert.deepEqual(msg, { type: 'recorder/statistics_during_period', start_time: '2026-08-15T21:00:00.000Z', statistic_ids: ['sensor.a'], period: 'day', types: ['change'] });
+  assert.deepEqual(msg, { type: 'recorder/statistics_during_period', start_time: '2026-08-14T21:00:00.000Z', statistic_ids: ['sensor.a'], period: 'day', types: ['change'] });
   assert.equal(A3.daysRange('30d', now, TZ).starts[0], day(2026, 10, 15));
 });
 
@@ -887,6 +888,7 @@ test('days sheet: 12 months across a year end, each on the 1st in HA zone', () =
   assert.equal(r.period, 'month');
   assert.equal(r.starts.length, 12);
   assert.equal(iso(r.starts[0]), '2026-01-31T22:00:00.000Z');
+  assert.equal(r.before, day(2026, 1, 1));
   r.starts.forEach(t => assert.equal(A3.zoneParts(t, TZ).d, 1));
   r.starts.forEach(t => assert.equal(A3.zoneParts(t, TZ).h, 0));
   assert.equal(r.starts[11], day(2027, 1, 1));
@@ -909,9 +911,11 @@ test('days sheet: empty months stay empty, this month and the first partial one 
   assert.equal(s.stats.avg, 102.5);
   assert.equal(s.stats.small.v, 101);
   assert.equal(s.stats.big.v, 104);
-  // data from the window's start may predate it: the first month counts
-  const full = rowsOf(r.starts, () => ({ change: 10 }));
+  // data in the month before the window: the first month counts; none there, it is the
+  // statistic's first and may be partial
+  const full = rowsOf([r.before, ...r.starts], () => ({ change: 10 }));
   assert.equal(A3.slotSeries({ 'sensor.a': full }, { statistic: 'sensor.a', type: 'change' }, '12m', now, TZ).pts[0].out, false);
+  assert.equal(A3.slotSeries({ 'sensor.a': full.slice(1) }, { statistic: 'sensor.a', type: 'change' }, '12m', now, TZ).pts[0].out, 'partial');
   assert.equal(A3.slotSeries({}, { statistic: 'sensor.a', type: 'change' }, '12m', now, TZ).stats, null);
 });
 
@@ -927,7 +931,7 @@ test('days sheet: a statistic that begins inside 90 days has its first day out',
 
 test('days sheet: days past the cutoff are late, today is open', () => {
   const now = Date.parse('2026-11-13T10:00:00Z'), r = A3.daysRange('30d', now, TZ);
-  const rows = rowsOf(r.starts, i => ({ change: i + 1 }));
+  const rows = rowsOf([r.before, ...r.starts], i => ({ change: i }));
   // the counter's data ends at 15:00 on the 11th: the 11th and the 12th are late
   const cutoff = day(2026, 11, 11) + 15 * 3600e3;
   const s = A3.slotSeries({ 'sensor.a': rows }, { statistic: 'sensor.a', type: 'change' }, '30d', now, TZ, cutoff);
@@ -939,7 +943,7 @@ test('days sheet: days past the cutoff are late, today is open', () => {
 test('days sheet: the price is a line of day means at scale 100', () => {
   const now = Date.parse('2026-11-13T10:00:00Z'), r = A3.daysRange('30d', now, TZ);
   // the day means swing 0.10 to 0.20 €/kWh; a dear single hour (max) is not a day mean
-  const rows = rowsOf(r.starts, i => ({ mean: 0.1 + (i % 11) / 100, max: 0.9 }));
+  const rows = rowsOf([r.before, ...r.starts], i => ({ mean: 0.1 + ((i + 10) % 11) / 100, max: 0.9 }));
   const s = A3.slotSeries({ 'sensor.c': rows }, { statistic: 'sensor.c', type: 'mean', scale: 100 }, '30d', now, TZ);
   assert.ok(Math.abs(s.stats.small.v - 10) < 1e-9);
   assert.ok(Math.abs(s.stats.big.v - 20) < 1e-9);
@@ -978,6 +982,9 @@ test('days sheet: the spec from the picked series, with more and the cutoff', ()
   };
   assert.deepEqual(A3.daysSheet(conf, 0), { days: true, title: 'Maja elekter', statistic: 'estfeed:c', type: 'change', color: 'indigo', unit: 'kWh', scale: 1, decimals: 1, more: 'sensor.today', cutoff: 'estfeed:c' });
   assert.deepEqual(A3.daysSheet(conf, 1), { days: true, title: 'Elektri hind', statistic: 'estfeed:p', type: 'mean', color: undefined, unit: 'senti/kWh', scale: 100, decimals: 1, more: 'sensor.level' });
+  const eur = A3.daysSheet({ series: [{ name: 'Eurod', statistic: 'estfeed:k', type: 'change', unit: '€', decimals: 2, scale: 0.5, more: 'sensor.today' }], cutoff: 'estfeed:c' }, 0);
+  assert.equal(eur.scale, 0.5);
+  assert.equal(eur.cutoff, 'estfeed:c');
   const boiler = A3.daysSheet({ series: [{ name: 'kWh', title: 'Boileri elekter', statistic: 'sensor.b', type: 'change', unit: 'kWh', more: 'sensor.b' }] }, 0);
   assert.equal(boiler.cutoff, undefined);
   assert.equal(boiler.decimals, 1);
