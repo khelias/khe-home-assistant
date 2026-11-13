@@ -181,7 +181,8 @@ The repo's own Lovelace cards are in `cards/khe-cards.js`:
 Soojuspump `custom:khe-reading-card`
 ([ADR-011](decisions/011-a3-hourly-lines-and-a-written-setpoint.md)), which
 Ventilatsioon uses too with any unit, a meter and three cells, beside a days
-card with an overlay series and a ratio headline. Kodu was drawn
+card with an overlay series and a ratio headline; a reading card's big value
+opens its history sheet as its cells do. Kodu was drawn
 with them on 2026-10-17 and went back to stock cards the next day; A3
 uses them. Deploy replaces `www/khe-cards/` in HA's config volume, so HA
 serves them as `/local/khe-cards/`, and a change arrives without a restart.

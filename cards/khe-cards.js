@@ -7,7 +7,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 12;
+export const KHE_CARDS_VERSION = 13;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -2104,8 +2104,8 @@ svg.ln{display:block;width:100%;height:88px;touch-action:pan-y}
 
 const LW = 341, LH = 88, LTOP = 8, LBOT = 4;
 
-// One reading big, with a note, a chip, a meter, its hourly line, cells that open their history
-// sheets and a stepper: Soojuspump's Küte and Soe vesi (ADR-011), Ventilatsioon's Toaõhk and Seade.
+// One reading big, with a note, a chip, a meter, its hourly line, the reading and cells that open
+// their history sheets and a stepper: Soojuspump's Küte and Soe vesi (ADR-011), Ventilatsioon's Toaõhk and Seade.
 // Every value reads its entity's unit, or the config's `unit` after its `scale`. The stepper's value moves at once and is
 // written once the taps settle (STEP_SETTLE); a pending value outlives redraws.
 const STEP_SETTLE = 1500, STEP_WAIT = 60e3;
@@ -2134,7 +2134,8 @@ class ReadingCard extends LoadingCard {
       const at = v => withUnit(fmtN(v, c.decimals ?? 1, L), unit);
       note = w.rangeNote(hours, at(range.lo), at(range.hi));
     }
-    const top = `<span class="hd"><span class="l"><span class="lab">${esc(c.label || '')}</span><span class="big"><span class="n num">${esc(value)}</span></span>${note ? `<span class="sub">${esc(note)}</span>` : ''}</span>${this._chip(states)}</span>`;
+    this._sheets.set('v', cellSheet({ entity: c.entity, name: c.label, decimals: c.decimals, scale: c.scale, unit: c.unit, color: (l || {}).color, history: c.history }, states));
+    const top = `<span class="hd"><button type="button" class="l press" data-k="v" aria-label="${esc(w.history(`${c.label || ''} ${value}`))}"><span class="lab">${esc(c.label || '')}</span><span class="big"><span class="n num">${esc(value)}</span></span>${note ? `<span class="sub">${esc(note)}</span>` : ''}</button>${this._chip(states)}</span>`;
     const parts = [`${top}${c.meter ? this._meter(states) : ''}${chart ? `<span class="ch">${chart}</span>${key}` : ''}`];
     if ((c.cells || []).length) parts.push(this._cells(states));
     if (c.stepper) parts.push(this._stepper(states));
