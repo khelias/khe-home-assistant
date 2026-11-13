@@ -74,6 +74,11 @@ EN = {
     "vähem soojust tagasi, kui seade elektrit võtab": "less heat back than the unit uses in electricity",
     "Boileri elekter": "Boiler electricity",
     "Boileri elekter päevade kaupa": "Boiler electricity by day",
+    # the days sheets' titles (ADR-013)
+    "Maja elekter": "House electricity",
+    "Maja elektrikulu": "House electricity cost",
+    "Elektri hind": "Electricity price",
+    "Tagastatud soojus": "Heat recovered",
     "Boileri vesi 48 tundi": "Boiler water, 48 hours",
     "Boileris": "In the boiler",
     "Elektri hinna päeva keskmine ja kalleim tund": "Electricity price, the day's average and dearest hour",

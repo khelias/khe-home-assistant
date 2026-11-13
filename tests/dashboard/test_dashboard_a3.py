@@ -535,5 +535,26 @@ class Ventilatsioon(unittest.TestCase):
         self.assertEqual(dc.ventilatsioon, before)
 
 
+class DaysSheets(unittest.TestCase):
+    """A days card's headline opens its series' sheet over 30 days, 90 days and 12 months
+    (ADR-013): the series names the sheet's title and a real entity for "Rohkem"."""
+
+    def test_every_days_series_has_a_title_and_a_real_entity_for_more(self):
+        series = [
+            s
+            for v in OVERVIEW["views"]
+            for c in walk(v)
+            if c.get("type") == "custom:khe-days-card"
+            for s in c["series"]
+        ]
+        self.assertEqual(len(series), 5)
+        for s in series:
+            with self.subTest(s["name"], statistic=s["statistic"]):
+                self.assertTrue(s["title"])
+                self.assertRegex(s["more"], r"^[a-z_]+\.[a-z0-9_]+$")
+        titles = [s["title"] for s in series]
+        self.assertEqual(len(set(titles)), len(titles))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,13 +1,14 @@
 // Home Assistant cards of the redesigned views (ADR-002, ADR-005): khe-summary-card,
 // khe-price-card, khe-tile-card and, for Kodu A3, khe-chips-card, khe-heading-card and
 // khe-status-card, with `style: a3` drawing glass boxes and a tap opening a history sheet;
-// Energia's month, days and split cards (ADR-008) and Soojuspump's reading card (ADR-011).
+// Energia's month, days and split cards (ADR-008), a days card's long-range sheet (ADR-013) and
+// Soojuspump's reading card (ADR-011).
 // The A2 and A3 designs are linked from the ADRs. Actions go through HA as a hass-action event, so HA runs the confirmation,
 // more-info, navigation and service call. No build step and no CDN; the pure helpers are
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 13;
+export const KHE_CARDS_VERSION = 14;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -99,7 +100,7 @@ const ET = {
   cents: 'senti/kWh', priceUnknown: 'Hind pole teada', energyLink: 'Energia ›', noForecast: 'Hinnaprognoosi pole',
   today: 'täna', tomorrow: 'homme', yesterday: 'eile', now: 'nüüd', hourPrices: both => `Tunnihinnad, täna${both ? ' ja homme' : ''}`,
   hourPrice: both => `Tunnihind täna${both ? ' ja homme' : ''}`, mode: n => `${n}: režiim`, brightness: n => `${n}: heledus`,
-  ranges: { '24h': '24 h', '7d': '7 päeva', '30d': '30 päeva' }, range: 'Ajavahemik',
+  ranges: { '24h': '24 h', '7d': '7 päeva', '30d': '30 päeva', '90d': '90 päeva', '12m': '12 kuud' }, range: 'Ajavahemik',
   close: 'Sulge', more: 'Rohkem', systemPage: 'Süsteemi leht', loading: 'Laen…', historyFailed: 'Ajalugu ei saanud lugeda',
   dataFailed: 'Andmeid ei saanud lugeda', noData: 'Selle aja kohta andmeid pole', noDataShort: 'Andmeid pole',
   history: n => `${n}, ajalugu`, lowest: 'Madalaim', mean: 'Keskmine', highest: 'Kõrgeim', cheapest: 'Odavaim', dearest: 'Kalleim',
@@ -109,6 +110,7 @@ const ET = {
   use: 'Tarbimine', useAria: 'Tarbimine, ajalugu',
   weekdays: ['pühapäev', 'esmaspäev', 'teisipäev', 'kolmapäev', 'neljapäev', 'reede', 'laupäev'],
   // "in <month>": the inessive is not one suffix for all
+  monthsShort: ['jaan', 'veebr', 'märts', 'apr', 'mai', 'juuni', 'juuli', 'aug', 'sept', 'okt', 'nov', 'dets'],
   inMonth: ['jaanuaris', 'veebruaris', 'märtsis', 'aprillis', 'mais', 'juunis', 'juulis', 'augustis', 'septembris', 'oktoobris', 'novembris', 'detsembris'],
   dayMonth: (d, m) => `${d}.${m}`, at: h => `kell ${h}`,
   rest: 'Ülejäänud maja', restNote: 'kõik, mida eraldi ei mõõdeta', late: 'andmed hilinevad', todayLate: 'täna, andmed hilinevad',
@@ -123,7 +125,9 @@ const ET = {
   cheapestDay: 'Odavaim päev', dearestDay: 'Kalleim päev', largest: 'Suurim', smallest: 'Väikseim', todaySoFar: 'Täna seni', dayNotOver: 'päev pole läbi',
   target: t => `Siht ${t}`, notBelow: v => `, mitte alla ${v}°`, rangeNote: (h, a, b) => `${h} tunniga ${a} kuni ${b}`, limit: v => `${v}° piir`,
   ratio: v => `${v} korda`, inLastShort: (m, v) => `${m} ${v}`,
-  failed: 'Ei õnnestunud', shiftDown: 'Nihe ühe kraadi võrra alla', shiftUp: 'Nihe ühe kraadi võrra üles'
+  failed: 'Ei õnnestunud', shiftDown: 'Nihe ühe kraadi võrra alla', shiftUp: 'Nihe ühe kraadi võrra üles',
+  perDayAvg: 'päevas keskmiselt', perMonthAvg: 'kuus keskmiselt', smallestDay: 'Väikseim päev', smallestMonth: 'Väikseim kuu',
+  largestMonth: 'Suurim kuu', last: 'Viimane', monthNotOver: 'kuu pole läbi', partialMonth: 'osaline kuu', partialDay: 'osaline päev'
 };
 const EN = {
   locale: 'en-GB', and: 'and',
@@ -142,7 +146,7 @@ const EN = {
   cents: 'cents/kWh', priceUnknown: 'Price not known', energyLink: 'Energy ›', noForecast: 'No price forecast',
   today: 'today', tomorrow: 'tomorrow', yesterday: 'yesterday', now: 'now', hourPrices: both => `Hourly prices, today${both ? ' and tomorrow' : ''}`,
   hourPrice: both => `Hourly price today${both ? ' and tomorrow' : ''}`, mode: n => `${n}: mode`, brightness: n => `${n}: brightness`,
-  ranges: { '24h': '24 h', '7d': '7 days', '30d': '30 days' }, range: 'Time range',
+  ranges: { '24h': '24 h', '7d': '7 days', '30d': '30 days', '90d': '90 days', '12m': '12 months' }, range: 'Time range',
   close: 'Close', more: 'More', systemPage: 'System page', loading: 'Loading…', historyFailed: 'Could not read the history',
   dataFailed: 'Could not read the data', noData: 'No data for this period', noDataShort: 'No data',
   history: n => `${n}, history`, lowest: 'Lowest', mean: 'Average', highest: 'Highest', cheapest: 'Cheapest', dearest: 'Dearest',
@@ -151,6 +155,7 @@ const EN = {
   priceTitle: 'Electricity, all fees included', exchange: v => `${v} cents on the exchange`, priceAria: 'Electricity price, history',
   use: 'Use', useAria: 'Use, history',
   weekdays: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+  monthsShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
   inMonth: ['in January', 'in February', 'in March', 'in April', 'in May', 'in June', 'in July', 'in August', 'in September', 'in October', 'in November', 'in December'],
   dayMonth: (d, m) => `${d}/${m}`, at: h => `at ${h}`,
   rest: 'Rest of the house', restNote: 'everything not metered on its own', late: 'data delayed', todayLate: 'today, data delayed',
@@ -165,7 +170,9 @@ const EN = {
   cheapestDay: 'Cheapest day', dearestDay: 'Dearest day', largest: 'Largest', smallest: 'Smallest', todaySoFar: 'Today so far', dayNotOver: 'day not over',
   target: t => `Target ${t}`, notBelow: v => `, not below ${v}°`, rangeNote: (h, a, b) => `${a} to ${b} in ${h} hours`, limit: v => `${v}° limit`,
   ratio: v => `${v} times`, inLastShort: (m, v) => `${v} ${m}`,
-  failed: 'Did not work', shiftDown: 'Shift one degree down', shiftUp: 'Shift one degree up'
+  failed: 'Did not work', shiftDown: 'Shift one degree down', shiftUp: 'Shift one degree up',
+  perDayAvg: 'a day on average', perMonthAvg: 'a month on average', smallestDay: 'Smallest day', smallestMonth: 'Smallest month',
+  largestMonth: 'Largest month', last: 'Last', monthNotOver: 'month not over', partialMonth: 'partial month', partialDay: 'partial day'
 };
 // The words the house's sensors write (the price level, the tomorrow line's lead word), as they
 // arrive in each language: the house's templates write Estonian, the English demo English.
@@ -837,11 +844,20 @@ export function chartPaths(series, { w = 350, h = 170, top = 14, bot = 12, t0, t
   return { line, area };
 }
 
-// five axis labels from t0 to t1: hours for a day, weekdays for a week, dates for a month
-export function axisLabels(range, t0, t1, lang = 'et') {
+// an axis label of a moment: hours for a day, weekdays for a week, dates for 30 or 90 days,
+// months for 12; in the browser's zone, or in tz
+export function axisLabel(range, lang = 'et', tz) {
+  const w = words(lang);
+  // the locale's short month is the whole name in Estonian
+  if (range === '12m') { const zone = tz || localZone(); return t => w.monthsShort[zoneParts(t, zone).m - 1]; }
   const fmt = range === '24h' ? { hour: '2-digit', minute: '2-digit' } : range === '7d' ? { weekday: 'short' } : { day: 'numeric', month: 'numeric' };
-  const w = words(lang), F = new Intl.DateTimeFormat(w.locale, fmt);
-  return [0, 1, 2, 3].map(i => F.format(new Date(t0 + ((t1 - t0) * i) / 4))).concat(w.now);
+  const F = new Intl.DateTimeFormat(w.locale, { ...fmt, timeZone: tz });
+  return t => F.format(new Date(t));
+}
+// five axis labels from t0 to t1, the last one now
+export function axisLabels(range, t0, t1, lang = 'et', tz) {
+  const label = axisLabel(range, lang, tz);
+  return [0, 1, 2, 3].map(i => label(t0 + ((t1 - t0) * i) / 4)).concat(words(lang).now);
 }
 
 // a price level's tone by the word the level sensor writes in that language
@@ -918,7 +934,8 @@ function wirePoint(el, pick, show, touch = true) {
 const SEL = color => `<path class="sel" d="" stroke="${color}" stroke-opacity="0.45" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
 
 // One <dialog> per card, opened with showModal() into the top layer. spec: { title, entity, more,
-// decimals, unit, color, history } or { title, price: { forecast, level, bands } }.
+// decimals, unit, color, history }, { title, price: { forecast, level, bands } } or a days card's
+// { days: true, title, statistic, type, ... } (daysSheet).
 class Sheet {
   constructor(card) {
     this.card = card;
@@ -934,25 +951,30 @@ class Sheet {
       if (s === 'close') d.close();
       else if (s === 'more') { d.close(); this.card._fire(actionDetail(this.spec.more || this.spec.entity, { action: 'more-info' })); }
       else if (s === 'view') { d.close(); this.card._fire(navigate(this.spec.view)); }
-      else if (RANGES[s]) { this.range = s; this.load(); }
+      else if ((this.spec.days ? DAYS_RANGES : RANGES)[s]) { this.range = s; this.load(); }
     });
     d.addEventListener('close', () => { this.token = null; });
   }
   open(spec) {
     this.spec = spec;
-    this.range = '24h';
+    this.range = spec.days ? '30d' : '24h';
     this.data = null;
     this.load();
     if (!this.el.open) this.el.showModal();
   }
-  // the value now follows the house while the sheet is open
+  // the value now follows the house while the sheet is open; a days sheet's is its data's average
   live() {
-    if (!this.el.open || this.pointing) return;
+    if (!this.el.open || this.pointing || this.spec.days) return;
     const v = this.el.querySelector('.now');
     if (v) v.innerHTML = this.nowHtml();
   }
   nowHtml() {
     const sp = this.spec, st = this.card._hass.states[sp.entity], L = this.card._lang, w = this.card._w;
+    if (sp.days) {
+      const d = this.data && this.data.series, s = d && d.stats;
+      if (!s) return '<span class="v">–</span>';
+      return `<span class="v num">${esc(fmtN(s.avg, sp.decimals, L))}</span><span class="u">${esc(`${sp.unit} ${d.period === 'month' ? w.perMonthAvg : w.perDayAvg}`.trim())}</span>`;
+    }
     if (sp.price) {
       const a = hasValue(st) && formatNumber((st.attributes || {}).arvel, 1, L);
       return a ? `<span class="v num">${a}</span><span class="u">${w.cents}</span>` : `<span class="v">${w.notKnown}</span>`;
@@ -963,18 +985,28 @@ class Sheet {
   }
   async load() {
     const sp = this.spec;
-    if (sp.price || !sp.history) { this.render(); return; }
+    if (sp.price || !(sp.history || sp.days)) { this.render(); return; }
     const token = (this.token = {}), range = this.range, now = Date.now();
     this.data = { loading: true };
     this.render();
     let series;
     try {
-      const h = sp.history, hass = this.card._hass;
-      series = seriesFrom(await hass.callWS(historyRequest(h, range, now)), h);
-      // an entity whose statistics come back empty (none kept, or a new one) falls back to history
-      if (series.kind === 'empty' && h.source === 'statistics' && h.type !== 'change') {
-        const hh = { ...h, source: 'history' };
-        series = seriesFrom(await hass.callWS(historyRequest(hh, range, now)), hh);
+      const hass = this.card._hass;
+      if (sp.days) {
+        // the card's own cutoff request, shared with it in the same hour; without it only the
+        // last slot is out, as the card does
+        const tz = tzOf(hass);
+        const cutReq = sp.cutoff ? fetchShared(hass, hourlyRequest(sp.cutoff, now), hourKeyOf(now, tz)).catch(() => null) : null;
+        const [resp, cut] = await Promise.all([hass.callWS(daysSheetRequest(sp, range, now, tz)), cutReq]);
+        series = { kind: 'slots', tz, ...slotSeries(resp, sp, range, now, tz, (cut && dataCutoff(cut, sp.cutoff)) ?? Infinity) };
+      } else {
+        const h = sp.history;
+        series = seriesFrom(await hass.callWS(historyRequest(h, range, now)), h);
+        // an entity whose statistics come back empty (none kept, or a new one) falls back to history
+        if (series.kind === 'empty' && h.source === 'statistics' && h.type !== 'change') {
+          const hh = { ...h, source: 'history' };
+          series = seriesFrom(await hass.callWS(historyRequest(hh, range, now)), hh);
+        }
       }
     } catch (e) {
       series = { kind: 'error', points: [] };
@@ -984,8 +1016,8 @@ class Sheet {
     this.render();
   }
   render() {
-    const sp = this.spec, ranged = !sp.price && sp.history, w = this.card._w;
-    const ranges = ranged ? `<div class="ranges" role="group" aria-label="${w.range}">${Object.keys(RANGES).map(k => `<button type="button" data-s="${k}" aria-pressed="${k === this.range}">${w.ranges[k]}</button>`).join('')}</div>` : '';
+    const sp = this.spec, ranged = !sp.price && (sp.history || sp.days), w = this.card._w;
+    const ranges = ranged ? `<div class="ranges" role="group" aria-label="${w.range}">${Object.keys(sp.days ? DAYS_RANGES : RANGES).map(k => `<button type="button" data-s="${k}" aria-pressed="${k === this.range}">${w.ranges[k]}</button>`).join('')}</div>` : '';
     this.point = null;
     const chart = sp.price ? this.priceChart() : this.seriesChart();
     this.body.innerHTML = `<span class="grab" aria-hidden="true"></span>
@@ -1038,12 +1070,59 @@ class Sheet {
       <div class="axis" aria-hidden="true">${lab.map(l => `<span>${l}</span>`).join('')}</div>
       ${this.stats([[w.cheapest, f1(Math.min(...ts))], [w.mean, f1(mean)], [w.dearest, f1(Math.max(...ts))]])}`;
   }
+  blank(msg) {
+    return `<div class="chart"><div class="msg">${msg}</div></div><div class="axis"><span>&nbsp;</span></div>${this.stats([['', '–'], ['', '–'], ['', '–']])}`;
+  }
+  // a days sheet: bars or a line in equal slots of HA's days or months, the slots out of the
+  // numbers lighter (ADR-013)
+  slotChart() {
+    const sp = this.spec, { series, range, now } = this.data, L = this.card._lang, w = this.card._w;
+    const { pts, stats, period, tz } = series;
+    if (!stats) return this.blank(w.noData);
+    const n = pts.length, slot = W / n, bars = sp.type === 'change', month = period === 'month';
+    const color = a3Color(sp.color)[0], pal = a3Palette(this.card._hass.themes && this.card._hass.themes.darkMode);
+    const vals = pts.filter(p => p.v !== null).map(p => p.v);
+    let lo = 0, hi = Math.max(...vals) || 1;
+    if (!bars) { const a = Math.min(...vals), pad = (hi - a) * 0.08 || 0.5; lo = a - pad; hi += pad; }
+    const y = v => H - 12 - ((v - lo) / ((hi - lo) || 1)) * (H - 26), x = i => (i + 0.5) * slot, f = v => v.toFixed(1);
+    const d = { in: '', out: '' };
+    pts.forEach((p, i) => {
+      if (p.v === null) return;
+      if (bars) {
+        const bw = slot * 0.72, bh = Math.max(1, H - 12 - y(p.v));
+        d[p.out ? 'out' : 'in'] += barRect(i * slot + (slot - bw) / 2, H - 12 - bh, bw, bh);
+        return;
+      }
+      // a line from the slot before, or a dot where it stands alone
+      const q = pts[i - 1], r = pts[i + 1];
+      if (q && q.v !== null) d[p.out || q.out ? 'out' : 'in'] += `M${f(x(i - 1))} ${f(y(q.v))}L${f(x(i))} ${f(y(p.v))}`;
+      else if (!r || r.v === null) d[p.out ? 'out' : 'in'] += `M${f(x(i))} ${f(y(p.v))}h0.01`;
+    });
+    const draw = (k, op) => {
+      const o = op < 1 ? ` ${bars ? 'fill' : 'stroke'}-opacity="${op}"` : '';
+      return bars ? `<path d="${d[k]}" fill="${color}"${o}/>` : `<path d="${d[k]}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"${o}/>`;
+    };
+    const fmt = v => fmtN(v, sp.decimals, L), u = v => withUnit(fmt(v), sp.unit);
+    const note = { open: month ? w.monthNotOver : w.dayNotOver, partial: month ? w.partialMonth : w.partialDay, late: w.late };
+    this.point = {
+      pick: q => Math.min(n - 1, Math.floor(q * n)),
+      read: i => ({ x: x(i), v: pts[i].v === null ? '–' : fmt(pts[i].v), u: [sp.unit, whenLabel(pts[i].t, range, true, now, L, tz), note[pts[i].out]].filter(Boolean).join(' · ') })
+    };
+    const grid = `<path d="M0 42.5H${W}M0 85H${W}M0 127.5H${W}" stroke="${pal.hair}" vector-effect="non-scaling-stroke"/>`;
+    // a label at the slot under each quarter of the width: months are not equally long
+    const label = axisLabel(range, L, tz), marks = [0, 1, 2, 3].map(q => label(pts[Math.round((q * n) / 4)].t)).concat(w.now);
+    const axis = `<div class="axis" aria-hidden="true">${marks.map(l => `<span>${esc(l)}</span>`).join('')}</div>`;
+    const list = bars
+      ? [[w.total, u(stats.total)], [month ? w.smallestMonth : w.smallestDay, u(stats.small.v)], [month ? w.largestMonth : w.peakDay, u(stats.big.v)]]
+      : [[w.lowest, u(stats.small.v)], [w.highest, u(stats.big.v)], [w.last, u(stats.last.v)]];
+    return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(w.history(sp.title))}">${grid}${draw('in', 1)}${draw('out', 0.4)}${SEL(pal.text)}</svg></div>${axis}${this.stats(list)}`;
+  }
   seriesChart() {
     const sp = this.spec, d = this.data, L = this.card._lang, w = this.card._w;
-    const blank = msg => `<div class="chart"><div class="msg">${msg}</div></div><div class="axis"><span>&nbsp;</span></div>${this.stats([['', '–'], ['', '–'], ['', '–']])}`;
-    if (!d || d.loading) return blank(w.loading);
+    if (!d || d.loading) return this.blank(w.loading);
     const { series, range, now } = d;
-    if (series.kind === 'error') return blank(w.historyFailed);
+    if (series.kind === 'error') return this.blank(w.historyFailed);
+    if (series.kind === 'slots') return this.slotChart();
     const t0 = now - RANGES[range].ms, t1 = now;
     const color = a3Color(sp.color)[0];
     const pal = a3Palette(this.card._hass.themes && this.card._hass.themes.darkMode);
@@ -1074,14 +1153,14 @@ class Sheet {
     }
     if (series.kind === 'bars') {
       const s = barStats(series);
-      if (!s) return blank(w.noData);
+      if (!s) return this.blank(w.noData);
       const p = chartPaths(series, { t0, t1, lo: 0, hi: s.peak || 1 });
       const per = RANGES[range].energy === 'hour' ? w.peakHour : w.peakDay;
       const middle = s.cost === null || s.cost === undefined ? [w.mean, `${fmt(s.total / series.points.length)}${unit}`] : [w.cost, `${formatNumber(s.cost.toFixed(2), 2, L)} €`];
       return `${svg(`<path d="${p.bars}" fill="${color}"/>`)}${this.stats([[w.total, `${fmt(s.total)}${unit}`], middle, [per, `${fmt(s.peak)}${unit}`]])}`;
     }
     const s = series.kind === 'line' && lineStats(series, t0, now);
-    if (!s) return blank(w.noData);
+    if (!s) return this.blank(w.noData);
     const pad = (s.hi - s.lo) * 0.08 || 0.5;
     const p = chartPaths(series, { t0, t1, lo: s.lo - pad, hi: s.hi + pad });
     return `${svg(`<path d="${p.area}" fill="${color}" fill-opacity="0.16"/><path d="${p.line}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`)}${this.stats([[w.lowest, `${fmt(s.lo)}${unit}`], [w.mean, `${fmt(s.mean)}${unit}`], [w.highest, `${fmt(s.hi)}${unit}`]])}`;
@@ -1556,6 +1635,48 @@ export function dayStats(points) {
   };
 }
 
+// The days sheet's ranges (ADR-013): slots of HA's calendar days or months, the last one now
+export const DAYS_RANGES = { '30d': { days: 30 }, '90d': { days: 90 }, '12m': { months: 12 } };
+
+// { period, starts, end } of a days sheet's range in HA's zone: the slots' starts, oldest first,
+// and the end of the last one
+export function daysRange(range, now, tz) {
+  const r = DAYS_RANGES[range] || DAYS_RANGES['30d'], p = zoneParts(now, tz);
+  if (!r.months) return { period: 'day', starts: dayStarts(r.days, now, tz), end: dayStart(p.y, p.m, p.d + 1, tz) };
+  const at = i => dayStart(p.y, p.m - r.months + 1 + i, 1, tz);
+  return { period: 'month', starts: Array.from({ length: r.months }, (_, i) => at(i)), end: at(r.months) };
+}
+
+// the WebSocket message for a days sheet (daysSheet's spec) over a range
+export function daysSheetRequest(spec, range, now, tz) {
+  const r = daysRange(range, now, tz);
+  return { type: 'recorder/statistics_during_period', start_time: new Date(r.starts[0]).toISOString(), statistic_ids: [spec.statistic], period: r.period, types: [spec.type] };
+}
+
+// a days sheet's slots, { period, end, pts, stats }: pts are { t, v, out } with v scaled, null
+// without data; out says why a slot is kept out of the numbers: 'open' for the last, unfinished
+// one, 'partial' for the first day or month with data after the window's start (a statistic
+// begins mid-period), 'late' past a delayed
+// counter's cutoff. stats over the counted slots, { avg, total, small, big, last } with the
+// last three slots, or null when none counts.
+export function slotSeries(resp, spec, range, now, tz, cutoff = Infinity) {
+  const { period, starts, end } = daysRange(range, now, tz);
+  const key = t => { const p = zoneParts(t, tz); return period === 'month' ? `${p.y}-${p.m}` : `${p.y}-${p.m}-${p.d}`; };
+  const rows = new Map(((resp || {})[spec.statistic] || []).map(r => [key(r.start), r]));
+  const scale = spec.scale || 1;
+  const pts = starts.map((t, i) => {
+    const r = rows.get(key(t)), v = r ? num(r[spec.type]) : null, e = i + 1 < starts.length ? starts[i + 1] : end;
+    return { t, v: v === null ? null : v * scale, out: i === starts.length - 1 ? 'open' : e > cutoff ? 'late' : false };
+  });
+  const first = pts.findIndex(p => p.v !== null);
+  if (first > 0 && !pts[first].out) pts[first].out = 'partial';
+  const counted = pts.filter(p => p.v !== null && !p.out);
+  if (!counted.length) return { period, end, pts, stats: null };
+  const total = counted.reduce((a, p) => a + p.v, 0);
+  const pick = better => counted.reduce((a, p) => (better(p.v, a.v) ? p : a));
+  return { period, end, pts, stats: { avg: total / counted.length, total, small: pick((a, b) => a < b), big: pick((a, b) => a > b), last: counted[counted.length - 1] } };
+}
+
 const earlyInMonth = (now, tz) => zoneParts(now, tz).d <= 2;
 
 // the month's cost at its pace: cost over the elapsed share of the month up to the data cutoff;
@@ -1578,21 +1699,25 @@ export function dayName(t, tz, lang = 'et') {
 const hh = n => String(n).padStart(2, '0');
 // an hour's price bar as the house says it: 'täna 18–19', 'homme 03–04'
 export const hourSpan = (bar, lang = 'et') => { const h = new Date(bar.s).getHours(), w = words(lang); return `${bar.tomorrow ? w.tomorrow : w.today} ${hh(h)}–${hh((h + 1) % 24)}`; };
-// when a pointed history point was, in the browser's zone like the axis: an hour's bar or a
-// moment in the 24 h range, the hour in the week, the day in a month or a day's bar
-export function whenLabel(t, range, bars, now = Date.now(), lang = 'et') {
-  const d = new Date(t), h = d.getHours(), w = words(lang);
-  const day = `${w.weekdays[d.getDay()]} ${w.dayMonth(d.getDate(), d.getMonth() + 1)}`;
+// when a pointed history point was, in the browser's zone like the axis or in tz: an hour's bar or
+// a moment in the 24 h range, the hour in the week, the day in 30 or 90 days or a day's bar, the
+// month in 12 months
+export function whenLabel(t, range, bars, now = Date.now(), lang = 'et', tz = localZone()) {
+  const w = words(lang);
+  if (range === '12m') return new Intl.DateTimeFormat(w.locale, { month: 'long', year: 'numeric', timeZone: tz }).format(new Date(t));
+  const p = zoneParts(t, tz), day = dayName(t, tz, lang);
   if (range === '24h') {
-    const at = bars ? `${hh(h)}–${hh((h + 1) % 24)}` : `${hh(h)}:${hh(d.getMinutes())}`;
-    return `${dayWord(t, now, lang) ?? day} ${at}`;
+    const at = bars ? `${hh(p.h)}–${hh((p.h + 1) % 24)}` : `${hh(p.h)}:${hh(p.min)}`;
+    return `${dayWord(t, now, lang, tz) ?? day} ${at}`;
   }
-  return range === '7d' && !bars ? `${day} ${w.at(hh(h))}` : day;
+  return range === '7d' && !bars ? `${day} ${w.at(hh(p.h))}` : day;
 }
-// 'täna' or 'eile' for a moment in the browser's zone, null for an earlier day
-function dayWord(t, now, lang) {
-  const d = new Date(t), n = new Date(now), w = words(lang);
-  const k = Math.round((new Date(n.getFullYear(), n.getMonth(), n.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / (24 * HOUR));
+let LOCAL_ZONE;
+const localZone = () => (LOCAL_ZONE ??= Intl.DateTimeFormat().resolvedOptions().timeZone);
+// 'täna' or 'eile' for a moment in a zone, null for an earlier day
+function dayWord(t, now, lang, tz) {
+  const date = x => { const p = zoneParts(x, tz); return Date.UTC(p.y, p.m - 1, p.d); };
+  const k = Math.round((date(now) - date(t)) / (24 * HOUR)), w = words(lang);
   return k === 0 ? w.today : k === 1 ? w.yesterday : null;
 }
 // the index of the point with a value nearest to t, null when none has one; on a stepped line the
@@ -1709,6 +1834,16 @@ export function meterRow(states, m, lang = 'et') {
   return { name: m.name || '', value: valueText(st, m.decimals ?? 0, lang, { unit: m.unit }), pct: v === null ? 0 : Math.max(0, Math.min(100, (v / (m.max || 100)) * 100)), note: m.note || '' };
 }
 
+// what a tap on a days card's headline opens: the picked series over 30 days, 90 days and 12
+// months (ADR-013), with the card's cutoff for a counter; `more` is a real entity, since an
+// external statistic has no state
+export function daysSheet(conf, i) {
+  const s = conf.series[i];
+  return {
+    days: true, title: s.title || s.name, statistic: s.statistic, type: s.type, color: s.color, unit: s.unit || '',
+    scale: s.scale || 1, decimals: s.decimals ?? 1, more: s.more, ...(s.type === 'change' && conf.cutoff ? { cutoff: conf.cutoff } : {})
+  };
+}
 const dailyKey = types => `daily:${types.join(',')}`;
 const seriesTypes = s => (s.peak ? [s.type, 'max'] : [s.type]);
 // the days card's requests: one daily request per set of types holding every series' and
@@ -1819,7 +1954,7 @@ function fetchShared(hass, msg, hour) {
   return FETCHES.get(key);
 }
 
-const tzOf = hass => (hass && hass.config && hass.config.time_zone) || Intl.DateTimeFormat().resolvedOptions().timeZone;
+const tzOf = hass => (hass && hass.config && hass.config.time_zone) || localZone();
 const hourKeyOf = (now, tz) => { const p = zoneParts(now, tz); return `${p.y}-${p.m}-${p.d}-${p.h}`; };
 const fmtN = (v, d, lang) => formatNumber(v.toFixed(d), d, lang);
 
@@ -1932,7 +2067,8 @@ svg.c{display:block;width:100%;height:120px;touch-action:pan-y}
 `;
 
 // daily bars of one statistic, or several behind a segmented control: the last `days` days in
-// HA's zone, the days past a delayed counter's cutoff lighter and out of the numbers. A series'
+// HA's zone, the days past a delayed counter's cutoff lighter and out of the numbers. The
+// headline opens the picked series' sheet over 30 days, 90 days and 12 months (ADR-013). A series'
 // `overlay` draws a second statistic as narrow bars in front, and `headline: 'ratio'` puts the
 // ratio of the two in the average's place.
 class DaysCard extends LoadingCard {
@@ -2017,7 +2153,9 @@ class DaysCard extends LoadingCard {
       three = [[w.largest, `${fmt(stats.big.v)}${u}`, stats.big.label], [w.smallest, `${fmt(stats.small.v)}${u}`, stats.small.label], [w.todaySoFar, tv === null ? '–' : `${fmtN(tv, dec, L)}${u}`, w.dayNotOver]].map(([k, v, l]) => ({ k, v, l }));
     }
     const cells = three.map(cellHtml).join('');
-    return shell(`<span class="avg"><span class="n num">${esc(head[0])}</span><span class="u">${esc(head[1])}</span></span><span>${svg}${axis}</span>${key}<span class="hr"></span><span class="stats">${cells}</span>${c.foot ? `<span class="foot">${esc(c.foot)}</span>` : ''}`);
+    const sheet = daysSheet(c, i);
+    this._sheets.set('h', sheet);
+    return shell(`<button type="button" class="avg press" data-k="h" aria-label="${esc(w.history(sheet.title))}"><span class="n num">${esc(head[0])}</span><span class="u">${esc(head[1])}</span></button><span>${svg}${axis}</span>${key}<span class="hr"></span><span class="stats">${cells}</span>${c.foot ? `<span class="foot">${esc(c.foot)}</span>` : ''}`);
   }
   // pointing at a day shows it in the average's place
   _wire() {

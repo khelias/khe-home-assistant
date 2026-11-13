@@ -861,3 +861,130 @@ test('languages: the helpers in English', () => {
   assert.equal(A3.usageSheet('sensor.m', {}, 'en').title, 'Use');
   assert.equal(A3.statusLine({}, { status: { entity: 'binary_sensor.x', ok: 'Works' } }, 'en').text, 'State not known');
 });
+
+/* ---------- A3 days sheet (ADR-013): 30 days, 90 days and 12 months in HA's slots ---------- */
+
+const day = (y, m, d) => A3.dayStart(y, m, d, TZ);
+const rowsOf = (starts, f) => starts.map((t, i) => ({ start: t, ...f(i) }));
+
+test('days sheet: 90 days across the October change start at HA midnight, today last', () => {
+  const now = Date.parse('2026-11-13T10:00:00Z'), r = A3.daysRange('90d', now, TZ);
+  assert.equal(r.period, 'day');
+  assert.equal(r.starts.length, 90);
+  assert.equal(iso(r.starts[0]), '2026-08-15T21:00:00.000Z');
+  assert.equal(r.starts[89], day(2026, 11, 13));
+  assert.equal(r.end, day(2026, 11, 14));
+  // the day of the change is 25 hours long
+  const i = r.starts.indexOf(day(2026, 10, 25));
+  assert.equal((r.starts[i + 1] - r.starts[i]) / 3600e3, 25);
+  const msg = A3.daysSheetRequest({ statistic: 'sensor.a', type: 'change' }, '90d', now, TZ);
+  assert.deepEqual(msg, { type: 'recorder/statistics_during_period', start_time: '2026-08-15T21:00:00.000Z', statistic_ids: ['sensor.a'], period: 'day', types: ['change'] });
+  assert.equal(A3.daysRange('30d', now, TZ).starts[0], day(2026, 10, 15));
+});
+
+test('days sheet: 12 months across a year end, each on the 1st in HA zone', () => {
+  const now = Date.parse('2027-01-10T12:00:00Z'), r = A3.daysRange('12m', now, TZ);
+  assert.equal(r.period, 'month');
+  assert.equal(r.starts.length, 12);
+  assert.equal(iso(r.starts[0]), '2026-01-31T22:00:00.000Z');
+  r.starts.forEach(t => assert.equal(A3.zoneParts(t, TZ).d, 1));
+  r.starts.forEach(t => assert.equal(A3.zoneParts(t, TZ).h, 0));
+  assert.equal(r.starts[11], day(2027, 1, 1));
+  assert.equal(r.starts[10], day(2026, 12, 1));
+  assert.equal(r.end, day(2027, 2, 1));
+  assert.equal(A3.daysSheetRequest({ statistic: 'sensor.a', type: 'mean' }, '12m', now, TZ).period, 'month');
+});
+
+test('days sheet: empty months stay empty, this month and the first partial one are out', () => {
+  const now = Date.parse('2026-11-13T10:00:00Z'), r = A3.daysRange('12m', now, TZ);
+  // data from July; 100 kWh a month, this month so far 40
+  const rows = rowsOf(r.starts.slice(6), i => ({ change: i === 5 ? 40 : 100 + i }));
+  const s = A3.slotSeries({ 'sensor.a': rows }, { statistic: 'sensor.a', type: 'change' }, '12m', now, TZ);
+  assert.equal(s.pts.length, 12);
+  assert.deepEqual(s.pts.slice(0, 6).map(p => p.v), [null, null, null, null, null, null]);
+  assert.equal(s.pts[6].out, 'partial');
+  assert.equal(s.pts[11].out, 'open');
+  assert.deepEqual(s.pts.filter(p => !p.out && p.v !== null).map(p => p.v), [101, 102, 103, 104]);
+  assert.equal(s.stats.total, 410);
+  assert.equal(s.stats.avg, 102.5);
+  assert.equal(s.stats.small.v, 101);
+  assert.equal(s.stats.big.v, 104);
+  // data from the window's start may predate it: the first month counts
+  const full = rowsOf(r.starts, () => ({ change: 10 }));
+  assert.equal(A3.slotSeries({ 'sensor.a': full }, { statistic: 'sensor.a', type: 'change' }, '12m', now, TZ).pts[0].out, false);
+  assert.equal(A3.slotSeries({}, { statistic: 'sensor.a', type: 'change' }, '12m', now, TZ).stats, null);
+});
+
+test('days sheet: a statistic that begins inside 90 days has its first day out', () => {
+  const now = Date.parse('2026-11-13T10:00:00Z'), r = A3.daysRange('90d', now, TZ);
+  const rows = rowsOf(r.starts.slice(5), () => ({ change: 2 }));
+  rows[0].change = 0.3;
+  const s = A3.slotSeries({ 'sensor.a': rows }, { statistic: 'sensor.a', type: 'change' }, '90d', now, TZ);
+  assert.equal(s.pts[5].out, 'partial');
+  assert.equal(s.stats.small.v, 2);
+  assert.equal(s.stats.total, 2 * 83);
+});
+
+test('days sheet: days past the cutoff are late, today is open', () => {
+  const now = Date.parse('2026-11-13T10:00:00Z'), r = A3.daysRange('30d', now, TZ);
+  const rows = rowsOf(r.starts, i => ({ change: i + 1 }));
+  // the counter's data ends at 15:00 on the 11th: the 11th and the 12th are late
+  const cutoff = day(2026, 11, 11) + 15 * 3600e3;
+  const s = A3.slotSeries({ 'sensor.a': rows }, { statistic: 'sensor.a', type: 'change' }, '30d', now, TZ, cutoff);
+  assert.deepEqual(s.pts.slice(-4).map(p => p.out), [false, 'late', 'late', 'open']);
+  assert.equal(s.stats.total, (27 * 28) / 2);
+  assert.equal(s.stats.last.v, 27);
+});
+
+test('days sheet: the price is a line of day means at scale 100', () => {
+  const now = Date.parse('2026-11-13T10:00:00Z'), r = A3.daysRange('30d', now, TZ);
+  // the day means swing 0.10 to 0.20 €/kWh; a dear single hour (max) is not a day mean
+  const rows = rowsOf(r.starts, i => ({ mean: 0.1 + (i % 11) / 100, max: 0.9 }));
+  const s = A3.slotSeries({ 'sensor.c': rows }, { statistic: 'sensor.c', type: 'mean', scale: 100 }, '30d', now, TZ);
+  assert.ok(Math.abs(s.stats.small.v - 10) < 1e-9);
+  assert.ok(Math.abs(s.stats.big.v - 20) < 1e-9);
+  assert.ok(s.pts.every(p => p.v <= 20 + 1e-9));
+  assert.ok(Math.abs(s.stats.last.v - (0.1 + (28 % 11) / 100) * 100) < 1e-9);
+});
+
+test('days sheet: when and the axis in HA zone, not the browser one', () => {
+  const ny = 'America/New_York', t = A3.dayStart(2026, 11, 4, ny), now = Date.parse('2026-11-13T10:00:00Z');
+  // 05:00 UTC is the 4th in New York and in Tallinn
+  assert.equal(A3.whenLabel(t, '30d', true, now, 'et', ny), 'kolmapäev 4.11');
+  assert.equal(A3.whenLabel(A3.dayStart(2026, 11, 1, ny), '90d', true, now, 'et', ny), 'pühapäev 1.11');
+  // in the browser's zone (Tallinn) New York's 1st of November is still 1.11 at 06:00, so a
+  // late-evening start shows the difference: 22:30 on 31.10 in New York is 1.11 in Tallinn
+  const eve = Date.parse('2026-11-01T02:30:00Z');
+  assert.equal(A3.whenLabel(eve, '30d', true, now, 'et', ny), 'laupäev 31.10');
+  assert.equal(A3.whenLabel(eve, '30d', true, now, 'et'), 'pühapäev 1.11');
+  assert.equal(A3.whenLabel(A3.dayStart(2026, 10, 1, ny), '12m', true, now, 'et', ny), 'oktoober 2026');
+  assert.equal(A3.whenLabel(A3.dayStart(2026, 10, 1, ny), '12m', true, now, 'en', ny), 'October 2026');
+  assert.equal(A3.whenLabel(eve, '24h', true, eve + 3600e3, 'en', ny), 'today 22–23');
+  const r = A3.daysRange('12m', now, ny);
+  const ax = A3.axisLabels('12m', r.starts[0], r.end, 'et', ny);
+  assert.equal(ax.length, 5);
+  assert.equal(ax[0], 'dets');
+  assert.equal(ax[4], 'nüüd');
+  assert.equal(A3.axisLabels('30d', eve, eve + 30 * 864e5, 'et', ny)[0], '31.10');
+  assert.equal(A3.axisLabels('30d', eve, eve + 30 * 864e5, 'et')[0], '1.11');
+});
+
+test('days sheet: the spec from the picked series, with more and the cutoff', () => {
+  const conf = {
+    cutoff: 'estfeed:c', series: [
+      { name: 'kWh', title: 'Maja elekter', statistic: 'estfeed:c', type: 'change', unit: 'kWh', decimals: 1, color: 'indigo', more: 'sensor.today' },
+      { name: 'Hind', title: 'Elektri hind', statistic: 'estfeed:p', type: 'mean', scale: 100, decimals: 1, unit: 'senti/kWh', more: 'sensor.level' }
+    ]
+  };
+  assert.deepEqual(A3.daysSheet(conf, 0), { days: true, title: 'Maja elekter', statistic: 'estfeed:c', type: 'change', color: 'indigo', unit: 'kWh', scale: 1, decimals: 1, more: 'sensor.today', cutoff: 'estfeed:c' });
+  assert.deepEqual(A3.daysSheet(conf, 1), { days: true, title: 'Elektri hind', statistic: 'estfeed:p', type: 'mean', color: undefined, unit: 'senti/kWh', scale: 100, decimals: 1, more: 'sensor.level' });
+  const boiler = A3.daysSheet({ series: [{ name: 'kWh', title: 'Boileri elekter', statistic: 'sensor.b', type: 'change', unit: 'kWh', more: 'sensor.b' }] }, 0);
+  assert.equal(boiler.cutoff, undefined);
+  assert.equal(boiler.decimals, 1);
+});
+
+test('days sheet: tile sheets keep 24 h, 7 and 30 days; the days sheet has its own three', () => {
+  assert.deepEqual(Object.keys(A3.RANGES), ['24h', '7d', '30d']);
+  assert.deepEqual(Object.keys(A3.DAYS_RANGES), ['30d', '90d', '12m']);
+  for (const L of A3.LANGUAGES) for (const k of [...Object.keys(A3.RANGES), ...Object.keys(A3.DAYS_RANGES)]) assert.ok(A3.words(L).ranges[k], `${L} ${k}`);
+});

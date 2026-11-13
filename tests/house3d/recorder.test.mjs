@@ -137,3 +137,25 @@ test("the level's sentence reads the price now against the day's average", () =>
   const said = ['2026-11-12T01:00:00Z', '2026-11-12T16:30:00Z'].map(at => rec.dated(Date.parse(at), { levels: et, hinnang })[ids.PRICE_LEVEL].attributes.hinnang);
   assert.deepEqual(said, ['B', 'A']);
 });
+
+test("months for the days sheet's 12 months (ADR-013): a month is the sum or the mean of its days", async () => {
+  const now = Date.parse('2026-11-13T10:00:00Z'), p = zoneParts(now, TZ);
+  const sep = dayStart(p.y, 9, 1, TZ), oct = dayStart(p.y, 10, 1, TZ);
+  const month = async (id, types) => (await stat(now, id, 'month', types, sep))[id];
+  const days = async (id, types) => (await stat(now, id, 'day', types, sep))[id].filter(r => r.start < oct);
+  const [m] = await month(stats.CONSUMPTION, ['change']);
+  assert.equal(m.start, sep);
+  assert.equal(m.end, oct);
+  assert.ok(Math.abs(m.change - sumOf(await days(stats.CONSUMPTION, ['change']))) < 0.05);
+  const [pm] = await month(stats.PRICE_STAT, ['mean']), pd = await days(stats.PRICE_STAT, ['mean']);
+  assert.ok(pm.mean >= Math.min(...pd.map(r => r.mean)) && pm.mean <= Math.max(...pd.map(r => r.mean)));
+  // the sheet's own request: twelve months, quickly, this month so far included
+  const t0 = performance.now();
+  const msg = cards.daysSheetRequest({ statistic: stats.COST, type: 'change' }, '12m', now, TZ);
+  const rows = (await rec.callWS(msg, now))[stats.COST];
+  assert.ok(performance.now() - t0 < 1000);
+  assert.ok(rows.length >= 12 && rows.length <= 13);
+  const s = cards.slotSeries({ [stats.COST]: rows }, { statistic: stats.COST, type: 'change' }, '12m', now, TZ);
+  assert.equal(s.pts.filter(x => x.v !== null).length, 12);
+  assert.equal(s.pts[11].out, 'open');
+});

@@ -444,6 +444,8 @@ def energia():
                                 "color": "indigo",
                                 "caption": "kWh päevas keskmiselt",
                                 "aria": "Tarbimine päevade kaupa",
+                                "title": "Maja elekter",
+                                "more": dc.TODAY,
                                 "today": {"entity": dc.TODAY},
                             },
                             {
@@ -455,6 +457,8 @@ def energia():
                                 "color": "teal",
                                 "caption": "€ päevas keskmiselt, ilma kuutasudeta",
                                 "aria": "Kulu päevade kaupa",
+                                "title": "Maja elektrikulu",
+                                "more": dc.TODAY,
                                 "today": {"entity": dc.TODAY, "attribute": "kulu"},
                             },
                         ],
@@ -514,6 +518,8 @@ def energia():
                                 "unit": "senti/kWh",
                                 "caption": "senti/kWh keskmiselt, kõigi tasudega",
                                 "aria": "Elektri hinna päeva keskmine ja kalleim tund",
+                                "title": "Elektri hind",
+                                "more": dc.PRICE_LEVEL,
                             }
                         ],
                         grid_options={"columns": "full"},
@@ -635,6 +641,8 @@ def soojuspump(h):
                                 "color": "orange",
                                 "caption": "kWh päevas keskmiselt",
                                 "aria": "Boileri elekter päevade kaupa",
+                                "title": "Boileri elekter",
+                                "more": dc.BOILER_TODAY,
                             }
                         ],
                         cells=[
@@ -785,6 +793,8 @@ def ventilatsioon(h):
                                 "caption": "rohkem soojust tagasi, kui seade elektrit võtab",
                                 "caption_below": "vähem soojust tagasi, kui seade elektrit võtab",
                                 "aria": "Tagastatud soojus ja seadme elekter päevade kaupa",
+                                "title": "Tagastatud soojus",
+                                "more": dc.RECOVERED,
                                 "overlay": {
                                     "statistic": dc.AHU_ENERGY,
                                     "type": "change",

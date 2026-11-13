@@ -56,6 +56,7 @@ export function createRecorder(spec, { zoneParts, dayStart, lastMonthName }) {
   function periods(period, start, end) {
     const out = [];
     if (period === 'day') for (let a = dayOf(start); a < end; a = nextDay(a)) out.push([a, nextDay(a)]);
+    else if (period === 'month') for (let a = monthOf(start); a < end; a = monthOf(a, 1)) out.push([a, monthOf(a, 1)]);
     else {
       const len = period === 'hour' ? HOUR : FIVE;
       for (let a = Math.floor(start / len) * len; a < end; a += len) out.push([a, a + len]);
@@ -77,7 +78,8 @@ export function createRecorder(spec, { zoneParts, dayStart, lastMonthName }) {
           if (a >= hourStart(now)) continue;
           r.change = round(sum(id, a, b, now), 3);
         } else {
-          const step = msg.period === 'day' ? HOUR : FIVE;
+          // a day's or a month's mean is over its hours
+          const step = msg.period === 'day' || msg.period === 'month' ? HOUR : FIVE;
           const vals = [];
           for (let t = a; t < Math.min(b, now); t += step) vals.push(at(id, t));
           if (!vals.length) continue;

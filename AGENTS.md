@@ -24,9 +24,11 @@ This file holds rules and pointers; the reference lives in:
   the hero with its surroundings ([ADR-009](docs/decisions/009-hero-shows-the-surroundings.md)),
   the hero beside the cards on wide screens ([ADR-010](docs/decisions/010-a3-landscape-hero-beside-the-cards.md)),
   page lines from hourly statistics with a stepper that writes the
-  heating shift ([ADR-011](docs/decisions/011-a3-hourly-lines-and-a-written-setpoint.md))
-  and the demo as the house's Overview, the cards in both languages
+  heating shift ([ADR-011](docs/decisions/011-a3-hourly-lines-and-a-written-setpoint.md)),
+  the demo as the house's Overview, the cards in both languages
   ([ADR-012](docs/decisions/012-the-demo-is-the-houses-overview.md))
+  and a days card's sheet over 30 days, 90 days and 12 months
+  ([ADR-013](docs/decisions/013-days-cards-open-a-long-range-sheet.md))
 - [ROADMAP.md](ROADMAP.md) - house automation, near-term and the long form
 
 House documentation (HA rollout, dashboard layout, HVAC protocols, energy)
@@ -42,7 +44,8 @@ cards/             the dashboard's own Lovelace cards (khe-cards.js, ADR-002,
                    ADR-005, ADR-008, ADR-011): summary, price, tile, chips,
                    heading, status, Energia's month, days and split, and
                    Soojuspump's and Ventilatsioon's reading, with the
-                   history sheet, their words in Estonian and English by
+                   history sheet (a days card's over 30 days, 90 days
+                   and 12 months, ADR-013), their words in Estonian and English by
                    their `language` config (ADR-012); A3 draws with them;
                    deploy copies
                    them to www/khe-cards/

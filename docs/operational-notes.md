@@ -182,7 +182,9 @@ Soojuspump `custom:khe-reading-card`
 ([ADR-011](decisions/011-a3-hourly-lines-and-a-written-setpoint.md)), which
 Ventilatsioon uses too with any unit, a meter and three cells, beside a days
 card with an overlay series and a ratio headline; a reading card's big value
-opens its history sheet as its cells do. Kodu was drawn
+opens its history sheet as its cells do, and a days card's headline opens
+its series' sheet over 30 days, 90 days and 12 months
+([ADR-013](decisions/013-days-cards-open-a-long-range-sheet.md)). Kodu was drawn
 with them on 2026-10-17 and went back to stock cards the next day; A3
 uses them. Deploy replaces `www/khe-cards/` in HA's config volume, so HA
 serves them as `/local/khe-cards/`, and a change arrives without a restart.
@@ -270,13 +272,26 @@ behind every value and device. It replaced the Bubble Card trial of
   which keeps no statistics. Empty statistics fall back to history. The
   recorder keeps 30 days. The price sheet shows the 48-hour forecast; it is
   not recorded, so it has no ranges.
+- **The days sheet** ([ADR-013](decisions/013-days-cards-open-a-long-range-sheet.md)):
+  a days card's headline opens the picked series (Energia's kWh or Eurod)
+  as daily statistics for 30 and 90 days and `period: "month"` for 12
+  months, counted in HA's calendar with today or this month the last slot.
+  The last slot, the first day or month with data inside the window and Estfeed's
+  days past its cutoff are lighter and out of the numbers; the big value is
+  the average per counted day or month. The series' `title` names the sheet
+  and its `more` is the entity "Rohkem" opens, since an `estfeed:`
+  statistic has no state. Long-term statistics are not purged, but they
+  start in the summer of 2026 (the price in June, consumption and cost in
+  July, the boiler and the recovered heat in August), so 12 months shows 4
+  to 6 bars in 2026.
 - **Limits:** the pergola roof is a group without position and its state
   is `unknown`, so its tile shows no state and opens more-info, not a sheet.
   Section headings link into Kodu's views (Energia, Soojuspump, Süsteem),
   and the light's, ventilation's and TV's sheets into Pergola, Ventilatsioon
   and Teler.
 - **HA bump check:** besides the actions above, open a value's sheet and
-  switch it to 7 and 30 days: the two WebSocket commands and the
+  switch it to 7 and 30 days, and a days card's headline to 12 months
+  (the `month` period): the two WebSocket commands and the
   `background` handling (`hui-view-background.ts`) can change with the
   frontend. Open Energia too: its cards read the same statistics command.
   On Soojuspump tap the shift once up and once back and see the unit take
