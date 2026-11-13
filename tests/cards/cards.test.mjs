@@ -1349,9 +1349,9 @@ test('Valve: the plan fills the room in motion now, tints the trail, and is left
   const rows = [row('binary_sensor.test_hall_motion', min(1)), row('binary_sensor.test_kitchen_motion', null, true), row('binary_sensor.test_living_motion', null)];
   const p = V.planSvg(PLAN, rows, T0, V.a3Palette(false));
   assert.match(p.svg, /<svg class="plan"/);
-  assert.match(p.svg, /fill="rgba\(48,176,199,0\.55\)"\/>/, 'r1 tinted strongly while its kitchen PIR is on');
-  assert.match(p.svg, /fill="rgba\(48,176,199,0\.18\)"\/>/, 'the hall tinted for the trail');
-  assert.match(p.svg, /fill="#55555b"\/>/, 'the outer walls');
+  assert.match(p.svg, /fill="rgba\(48,176,199,0\.42\)"\/>/, 'r1 tinted strongly while its kitchen PIR is on');
+  assert.match(p.svg, /fill="rgba\(48,176,199,0\.16\)"\/>/, 'the hall tinted for the trail');
+  assert.match(p.svg, /stroke="rgba\(60,60,67,0\.42\)" stroke-width="5" stroke-linecap="round"/, 'the outer walls as soft round-ended lines');
   assert.match(p.svg, /stroke="url\(#trail0\)"/, 'the hall a minute before the kitchen: one walk');
   assert.match(p.svg, /class="ring"/);
   assert.equal(p.aria, 'Maja plaan, liikumise tee viimase veerandtunniga: Eeskoda ja Pere köök-elutuba');
@@ -1445,16 +1445,12 @@ test('Valve: a motion sheet counts the times a sensor fired, per hour over a day
   assert.equal(week.points.reduce((a, p) => a + p.v, 0), 1, 'a firing before the week is out');
 });
 
-test('Valve: a wall is drawn in pieces between its door openings, at least a hairline thick', () => {
-  const box = [0, 0, 10, 10];
-  const one = V.wallPieces({ a: [0, 0], b: [4, 0], t: 0.2, doors: [] }, box);
-  assert.equal(one.length, 1);
-  assert.deepEqual(one[0].map(p => p.map(v => +v.toFixed(2))), [[-0.1, 0.1], [4.1, 0.1], [4.1, -0.1], [-0.1, -0.1]], 'carried on by half its thickness at each end');
-  const cut = V.wallPieces({ a: [0, 0], b: [4, 0], t: 0.2, doors: [[3, 1], [1, 0.8]] }, box);
-  assert.deepEqual(cut.map(q => [+q[0][0].toFixed(2), +q[1][0].toFixed(2)]), [[-0.1, 0.6], [1.4, 2.5], [3.5, 4.1]], 'two openings, in any order, leave three pieces');
-  assert.equal(V.wallPieces({ a: [0, 0], b: [4, 0], t: 0.2, doors: [[0.4, 1]] }, box).length, 1, 'an opening at the end leaves one piece');
-  assert.ok(Math.abs(V.wallPieces({ a: [0, 0], b: [0, 4], t: 0.02 }, box, 0.1)[0][0][0]) > 0.04, 'a thin wall drawn at the least thickness');
-  assert.equal(V.wallPieces({ a: [20, 20], b: [24, 20], t: 0.2 }, box), null, 'an outbuilding wall is left out');
+test('Valve: a wall is drawn as its centre line in pieces between its door openings', () => {
+  const box = [0, 0, 10, 10], r = q => q.map(([a, b]) => [a.map(v => +v.toFixed(2)), b.map(v => +v.toFixed(2))]);
+  assert.deepEqual(r(V.wallSpans({ a: [0, 0], b: [4, 0], t: 0.2, doors: [] }, box)), [[[0, 0], [4, 0]]]);
+  assert.deepEqual(r(V.wallSpans({ a: [0, 0], b: [4, 0], t: 0.2, doors: [[3, 1], [1, 0.8]] }, box)), [[[0, 0], [0.6, 0]], [[1.4, 0], [2.5, 0]], [[3.5, 0], [4, 0]]], 'two openings, in any order, leave three pieces');
+  assert.equal(V.wallSpans({ a: [0, 0], b: [4, 0], t: 0.2, doors: [[0.5, 1]] }, box).length, 1, 'an opening at the end leaves one piece');
+  assert.equal(V.wallSpans({ a: [20, 20], b: [24, 20], t: 0.2 }, box), null, 'an outbuilding wall is left out');
 });
 
 test('Valve: the footprint grows each nearby room by half a wall, so walls and the garage close into one shape', () => {

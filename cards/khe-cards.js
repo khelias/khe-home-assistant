@@ -9,7 +9,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 23;
+export const KHE_CARDS_VERSION = 25;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -3094,24 +3094,20 @@ export function growRect(r, others) {
   ];
 }
 
-// A wall's pieces between its door openings, each a quad [[x, z] x4] around the wall's line at its
-// thickness (at least `least` m, so a thin one still shows), its ends carried on by half of it so
-// corners close; null for a wall well outside the box.
-export function wallPieces(wl, box, least = 0) {
+// A wall's centre line in pieces between its door openings, [[a, b], ...] in metres; null for a
+// wall well outside the box.
+export function wallSpans(wl, box) {
   const len = Math.hypot(wl.b[0] - wl.a[0], wl.b[1] - wl.a[1]), [x0, z0, x1, z1] = box;
   if (!len || Math.max(wl.a[0], wl.b[0]) < x0 - 1 || Math.min(wl.a[0], wl.b[0]) > x1 + 1 || Math.max(wl.a[1], wl.b[1]) < z0 - 1 || Math.min(wl.a[1], wl.b[1]) > z1 + 1) return null;
-  const ux = (wl.b[0] - wl.a[0]) / len, uz = (wl.b[1] - wl.a[1]) / len, h = Math.max(wl.t || 0, least) / 2, nx = -uz * h, nz = ux * h;
+  const ux = (wl.b[0] - wl.a[0]) / len, uz = (wl.b[1] - wl.a[1]) / len, at = d => [wl.a[0] + ux * d, wl.a[1] + uz * d];
   const spans = [];
-  let from = -h;
+  let from = 0;
   for (const [c, w] of [...(wl.doors || [])].sort((a, b) => a[0] - b[0])) {
     if (c - w / 2 > from + EPS) spans.push([from, c - w / 2]);
     from = Math.max(from, c + w / 2);
   }
-  if (len + h > from + EPS) spans.push([from, len + h]);
-  return spans.map(([s0, s1]) => {
-    const A = [wl.a[0] + ux * s0, wl.a[1] + uz * s0], B = [wl.a[0] + ux * s1, wl.a[1] + uz * s1];
-    return [[A[0] + nx, A[1] + nz], [B[0] + nx, B[1] + nz], [B[0] - nx, B[1] - nz], [A[0] - nx, A[1] - nz]];
-  });
+  if (len > from + EPS) spans.push([from, len]);
+  return spans.map(([a, b]) => [at(a), at(b)]);
 }
 
 // The house's floor for the plan: each room rect near the sensed ones (not the outbuildings) grown
@@ -3125,9 +3121,9 @@ export function houseRects(plan, box) {
 }
 
 const TEAL = '#30b0c7', PW = 330, PH = 360;
-// The plan's SVG, drawn as a floor plan: the house's floor, the rooms on the trail tinted to their
-// walls' middle (the room in motion now stronger), the walls at their thickness with the door
-// openings cut out, the trail as one curve per walk (trailRuns) fading in from its start, a dot at
+// The plan's SVG, drawn as a soft floor plan: the house's floor, the rooms on the trail tinted to
+// their walls' middle (the room in motion now stronger), the walls as round-ended lines with the
+// door openings cut out, the trail as one curve per walk (trailRuns) fading in from its start, a dot at
 // each room it passed and at each walk's end, a ring at the latest while there is motion, and the
 // sensed rooms' names, lifted over the trail's dots.
 // { svg, aria }; '' without a plan or a sensed room.
@@ -3144,9 +3140,9 @@ export function planSvg(plan, rows, now, pal, lang = 'et', minutes = 15) {
   const g = graphOf(plan), trail = trailRooms(plan, rows, now, minutes), runs = trailRuns(g, trail, sensed);
   const roomOf = new Map(plan.pirs.map(p => [p.entity, p.room])), nowRooms = new Set(rows.filter(r => r.on).map(r => roomOf.get(r.entity)).filter(Boolean));
   const inTrail = new Set(trail.map(x => x.room));
-  const c = pal.dark
-    ? { floor: '#2c2c31', trail: 'rgba(48,176,199,0.30)', now: 'rgba(48,176,199,0.55)', outer: '#8e8e93', inner: '#5c5c62' }
-    : { floor: '#eeede9', trail: 'rgba(48,176,199,0.18)', now: 'rgba(48,176,199,0.55)', outer: '#55555b', inner: '#a8a8ad' };
+  // the A3 palette's own greys: the floor in the segmented controls' fill, the walls as soft lines
+  const ink = pal.dark ? '235,235,245' : '60,60,67';
+  const c = { floor: pal.seg, trail: 'rgba(48,176,199,0.16)', now: 'rgba(48,176,199,0.42)', outer: `rgba(${ink},0.42)`, inner: `rgba(${ink},${pal.dark ? 0.2 : 0.24})` };
   const f = v => v.toFixed(1), box = [bx0, bz0, bx1, bz1];
   const P = p => [X(p[0]), Z(p[1])];
   const rectD = r => `M${f(X(r[0]))} ${f(Z(r[1]))}H${f(X(r[2]))}V${f(Z(r[3]))}H${f(X(r[0]))}Z`;
@@ -3156,9 +3152,10 @@ export function planSvg(plan, rows, now, pal, lang = 'et', minutes = 15) {
     `<path d="${room.rects.map(r => rectD(growRect(r, allRects.filter(o => o !== r)))).join('')}" fill="${nowRooms.has(room.id) ? c.now : c.trail}"/>`).join('');
   const walls = { outer: '', inner: '' };
   for (const wl of plan.walls || []) {
-    for (const q of wallPieces(wl, box, 2.2 / K) || []) walls[(wl.t || 0) > 0.3 ? 'outer' : 'inner'] += `M${q.map(p => P(p).map(f).join(' ')).join('L')}Z`;
+    for (const [a, b] of wallSpans(wl, box) || []) walls[(wl.t || 0) > 0.3 ? 'outer' : 'inner'] += `M${P(a).map(f).join(' ')}L${P(b).map(f).join(' ')}`;
   }
-  const plates = `${tints}<path d="${walls.inner}" fill="${c.inner}"/><path d="${walls.outer}" fill="${c.outer}"/>`;
+  const line = (d, color, width) => `<path d="${d}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const plates = `${tints}${line(walls.inner, c.inner, 2)}${line(walls.outer, c.outer, 5)}`;
   // each run fades in from its start and ends in a dot; the latest one, while there is motion, rings
   const pts = runs.map(run => run.map(P));
   let curve = '';
