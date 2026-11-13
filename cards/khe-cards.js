@@ -9,7 +9,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 17;
+export const KHE_CARDS_VERSION = 18;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -508,10 +508,11 @@ class KheCard extends Base {
       this._styleEl.textContent = `${cssVars(pal)}${BASE_CSS}${this._a3 ? A3_CSS : ''}${own}`;
       this._cssDark = dark;
     }
-    // keep the focus on the same control across a redraw
+    // keep the focus on the same control across a redraw, without scrolling to it: a redraw
+    // comes with any watched state change, long after the operator scrolled away
     const focused = this.shadowRoot.activeElement && this.shadowRoot.activeElement.dataset.k;
     this._root.innerHTML = this._html(this._hass.states, pal);
-    if (focused) { const el = this._root.querySelector(`[data-k="${CSS.escape(focused)}"]`); if (el) el.focus(); }
+    if (focused) { const el = this._root.querySelector(`[data-k="${CSS.escape(focused)}"]`); if (el) el.focus({ preventScroll: true }); }
     if (this._wire) this._wire();
   }
   // a drag holds redraws; its end draws what changed meanwhile
