@@ -10,7 +10,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 27;
+export const KHE_CARDS_VERSION = 28;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -3586,7 +3586,7 @@ const TV_CSS = `
 .btn.stop{background:var(--highBg);color:var(--high)}
 .prof{display:flex;flex-direction:column;gap:8px}
 .hr{height:0.5px;background:var(--hair)}
-.ps{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
+.ps{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:8px}
 .ps .btn{gap:6px;border-radius:12px;font-size:14px}
 `;
 
