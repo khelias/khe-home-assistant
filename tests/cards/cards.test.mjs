@@ -1329,6 +1329,9 @@ test('Valve: the trail is each room once by its last motion, the last five, insi
   assert.deepEqual(V.trailRooms(PLAN, rows, T0).map(x => x.room), ['r4', 'r3', 'r1'], 'the bedroom is past 15 minutes, the unplaced PIR is out, two PIRs light r1 once');
   assert.deepEqual(V.trailRooms(PLAN, rows, T0, 15, 2).map(x => x.room), ['r3', 'r1']);
   assert.deepEqual(V.trailRooms(PLAN, rows, T0, 20).map(x => x.room), ['r2', 'r4', 'r3', 'r1']);
+  const every = { ...PLAN, pirs: PLAN.rooms.map(r => ({ entity: `binary_sensor.${r.id}`, room: r.id })) };
+  const busy = PLAN.rooms.map((r, i) => row(`binary_sensor.${r.id}`, min(10 - i)));
+  assert.deepEqual(V.trailRooms(every, busy, T0).map(x => x.room), PLAN.rooms.slice(-5).map(r => r.id), 'six rooms or more keep the last five');
 });
 
 test('Valve: the plan fills the room in motion now, tints the trail, and is left out without a slice', () => {

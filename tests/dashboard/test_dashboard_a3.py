@@ -804,9 +804,11 @@ class Valve(unittest.TestCase):
         self.assertNotIn('"devices"', json.dumps(sl))
         for w in sl["walls"]:
             self.assertEqual(sorted(w), ["a", "b", "doors", "t"])
-        # every string is a room id, a room name or a placed PIR's id
+        # every string is a room id, a placed PIR's id or the name of a room with a PIR
         room_ids = {r["id"] for r in sl["rooms"]}
-        names = {r["name"] for r in sl["rooms"]}
+        sensed = {p["room"] for p in sl["pirs"]}
+        self.assertEqual({r["id"] for r in sl["rooms"] if "name" in r}, sensed)
+        names = {r["name"] for r in sl["rooms"] if "name" in r}
         strings = {v for d in walk(sl) for v in d.values() if isinstance(v, str)}
         self.assertEqual(strings - room_ids - names - {p["entity"] for p in sl["pirs"]}, set())
         # only the PIRs the model places in a room, in the card's order
@@ -821,7 +823,7 @@ class Valve(unittest.TestCase):
         pirs = dc.SHARED + dc.PRIVATE
         sl = a3.plan_slice(placed(FIXTURE, pirs), pirs)
         names = a3.motion_names(sl)
-        rooms = {r["id"]: r["name"] for r in sl["rooms"]}
+        rooms = {r["id"]: r.get("name") for r in sl["rooms"]}
         count = {}
         for p in sl["pirs"]:
             count[p["room"]] = count.get(p["room"], 0) + 1

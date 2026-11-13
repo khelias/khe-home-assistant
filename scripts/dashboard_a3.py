@@ -1021,10 +1021,11 @@ DOOR_KINDS = ("door", "glassdoor")
 
 
 def plan_slice(model, pirs):
-    """What the motion card draws the house plan and its trail from (ADR-015): every room's id,
-    name and rects, every wall with its door openings as [c, w], and the room of each PIR in
-    `pirs` that the model places in one of its rooms. None without a model or without such a PIR.
-    Never the model's devices or anything else of it."""
+    """What the motion card draws the house plan and its trail from (ADR-015): every room's id
+    and rects, a name only for a room with a PIR (the card labels no other), every wall with its
+    door openings as [c, w], and the room of each PIR in `pirs` that the model places in one of
+    its rooms. None without a model or without such a PIR. Never the model's devices or anything
+    else of it."""
     if not model:
         return None
     rooms = model.get("rooms", [])
@@ -1042,8 +1043,16 @@ def plan_slice(model, pirs):
         }
         for w in model.get("walls", [])
     ]
+    sensed = {p["room"] for p in placed}
     return {
-        "rooms": [{"id": r["id"], "name": r["name"], "rects": r["rects"]} for r in rooms],
+        "rooms": [
+            {
+                "id": r["id"],
+                "rects": r["rects"],
+                **({"name": r["name"]} if r["id"] in sensed else {}),
+            }
+            for r in rooms
+        ],
         "walls": walls,
         "pirs": placed,
     }
@@ -1054,7 +1063,7 @@ def motion_names(plan):
     the public room name in dashboard_config (as without a plan)."""
     names = dict(dc.MOTION_ROOMS)
     if plan:
-        room = {r["id"]: r["name"] for r in plan["rooms"]}
+        room = {r["id"]: r.get("name") for r in plan["rooms"]}
         count = {}
         for p in plan["pirs"]:
             count[p["room"]] = count.get(p["room"], 0) + 1
