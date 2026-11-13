@@ -1699,6 +1699,9 @@ export function cellSheet(x, states) {
   return { title: x.title || x.name, entity: x.entity, more: x.entity, decimals: x.scale ? 0 : x.decimals ?? 1, unit: unitOf(states[x.entity]), color: x.color, history: { entity: x.entity, ...x.history } };
 }
 
+// the reading card's cell row: two to a row, three side by side
+export const cellsClass = n => (n > 2 ? 'cells c3' : 'cells');
+
 // the reading card's meter: { name, value, pct, note }, the value's share of `max` (100 by
 // default) held to 0-100, and no fill without a value
 export function meterRow(states, m, lang = 'et') {
@@ -2185,7 +2188,7 @@ class ReadingCard extends LoadingCard {
       this._sheets.set(`c${i}`, cellSheet(x, states));
       return `<button type="button" class="press" data-k="c${i}" aria-label="${esc(this._w.history(`${x.name} ${value}`))}"><span class="lab">${esc(x.name)}</span><span class="v num">${esc(value)}</span><span class="sub">${esc(x.caption || '')}</span></button>`;
     });
-    return `<span class="cells${cells.length > 2 ? ' c3' : ''}">${list.join('')}</span>`;
+    return `<span class="${cellsClass(cells.length)}">${list.join('')}</span>`;
   }
   _stepper(states) {
     const sp = this._config.stepper, { cur, lim } = stepState(states[sp.entity]), w = this._w;

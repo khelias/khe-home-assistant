@@ -680,6 +680,18 @@ test('Ventilatsioon: a cell sheet reads its entity unit, a scaled one whole', ()
   assert.deepEqual([A3.cellSheet({ entity: 'sensor.p', name: 'Vaheti', decimals: 0 }, states).unit, A3.cellSheet({ entity: 'sensor.p', name: 'Vaheti', decimals: 0 }, states).decimals], ['%', 0]);
 });
 
+test('Ventilatsioon: three cells sit side by side, one or two as before', () => {
+  assert.deepEqual([1, 2, 3].map(A3.cellsClass), ['cells', 'cells', 'cells c3']);
+});
+
+test("Ventilatsioon: the tile's second line names the mode and ECO", () => {
+  const conf = { entity: 'select.komfovent_operation_mode', state_text: [{ entity: 'sensor.ventilatsiooni_reziim' }, { entity: 'switch.komfovent_eco_mode', label: 'ECO' }] };
+  const states = { 'select.komfovent_operation_mode': st('normal'), 'sensor.ventilatsiooni_reziim': st('Tavaline'), 'switch.komfovent_eco_mode': st('on') };
+  assert.equal(A3.tileState(conf, states).text, 'Tavaline · ECO sees');
+  assert.equal(A3.tileState(conf, { ...states, 'switch.komfovent_eco_mode': st('off') }).text, 'Tavaline · ECO väljas');
+  assert.equal(A3.tileState(conf, { ...states, 'sensor.ventilatsiooni_reziim': st('Kamin') }).text, 'Kamin · ECO sees');
+});
+
 test('Ventilatsioon: the meter at 0, 34 and over its max, and without a value', () => {
   const m = { entity: 'sensor.f', name: 'Filter', note: 'ummistunud', max: 100 };
   const at = v => A3.meterRow({ 'sensor.f': st(v, { unit_of_measurement: '%' }) }, m);
