@@ -179,7 +179,9 @@ The repo's own Lovelace cards are in `cards/khe-cards.js`:
 `custom:khe-month-card`, `custom:khe-days-card` and `custom:khe-split-card`
 ([ADR-008](decisions/008-a3-page-cards-read-statistics.md)), and for
 Soojuspump `custom:khe-reading-card`
-([ADR-011](decisions/011-a3-hourly-lines-and-a-written-setpoint.md)). Kodu was drawn
+([ADR-011](decisions/011-a3-hourly-lines-and-a-written-setpoint.md)), which
+Ventilatsioon uses too with any unit, a meter and three cells, beside a days
+card with an overlay series and a ratio headline. Kodu was drawn
 with them on 2026-10-17 and went back to stock cards the next day; A3
 uses them. Deploy replaces `www/khe-cards/` in HA's config volume, so HA
 serves them as `/local/khe-cards/`, and a change arrives without a restart.
@@ -222,7 +224,8 @@ behind every value and device. It replaced the Bubble Card trial of
 
 - **Saving:** `ha-dashboard.py` saves `dashboard_a3.overview()`:
   `dashboard_config.build()`'s views with A3's in place of Kodu's at the same
-  paths (`kodu` and, since 2026-11-12, `energia` and `soojuspump`) and the 3D view
+  paths (`kodu` and, since 2026-11-12, `energia` and `soojuspump`, since
+  2026-11-13 `ventilatsioon`) and the 3D view
   (`maja-3d`) last. Kodu stays in `dashboard_config.py` as the fallback and as
   A3's source of entities and confirmations; the demo builds `overview()` too.
 - **Undo:** revert the commit and run `ha-dashboard.py` for the Overview
@@ -304,6 +307,19 @@ behind every value and device. It replaced the Bubble Card trial of
   16 days, today lighter and out of the average, with Täna, Sel kuul (its
   share of `maja_sel_kuul`) and last month as cells. Kodu's 24-month boiler
   chart is not carried. The settings subview is still Kodu's.
+- **Ventilatsioon:** the status line on the unit's power switch, its fault
+  and warning as red chips and `status_flow_down` as a neutral chip while on
+  (ECO lowers the airflow on an ordinary sauna evening, so it is a state,
+  not a fault); Kodu's mode tile with the mode by name and ECO; the room
+  air's humidity as 48 hourly means with supply, extract and outdoor as
+  cells; the unit's efficiency big with the filter as a meter (no change
+  threshold is known, so one neutral colour) and recovery (the W sensor
+  shown in kW), power and exchanger as cells. "Kas tasub end ära" draws 16
+  days of `total_recovered_energy`'s daily `change` with
+  `total_ahu_energy`'s in front, its headline the ratio of their complete-day
+  sums (the unit's electricity includes the afterheater, which ECO keeps at
+  zero). The schedule is not on the page: it runs only in auto mode, which
+  is off; it stays on the settings subview, still Kodu's.
 
 ## The 3D house view (`house3d`)
 

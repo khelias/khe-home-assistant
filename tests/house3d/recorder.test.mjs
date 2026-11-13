@@ -17,7 +17,7 @@ const py = `import json, sys; sys.path.insert(0, 'scripts'); import dashboard_de
 m = __import__('house3d_model'); fx = m.with_room_names(m.merge(m.read_layers('tests/house3d/fixture-model.md'), m.CARD))
 ids = {k: v['id'] for k, v in d.CATALOGUE.items()}
 print(json.dumps({'spec': d.demo_recorder(), 'en': d.demo_states_en(fx)['levels'], 'et': d.demo_states(fx)['levels'],
-  'ids': {k: ids[getattr(dc, k)] for k in ('MONTH', 'TODAY', 'YESTERDAY', 'LAST_MONTH', 'BOILER_MONTH', 'BOILER_TODAY', 'VENT_MONTH', 'OUTDOOR', 'HUMIDITY', 'FORECAST', 'PRICE_LEVEL', 'PERGOLA_LIGHT')},
+  'ids': {k: ids[getattr(dc, k)] for k in ('MONTH', 'TODAY', 'YESTERDAY', 'LAST_MONTH', 'BOILER_MONTH', 'BOILER_TODAY', 'VENT_MONTH', 'AHU_ENERGY', 'RECOVERED', 'OUTDOOR', 'HUMIDITY', 'FORECAST', 'PRICE_LEVEL', 'PERGOLA_LIGHT')},
   'stats': {k: d.STATISTICS[getattr(dc, k)] for k in ('CONSUMPTION', 'COST', 'PRICE_STAT')}}))`;
 const { spec, en, et, ids, stats } = JSON.parse(execFileSync('python3', ['-I', '-c', py], { cwd: ROOT, encoding: 'utf8' }));
 const rec = createRecorder(spec, { zoneParts, dayStart, lastMonthName });
@@ -59,6 +59,8 @@ test('the counters equal their days on the 1st, the 2nd and the 28th of a month'
     assert.equal(s[ids.MONTH].state, (await days(stats.CONSUMPTION)).toFixed(1), at);
     assert.equal(s[ids.BOILER_MONTH].state, (await days(ids.BOILER_MONTH)).toFixed(1), at);
     assert.equal(s[ids.VENT_MONTH].state, (await days(ids.VENT_MONTH)).toFixed(1), at);
+    // Ventilatsioon's month cell equals its bars of the unit's electricity
+    assert.equal(s[ids.VENT_MONTH].state, (await days(ids.AHU_ENERGY)).toFixed(1), at);
     const today = (await stat(now, stats.CONSUMPTION, 'day', ['change'], d0))[stats.CONSUMPTION];
     assert.equal(s[ids.TODAY].state, (today ? sumOf(today) : 0).toFixed(1), at);
     const last = (await stat(now, stats.CONSUMPTION, 'day', ['change'], m1))[stats.CONSUMPTION].filter(r => r.start < m0);
@@ -73,6 +75,16 @@ test('the counters equal their days on the 1st, the 2nd and the 28th of a month'
   const jan = rec.dated(Date.parse('2027-01-10T12:00:00Z'));
   assert.ok('Last December' in jan[ids.BOILER_MONTH].attributes);
   assert.ok(cards.lastMonthValue(jan[ids.BOILER_MONTH], 'month', Date.parse('2027-01-10T12:00:00Z'), TZ) > 0);
+});
+
+test("Ventilatsioon's days: the house's 24 to 34 kWh recovered, about 1 kWh of electricity, a ratio near the house's", async () => {
+  const now = Date.parse('2026-11-12T14:07:00Z'), start = now - 16 * 86400e3;
+  const res = await rec.callWS({ type: 'recorder/statistics_during_period', start_time: new Date(start).toISOString(), statistic_ids: [ids.RECOVERED, ids.AHU_ENERGY], period: 'day', types: ['change'] }, now);
+  const full = id => res[id].slice(1, -1).map(r => r.change);
+  assert.ok(full(ids.RECOVERED).every(v => v > 18 && v < 40), full(ids.RECOVERED).join());
+  assert.ok(full(ids.AHU_ENERGY).every(v => v > 0.6 && v < 1.6));
+  const ratio = sumOf(res[ids.RECOVERED].slice(1, -1)) / sumOf(res[ids.AHU_ENERGY].slice(1, -1));
+  assert.ok(ratio > 15 && ratio < 40, String(ratio));
 });
 
 test('a measurement ends at its state, in English with a decimal point', async () => {

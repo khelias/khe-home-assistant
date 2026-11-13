@@ -241,7 +241,12 @@ class Build(unittest.TestCase):
         src = (ROOT / "scripts/dashboard_a3.py").read_text()
         code = src.split('"""', 2)[2]
         quoted = set(re.findall(r'"([^"\s]+)"', code))
-        spelled = kodu_entities(KODU) | kodu_entities(VIEW) | kodu_entities(SOOJUSPUMP)
+        spelled = (
+            kodu_entities(KODU)
+            | kodu_entities(VIEW)
+            | kodu_entities(SOOJUSPUMP)
+            | ids(VENTILATSIOON)
+        )
         self.assertEqual(quoted & spelled, set())
 
 
@@ -261,7 +266,12 @@ class Overview(unittest.TestCase):
         self.assertNotIn(dc.home(dc.House(HOUSE, PEOPLE)), OVERVIEW["views"])
 
     def test_every_other_view_is_dashboard_configs_in_its_order(self):
-        swapped = {"kodu": VIEW, "energia": a3.energia(), "soojuspump": SOOJUSPUMP}
+        swapped = {
+            "kodu": VIEW,
+            "energia": a3.energia(),
+            "soojuspump": SOOJUSPUMP,
+            "ventilatsioon": VENTILATSIOON,
+        }
         built = [swapped.get(v["path"], v) for v in BUILT["views"] if v["path"] != "maja-3d"]
         self.assertEqual(OVERVIEW["views"][:-1], built)
         self.assertEqual(sorted(paths(OVERVIEW)), sorted(v["path"] for v in BUILT["views"]))
@@ -412,6 +422,117 @@ class Soojuspump(unittest.TestCase):
         (days, _price) = [c for c in walk(ENERGIA) if c.get("type") == "custom:khe-days-card"]
         self.assertNotIn("cells", days)
         self.assertNotIn("foot", days)
+
+
+VENTILATSIOON = a3.ventilatsioon(dc.House(HOUSE, PEOPLE))
+KODU_VENT = dc.ventilatsioon
+
+
+def vent_tiles(node):
+    return [c for c in walk(node) if c.get("entity") == dc.MODE and c.get("modes")]
+
+
+class Ventilatsioon(unittest.TestCase):
+    def test_every_kodu_ventilatsioon_entity_is_on_the_page(self):
+        kodu = {i for i in kodu_entities(KODU_VENT) | ids(KODU_VENT) if not i.startswith("mdi:")}
+        self.assertIn(dc.MODE_LABEL, kodu)
+        self.assertEqual(kodu - ids(without_sheets(VENTILATSIOON)), set())
+
+    def test_the_settings_subview_is_reachable(self):
+        self.assertIn("/lovelace/komfovent-seaded", links(VENTILATSIOON))
+        self.assertLessEqual(links(KODU_VENT), links(VENTILATSIOON))
+
+    def test_kodus_title_and_icon_two_columns_and_a3s_background(self):
+        for k in ("title", "path", "icon"):
+            self.assertEqual(VENTILATSIOON[k], KODU_VENT[k])
+        self.assertEqual(VENTILATSIOON["max_columns"], 2)
+        self.assertEqual(VENTILATSIOON["background"], VIEW["background"])
+
+    def test_cards_are_the_repos_own(self):
+        types = {c["type"] for s in VENTILATSIOON["sections"] for c in s["cards"]}
+        self.assertTrue(all(t.startswith("custom:khe-") for t in types))
+        self.assertLessEqual({"custom:khe-reading-card", "custom:khe-days-card"}, types)
+
+    def test_the_mode_confirmations_are_kodus(self):
+        kodu = confirmations(KODU)
+        found = 0
+        for card in walk(VENTILATSIOON):
+            for act in card_actions(card):
+                if "confirmation" not in act:
+                    continue
+                found += 1
+                key = (card.get("entity"), bare(act))
+                self.assertEqual(kodu.get(key), {json.dumps(act["confirmation"])})
+        self.assertEqual(found, len(a3.modes(HOME)))
+        self.assertEqual(found, 3)
+
+    def test_the_tile_names_the_mode_and_eco_and_links_nowhere_here(self):
+        (here,) = vent_tiles(VENTILATSIOON)
+        (kodu,) = vent_tiles(VIEW)
+        self.assertEqual(
+            here["state_text"], [{"entity": dc.MODE_LABEL}, {"entity": dc.ECO, "label": "ECO"}]
+        )
+        self.assertNotIn("view", here["history"])
+        self.assertEqual(kodu["history"]["view"], "/lovelace/ventilatsioon")
+        self.assertEqual(
+            {**here, "state_text": kodu["state_text"]}, {**kodu, "history": here["history"]}
+        )
+
+    def test_kodus_tile_is_unchanged(self):
+        expected = a3.wide(
+            a3.tile(
+                dc.MODE,
+                "Ventilatsioon",
+                icon="vent",
+                color="blue",
+                active=["*"],
+                state_text=[{"entity": dc.MODE_LABEL}],
+                modes=a3.modes(HOME),
+                history={
+                    **a3.ONOFF,
+                    "active": [m["option"] for m in a3.modes(HOME) if m["option"] != "normal"],
+                    "view": "/lovelace/ventilatsioon",
+                },
+            )
+        )
+        self.assertEqual(json.dumps(vent_tiles(VIEW)[0]), json.dumps(expected))
+
+    def test_flow_down_is_a_note_not_a_fault(self):
+        (chips,) = [c for c in walk(VENTILATSIOON) if c.get("type") == "custom:khe-chips-card"]
+        self.assertEqual([f["entity"] for f in chips["faults"]], [dc.VENT_FAULT, dc.VENT_WARNING])
+        self.assertEqual([n["entity"] for n in chips["notes"]], [dc.FLOW_DOWN])
+        self.assertEqual(chips["status"]["entity"], dc.VENT_POWER)
+
+    def test_the_payback_overlays_the_units_electricity_with_a_ratio(self):
+        (days,) = [c for c in walk(VENTILATSIOON) if c.get("type") == "custom:khe-days-card"]
+        (s,) = days["series"]
+        self.assertEqual((s["statistic"], s["overlay"]["statistic"]), (dc.RECOVERED, dc.AHU_ENERGY))
+        self.assertEqual(s["headline"], "ratio")
+        self.assertEqual(days["days"], 16)
+        cells = {c.get("entity", c.get("kind")): c for c in days["cells"]}
+        self.assertEqual(cells[dc.VENT_MONTH]["note_last"], "last_period")
+        self.assertEqual(cells[dc.HEATER_MONTH]["bad_above"], 0)
+        self.assertIn("avg", cells)
+
+    def test_every_sheet_names_its_source(self):
+        for c in walk(VENTILATSIOON):
+            h = c.get("history")
+            if isinstance(h, dict):
+                with self.subTest(card=c.get("name")):
+                    self.assertIn(h["source"], ("statistics", "history"))
+
+    def test_the_alarms_tile_shows_only_with_alarms(self):
+        (t,) = [
+            c for c in walk(VENTILATSIOON) if c.get("entity") == dc.ACTIVE_ALARMS and "type" in c
+        ]
+        self.assertEqual(
+            t["visibility"], [{"condition": "state", "entity": dc.ACTIVE_ALARMS, "state_not": ""}]
+        )
+
+    def test_kodus_ventilatsioon_is_unchanged(self):
+        before = copy.deepcopy(dc.ventilatsioon)
+        a3.ventilatsioon(dc.House(HOUSE, PEOPLE))
+        self.assertEqual(dc.ventilatsioon, before)
 
 
 if __name__ == "__main__":

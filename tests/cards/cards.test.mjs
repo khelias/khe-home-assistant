@@ -651,6 +651,155 @@ test('Soojuspump: a link tile keeps its fixed text when its entity is unavailabl
   assert.equal(A3.tileState(conf, { 'switch.heat': st('on') }).lit, false);
 });
 
+/* ---------- Ventilatsioon: any unit, the meter, the overlay and the ratio ---------- */
+
+const VENT = JSON.parse(readFileSync(new URL('./fixtures/vent.json', import.meta.url), 'utf-8'));
+
+test('Ventilatsioon: a % value and its unit, a W cell scaled to kW, °C as before', () => {
+  assert.deepEqual(A3.splitValue(st('41', { unit_of_measurement: '%' })), { value: '41', unit: '%' });
+  assert.deepEqual(A3.splitValue(st('84.2', { unit_of_measurement: '%' }), 0), { value: '84', unit: '%' });
+  assert.deepEqual(A3.splitValue(st('1274.07', { unit_of_measurement: 'W' }), 1, 'et', { scale: 0.001, unit: 'kW' }), { value: '1,3', unit: 'kW' });
+  assert.deepEqual(A3.splitValue(st('1274.07', { unit_of_measurement: 'W' }), 1, 'en', { scale: 0.001, unit: 'kW' }), { value: '1.3', unit: 'kW' });
+  assert.deepEqual(A3.splitValue(st('53', { unit_of_measurement: 'W' }), 0), { value: '53', unit: 'W' });
+  assert.deepEqual(A3.splitValue(st('21.78', { unit_of_measurement: '°C' }), 1), { value: '21,8°', unit: '' });
+  assert.deepEqual(A3.splitValue(st('unavailable', { unit_of_measurement: 'W' }), 1, 'et', { scale: 0.001, unit: 'kW' }), { value: 'pole saadaval', unit: '' });
+  assert.deepEqual(A3.splitValue(st('on'), 1, 'et', { scale: 0.001 }), { value: 'sees', unit: '' });
+});
+
+test('Ventilatsioon: the range note carries the unit in both languages, ° stays °', () => {
+  assert.equal(A3.words('et').rangeNote(48, '30 %', '47 %'), '48 tunniga 30 % kuni 47 %');
+  assert.equal(A3.words('en').rangeNote(48, '30 %', '47 %'), '30 % to 47 % in 48 hours');
+  assert.equal(A3.words('et').rangeNote(48, '22,1°', '24,5°'), '48 tunniga 22,1° kuni 24,5°');
+});
+
+test('Ventilatsioon: a cell sheet reads its entity unit, a scaled one whole', () => {
+  const states = { 'sensor.w': st('1274', { unit_of_measurement: 'W' }), 'sensor.t': st('21.7', { unit_of_measurement: '°C' }), 'sensor.p': st('100', { unit_of_measurement: '%' }) };
+  const w = A3.cellSheet({ entity: 'sensor.w', name: 'Tagastab', scale: 0.001, unit: 'kW', decimals: 1, history: { source: 'statistics', type: 'mean' } }, states);
+  assert.deepEqual([w.unit, w.decimals, w.history.entity], ['W', 0, 'sensor.w']);
+  assert.deepEqual([A3.cellSheet({ entity: 'sensor.t', name: 'Tuppa' }, states).unit, A3.cellSheet({ entity: 'sensor.t', name: 'Tuppa' }, states).decimals], ['°C', 1]);
+  assert.deepEqual([A3.cellSheet({ entity: 'sensor.p', name: 'Vaheti', decimals: 0 }, states).unit, A3.cellSheet({ entity: 'sensor.p', name: 'Vaheti', decimals: 0 }, states).decimals], ['%', 0]);
+});
+
+test('Ventilatsioon: the meter at 0, 34 and over its max, and without a value', () => {
+  const m = { entity: 'sensor.f', name: 'Filter', note: 'ummistunud', max: 100 };
+  const at = v => A3.meterRow({ 'sensor.f': st(v, { unit_of_measurement: '%' }) }, m);
+  assert.deepEqual(at('34'), { name: 'Filter', value: '34 %', pct: 34, note: 'ummistunud' });
+  assert.equal(at('0').pct, 0);
+  assert.deepEqual([at('130').pct, at('130').value], [100, '130 %']);
+  assert.equal(A3.meterRow({ 'sensor.f': st('-5') }, m).pct, 0);
+  assert.deepEqual([at('unknown').pct, at('unknown').value], [0, 'teadmata']);
+  assert.equal(A3.meterRow({ 'sensor.f': st('17') }, { entity: 'sensor.f', max: 50 }).pct, 34);
+});
+
+const PAYBACK = { days: 16, series: [{ name: 'kWh', statistic: 'sensor.r', type: 'change', headline: 'ratio', overlay: { statistic: 'sensor.e', type: 'change', name: 'seadme elekter' } }] };
+
+test('Ventilatsioon: the overlay rides in the same request, its own when its type differs', () => {
+  const same = A3.daysRequests(PAYBACK, VENT.now, TZ);
+  assert.deepEqual(Object.keys(same), ['daily:change']);
+  assert.deepEqual(same['daily:change'].statistic_ids, ['sensor.r', 'sensor.e']);
+  const other = A3.daysRequests({ ...PAYBACK, series: [{ ...PAYBACK.series[0], overlay: { statistic: 'sensor.m', type: 'mean' } }] }, VENT.now, TZ);
+  assert.deepEqual(Object.keys(other), ['daily:change', 'daily:mean']);
+  assert.deepEqual([other['daily:change'].statistic_ids, other['daily:mean'].statistic_ids, other['daily:mean'].types], [['sensor.r'], ['sensor.m'], ['mean']]);
+});
+
+test('Energia and Soojuspump: their days requests are as before', () => {
+  const energia = { days: 31, cutoff: 'sensor.a', series: [{ statistic: 'sensor.a', type: 'change' }, { statistic: 'sensor.b', type: 'change' }] };
+  assert.deepEqual(A3.daysRequests(energia, NOW, TZ), { 'daily:change': A3.dailyRequest(['sensor.a', 'sensor.b'], ['change'], 31, NOW, TZ), cutoff: A3.hourlyRequest('sensor.a', NOW) });
+  const price = { days: 30, series: [{ statistic: 'sensor.c', type: 'mean', peak: true }] };
+  assert.deepEqual(A3.daysRequests(price, NOW, TZ), { 'daily:mean,max': A3.dailyRequest(['sensor.c'], ['mean', 'max'], 30, NOW, TZ) });
+  const boiler = { days: 16, series: [{ statistic: 'sensor.c', type: 'change' }] };
+  assert.deepEqual(A3.daysRequests(boiler, NOW, TZ), { 'daily:change': A3.dailyRequest(['sensor.c'], ['change'], 16, NOW, TZ) });
+});
+
+const ventDays = () => {
+  const today = A3.dayStarts(1, VENT.now, TZ)[0], days = (id) => A3.dailySeries(VENT.daily_change, id, 'change', 16, VENT.now, TZ, today);
+  return A3.withOverlay(days('sensor.r'), days('sensor.e'));
+};
+
+test('Ventilatsioon: the ratio of complete-day sums from the house, today out', () => {
+  const pts = ventDays();
+  assert.equal(pts.length, 16);
+  assert.ok(pts[15].late && pts.slice(0, 15).every(p => !p.late && p.v !== null && p.o !== null));
+  const full = pts.slice(0, 15), want = full.reduce((a, p) => a + p.v, 0) / full.reduce((a, p) => a + p.o, 0);
+  assert.ok(Math.abs(A3.dayRatio(pts) - want) < 1e-9);
+  assert.ok(want > 15 && want < 30);
+  assert.deepEqual(A3.ratioHeadline(want, { caption: 'rohkem', caption_below: 'vähem' }), [`${Math.round(want)} korda`, 'rohkem']);
+  assert.equal(A3.ratioHeadline(want, { caption: 'more' }, 'en')[0], `${Math.round(want)} times`);
+});
+
+test('Ventilatsioon: a zero electricity day, none at all, and a ratio below 1', () => {
+  const day = (v, o, late = false) => ({ v, o, late });
+  assert.equal(A3.dayRatio([day(20, 0), day(10, 1)]), 30);
+  assert.equal(A3.dayRatio([day(20, 0), day(10, 0)]), null);
+  assert.equal(A3.dayRatio([day(20, null), day(10, 2), day(99, 1, true)]), 5);
+  assert.equal(A3.dayRatio([]), null);
+  const below = A3.dayRatio([day(1, 2), day(0.5, 2)]);
+  assert.deepEqual(A3.ratioHeadline(below, { caption: 'rohkem soojust tagasi', caption_below: 'vähem soojust tagasi' }), ['0,4 korda', 'vähem soojust tagasi']);
+  assert.deepEqual(A3.ratioHeadline(null, { caption: 'x' }), ['–', '']);
+  assert.equal(A3.ratioHeadline(3.44, {})[0], '3,4 korda');
+  // the caption follows the number shown, so 0.97 reads as 1,0 and not as less
+  assert.deepEqual(A3.ratioHeadline(0.97, { caption: 'rohkem', caption_below: 'vähem' }), ['1,0 korda', 'rohkem']);
+  assert.deepEqual(A3.ratioHeadline(0.94, { caption: 'rohkem', caption_below: 'vähem' }), ['0,9 korda', 'vähem']);
+});
+
+test('Ventilatsioon: the scale takes the overlay in, so a day with no recovered heat still fits', () => {
+  const pts = ventDays();
+  const top = A3.daysTop(pts);
+  assert.ok(top >= Math.max(...pts.map(p => p.v)));
+  assert.equal(A3.daysTop([{ v: 0, o: 1.3, max: null }]), 1.3 * 1.05);
+  assert.equal(A3.daysTop([{ v: 0, o: 0, max: null }]), 1);
+  assert.equal(A3.daysTop([{ v: null, o: null, max: null }]), 1);
+});
+
+const VENT_CELLS = [
+  { kind: 'avg', name: 'Tagastas', note: 'päevas keskmiselt' },
+  { name: 'Elekter sel kuul', entity: 'sensor.vm', unit: 'kWh', decimals: 1, note_last: 'last_period' },
+  { name: 'Järelküte', entity: 'sensor.hm', unit: 'kWh', note: 'sel kuul', bad_above: 0 }
+];
+const ventStates = (over = {}) => ({ 'sensor.vm': st('16.718', { last_period: '42.589' }), 'sensor.hm': st('0', { last_period: '0' }), ...over });
+
+test('Ventilatsioon: the average cell, last month in a note and the heater red above 0', () => {
+  assert.deepEqual(A3.dayCells(ventStates(), VENT_CELLS, NOW, TZ, 'et', { avg: '27,9 kWh' }), [
+    { k: 'Tagastas', v: '27,9 kWh', l: 'päevas keskmiselt' }, { k: 'Elekter sel kuul', v: '16,7 kWh', l: 'oktoobris 42,6' }, { k: 'Järelküte', v: '0 kWh', l: 'sel kuul' }
+  ]);
+  assert.equal(A3.dayCells(ventStates(), VENT_CELLS, NOW, TZ)[0].v, '–');
+  const hot = A3.dayCells(ventStates({ 'sensor.hm': st('2.5') }), VENT_CELLS, NOW, TZ)[2];
+  assert.deepEqual(hot, { k: 'Järelküte', v: '2,5 kWh', l: 'sel kuul', bad: true });
+  assert.equal(A3.dayCells(ventStates(), VENT_CELLS, NOW, TZ, 'en')[1].l, '42.6 in October');
+});
+
+test('Ventilatsioon: last month\'s note is empty on days 1-2', () => {
+  for (const day of ['2026-11-01T10:00:00Z', '2026-11-02T10:00:00Z']) assert.equal(A3.dayCells(ventStates(), VENT_CELLS, Date.parse(day), TZ)[1].l, '');
+  assert.equal(A3.dayCells(ventStates(), VENT_CELLS, Date.parse('2026-11-03T10:00:00Z'), TZ)[1].l, 'oktoobris 42,6');
+});
+
+test('Ventilatsioon: pointing shows both values of a day, its end restores the ratio', () => {
+  const pts = ventDays(), head = A3.ratioHeadline(A3.dayRatio(pts), { caption: 'rohkem' });
+  const P = { pts, fmt: v => A3.formatNumber(v.toFixed(1), 1), unit: 'kWh', over: { name: 'seadme elekter', unit: 'kWh', fmt: v => A3.formatNumber(v.toFixed(2), 2) }, tz: TZ, lang: 'et', avg: head, unfinished: true };
+  const [n, u] = A3.dayPoint(P, 14);
+  assert.equal(n, A3.formatNumber(pts[14].v.toFixed(1), 1));
+  assert.equal(u, `kWh · seadme elekter ${A3.formatNumber(pts[14].o.toFixed(2), 2)} kWh · ${A3.dayName(pts[14].t, TZ)}`);
+  assert.match(A3.dayPoint(P, 15)[1], /päev pole läbi$/);
+  assert.equal(A3.dayPoint(P, null), head);
+  // without an overlay, as Energia and Soojuspump point
+  assert.equal(A3.dayPoint({ ...P, over: undefined }, 14)[1], `kWh · ${A3.dayName(pts[14].t, TZ)}`);
+});
+
+test('Ventilatsioon: the humidity line from the house', () => {
+  const s = A3.lineSeries(VENT.hourly_mean, 'sensor.h', 41, VENT.now);
+  assert.equal(s.points.length, 49);
+  const r = A3.lineStats(s, VENT.hourly_mean['sensor.h'][0].start, VENT.now);
+  assert.ok(r.lo > 25 && r.hi < 60 && r.hi > r.lo);
+});
+
+test('Ventilatsioon: flow down is a note, not a fault, in the status line', () => {
+  const conf = { faults: [{ entity: 'binary_sensor.f', name: 'Ventilatsiooni viga' }, { entity: 'binary_sensor.w', name: 'Ventilatsiooni hoiatus' }], notes: [{ entity: 'binary_sensor.d', name: 'Õhuvool alandatud' }], status: { entity: 'switch.p', ok: 'Korras, vigu ega hoiatusi pole', off: 'Seade väljas' } };
+  const s = (p, d = 'off', f = 'off', w = 'off') => A3.statusLine({ 'switch.p': st(p), 'binary_sensor.d': st(d), 'binary_sensor.f': st(f), 'binary_sensor.w': st(w) }, conf);
+  assert.equal(s('on', 'on').tone, 'ok');
+  assert.equal(s('on', 'off', 'off', 'on').tone, 'bad');
+  assert.deepEqual(s('off'), { tone: 'off', text: 'Seade väljas' });
+});
+
 /* ---------- the cards' languages (ADR-012) ---------- */
 
 const keysOf = o => Object.entries(o).map(([k, v]) => (v && typeof v === 'object' && !Array.isArray(v) ? `${k}{${keysOf(v)}}` : Array.isArray(v) ? `${k}[${v.length}]` : k)).sort().join(',');

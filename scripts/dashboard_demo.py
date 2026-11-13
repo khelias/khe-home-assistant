@@ -897,6 +897,7 @@ def demo_recorder():
     ids = {real: e["id"] for real, e in CATALOGUE.items()}
     consumption, cost, price = (STATISTICS[k] for k in (dc.CONSUMPTION, dc.COST, dc.PRICE_STAT))
     boiler = (0.1, 0.06, 6)
+    vent = (0.04, 0.01, 12)
     profiles = {
         ids[dc.OUTDOOR]: _wave_profile(7.5, 2.5, 15, 2.0),
         ids[dc.PUMP_OUTDOOR]: _wave_profile(7.1, 2.5, 15, 2.0),
@@ -918,7 +919,16 @@ def demo_recorder():
         },
         ids[dc.BOILER_TODAY]: _counter(*boiler, state="day"),
         ids[dc.BOILER_MONTH]: _counter(*boiler, state="month", last="month"),
-        ids[dc.VENT_MONTH]: _counter(0.04, 0.01, 12, state="month", last="last_period"),
+        ids[dc.VENT_MONTH]: _counter(*vent, state="month", last="last_period"),
+        # the unit's own counter has the month's shape, so Ventilatsioon's bars sum to its month
+        ids[dc.AHU_ENERGY]: _counter(*vent),
+        # the house recovers 24 to 34 kWh a day, more in the cold of the night
+        ids[dc.RECOVERED]: _counter(1.1, 0.35, 5),
+        ids[dc.RECOVERY]: _wave_profile(1250, 350, 5, 120, 0),
+        ids[dc.VENT_POWER_USE]: _wave_profile(38, 4, 18, 1, 0),
+        ids[dc.EXCHANGER]: _wave_profile(97, 3, 5, 1, 0),
+        ids[dc.EFFICIENCY]: _wave_profile(83, 1.5, 5, 0.5, 0),
+        ids[dc.FILTER]: _wave_profile(34, 0, 12, 0, 0),
         ids[dc.HEATER_MONTH]: _counter(0, 0, 0, state="month", last="last_period"),
         ids[dc.PERGOLA_LIGHT]: {"kind": "duty", "on": [[17, 23]], "states": ["off", "on"]},
         ids[dc.TV]: {"kind": "duty", "on": [[7, 8], [19, 22]], "states": ["off", "playing"]},
@@ -1024,7 +1034,18 @@ def demo_series():
 
 VISIBLE = (
     *("title", "heading", "name", "text", "label", "caption", "aria", "state_text", "icon_label"),
-    *("confirm", "ok", "on", "off", "fault_text", "note", "foot", "unit"),
+    *(
+        "confirm",
+        "ok",
+        "on",
+        "off",
+        "fault_text",
+        "note",
+        "foot",
+        "unit",
+        "legend",
+        "caption_below",
+    ),
 )
 RAW = re.compile(r"^[a-z0-9_]*$")
 NUMBER = re.compile(r"^-?\d+(\.\d+)?$")

@@ -41,9 +41,10 @@ own.
 cards/             the dashboard's own Lovelace cards (khe-cards.js, ADR-002,
                    ADR-005, ADR-008, ADR-011): summary, price, tile, chips,
                    heading, status, Energia's month, days and split, and
-                   Soojuspump's reading, with the history sheet, their
-                   words in Estonian and English by their `language`
-                   config (ADR-012); A3 draws with them; deploy copies
+                   Soojuspump's and Ventilatsioon's reading, with the
+                   history sheet, their words in Estonian and English by
+                   their `language` config (ADR-012); A3 draws with them;
+                   deploy copies
                    them to www/khe-cards/
 config/            what deploy copies into HA's /config
   configuration.yaml
@@ -62,9 +63,10 @@ house3d/           3D house view: engine (core house3d.js, scene/ layer
                    modules, kit and sun), HA card, standalone viewer,
                    placement page, vendored three.js
 scripts/           dashboard_config.py (the HA Overview as data, no I/O),
-                   dashboard_a3.py (A3, Energia and Soojuspump in A3's
-                   look from the same entities, and overview(), what the
-                   house saves, ADR-005, ADR-007, ADR-008, ADR-011),
+                   dashboard_a3.py (A3, Energia, Soojuspump and
+                   Ventilatsioon in A3's look from the same entities, and
+                   overview(), what the house saves, ADR-005, ADR-007,
+                   ADR-008, ADR-011),
                    ha-dashboard.py (reads the private inputs, saves either),
                    dashboard_demo.py (the demo's made-up entities, texts,
                    series and recorder profiles for the same config),

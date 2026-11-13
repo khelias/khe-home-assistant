@@ -77,6 +77,21 @@ DHW_FLOOR = 45
 SUPPLY = "sensor.komfovent_supply_temperature"
 EXTRACT = "sensor.komfovent_extract_temperature"
 HUMIDITY = "sensor.komfovent_panel_1_humidity"
+# The ventilation unit's own entities that A3's Ventilatsioon reads too.
+VENT_POWER = "switch.komfovent_power"
+ECO = "switch.komfovent_eco_mode"
+VENT_FAULT = "binary_sensor.komfovent_status_alarm_fault"
+VENT_WARNING = "binary_sensor.komfovent_status_alarm_warning"
+# On whenever ECO lowers the airflow, an ordinary sauna evening: a state, not a fault.
+FLOW_DOWN = "binary_sensor.komfovent_status_flow_down"
+ACTIVE_ALARMS = "sensor.komfovent_active_alarms"
+EXCHANGER = "sensor.komfovent_heat_exchanger"
+EFFICIENCY = "sensor.komfovent_heat_exchanger_efficiency"
+RECOVERY = "sensor.komfovent_heat_recovery"
+FILTER = "sensor.komfovent_filter_clogging"
+VENT_POWER_USE = "sensor.komfovent_power_consumption"
+RECOVERED = "sensor.komfovent_total_recovered_energy"
+AHU_ENERGY = "sensor.komfovent_total_ahu_energy"
 TV_APP = "sensor.teleri_app"
 NVR = "sensor.nvr_ketas"
 
@@ -450,8 +465,8 @@ FAULTS = [
     (SMOKE, "Tulekahju"),
     (HEATING_FAULT, "Soojuspumba viga"),
     (TANK_FAULT, "Boileri viga"),
-    ("binary_sensor.komfovent_status_alarm_fault", "Ventilatsiooni viga"),
-    ("binary_sensor.komfovent_status_alarm_warning", "Ventilatsiooni hoiatus"),
+    (VENT_FAULT, "Ventilatsiooni viga"),
+    (VENT_WARNING, "Ventilatsiooni hoiatus"),
 ]
 
 # The TV is on Kodu for one reason: the owner's Google TV profile has no time limits and the
@@ -786,10 +801,8 @@ def home(h):
                     third(tile(SUPPLY, "Sissepuhe", vertical=True)),
                     third(tile(EXTRACT, "Väljatõmme", vertical=True)),
                     third(tile(HUMIDITY, "Niiskus", vertical=True)),
-                    when_on("binary_sensor.komfovent_status_alarm_fault", "Ventilatsiooni viga"),
-                    when_on(
-                        "binary_sensor.komfovent_status_alarm_warning", "Ventilatsiooni hoiatus"
-                    ),
+                    when_on(VENT_FAULT, "Ventilatsiooni viga"),
+                    when_on(VENT_WARNING, "Ventilatsiooni hoiatus"),
                 ],
                 badges=[
                     {
@@ -1466,7 +1479,7 @@ ventilatsioon = {
         },
         {
             "type": "entity",
-            "entity": "switch.komfovent_eco_mode",
+            "entity": ECO,
             "name": "ECO",
             "show_name": True,
             "show_state": True,
@@ -1488,19 +1501,17 @@ ventilatsioon = {
             [
                 *row(
                     [
-                        nowrite("sensor.komfovent_supply_temperature", "Sissepuhe", vertical=True),
-                        nowrite(
-                            "sensor.komfovent_extract_temperature", "Väljatõmme", vertical=True
-                        ),
+                        nowrite(SUPPLY, "Sissepuhe", vertical=True),
+                        nowrite(EXTRACT, "Väljatõmme", vertical=True),
                         nowrite(OUTDOOR, "Välisõhk", vertical=True),
-                        nowrite("sensor.komfovent_panel_1_humidity", "Niiskus", vertical=True),
+                        nowrite(HUMIDITY, "Niiskus", vertical=True),
                     ]
                 ),
                 hist(
                     "Temperatuurid 48 h",
                     [
-                        ("sensor.komfovent_supply_temperature", "Sissepuhe"),
-                        ("sensor.komfovent_extract_temperature", "Väljatõmme"),
+                        (SUPPLY, "Sissepuhe"),
+                        (EXTRACT, "Väljatõmme"),
                         (OUTDOOR, "Välisõhk"),
                     ],
                     48,
@@ -1513,30 +1524,28 @@ ventilatsioon = {
                 {
                     "type": "horizontal-stack",
                     "cards": [
-                        nowrite("sensor.komfovent_heat_exchanger", "Vaheti", vertical=True),
-                        nowrite(
-                            "sensor.komfovent_heat_exchanger_efficiency", "Kasutegur", vertical=True
-                        ),
-                        nowrite("sensor.komfovent_heat_recovery", "Tagastus", vertical=True),
+                        nowrite(EXCHANGER, "Vaheti", vertical=True),
+                        nowrite(EFFICIENCY, "Kasutegur", vertical=True),
+                        nowrite(RECOVERY, "Tagastus", vertical=True),
                     ],
                 },
                 tile(
-                    "sensor.komfovent_filter_clogging",
+                    FILTER,
                     "Filter",
                     features=[{"type": "bar-gauge", "min": 0, "max": 100}],
                     features_position="inline",
                 ),
-                when_on("binary_sensor.komfovent_status_flow_down", "Õhuvool alandatud"),
-                when_on("binary_sensor.komfovent_status_alarm_fault", "Viga"),
-                when_on("binary_sensor.komfovent_status_alarm_warning", "Hoiatus"),
+                when_on(FLOW_DOWN, "Õhuvool alandatud"),
+                when_on(VENT_FAULT, "Viga"),
+                when_on(VENT_WARNING, "Hoiatus"),
                 tile(
-                    "sensor.komfovent_active_alarms",
+                    ACTIVE_ALARMS,
                     "Aktiivsed alarmid",
                     color="red",
                     visibility=[
                         {
                             "condition": "state",
-                            "entity": "sensor.komfovent_active_alarms",
+                            "entity": ACTIVE_ALARMS,
                             "state_not": "",
                         }
                     ],
@@ -1544,7 +1553,7 @@ ventilatsioon = {
                 # The payback chart. The heater is not plotted: under ECO it is zero by design, which the month tile and the alert cover.
                 bars(
                     "Tagastatud päevas, kWh",
-                    [("sensor.komfovent_total_recovered_energy", "Tagastatud")],
+                    [(RECOVERED, "Tagastatud")],
                     14,
                 ),
             ],
@@ -1555,7 +1564,7 @@ ventilatsioon = {
                 {
                     "type": "horizontal-stack",
                     "cards": [
-                        nowrite("sensor.komfovent_power_consumption", "Võimsus", vertical=True),
+                        nowrite(VENT_POWER_USE, "Võimsus", vertical=True),
                         nowrite(VENT_MONTH, "Kuu kokku", vertical=True),
                         *heater_month(
                             "Kuu järelküte",
@@ -1564,7 +1573,7 @@ ventilatsioon = {
                         ),
                     ],
                 },
-                bars("Seade päevas, kWh", [("sensor.komfovent_total_ahu_energy", "Seade")], 31),
+                bars("Seade päevas, kWh", [(AHU_ENERGY, "Seade")], 31),
             ],
         ),
     ],
@@ -1965,9 +1974,7 @@ komfovent_seaded = {
                     "sensor.ventilatsiooni_ajakava", "select.komfovent_scheduler_mode", "Ajakava"
                 ),
                 tile("switch.komfovent_auto_mode", "Automaatrežiim"),
-                confirm(
-                    "switch.komfovent_power", "Seade sees", "Lülitad kogu ventilatsiooni. Kindel?"
-                ),
+                confirm(VENT_POWER, "Seade sees", "Lülitad kogu ventilatsiooni. Kindel?"),
             ],
         ),
         # ECO is the strategy since 2026-09-13: heater blocked, exchanger always on. Free cooling is the one seasonal switch
@@ -1976,7 +1983,7 @@ komfovent_seaded = {
         section(
             "ECO",
             [
-                tile("switch.komfovent_eco_mode", "ECO sees"),
+                tile(ECO, "ECO sees"),
                 confirm(
                     "switch.komfovent_eco_heater_blocking",
                     "Kütteblokeering",

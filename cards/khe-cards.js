@@ -7,7 +7,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 11;
+export const KHE_CARDS_VERSION = 12;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -121,7 +121,8 @@ const ET = {
   noFees: 'Eurod ilma kuutasudeta.', monthAria: 'Sel kuul, tarbimise ajalugu', monthDate: (m, d) => `${m}, ${d}. päev`, energy: 'Energia',
   unitSwitch: 'Ühik', dayAvg: 'päeva keskmine', dearestHour: 'kalleim tund', dearestHourAt: v => `kalleim tund ${v}`,
   cheapestDay: 'Odavaim päev', dearestDay: 'Kalleim päev', largest: 'Suurim', smallest: 'Väikseim', todaySoFar: 'Täna seni', dayNotOver: 'päev pole läbi',
-  target: t => `Siht ${t}`, notBelow: v => `, mitte alla ${v}°`, rangeNote: (h, a, b) => `${h} tunniga ${a}° kuni ${b}°`, limit: v => `${v}° piir`,
+  target: t => `Siht ${t}`, notBelow: v => `, mitte alla ${v}°`, rangeNote: (h, a, b) => `${h} tunniga ${a} kuni ${b}`, limit: v => `${v}° piir`,
+  ratio: v => `${v} korda`, inLastShort: (m, v) => `${m} ${v}`,
   failed: 'Ei õnnestunud', shiftDown: 'Nihe ühe kraadi võrra alla', shiftUp: 'Nihe ühe kraadi võrra üles'
 };
 const EN = {
@@ -162,7 +163,8 @@ const EN = {
   noFees: 'Euros without monthly fees.', monthAria: 'This month, use history', monthDate: (m, d) => `${m}, day ${d}`, energy: 'Energy',
   unitSwitch: 'Unit', dayAvg: 'day average', dearestHour: 'dearest hour', dearestHourAt: v => `dearest hour ${v}`,
   cheapestDay: 'Cheapest day', dearestDay: 'Dearest day', largest: 'Largest', smallest: 'Smallest', todaySoFar: 'Today so far', dayNotOver: 'day not over',
-  target: t => `Target ${t}`, notBelow: v => `, not below ${v}°`, rangeNote: (h, a, b) => `${a}° to ${b}° in ${h} hours`, limit: v => `${v}° limit`,
+  target: t => `Target ${t}`, notBelow: v => `, not below ${v}°`, rangeNote: (h, a, b) => `${a} to ${b} in ${h} hours`, limit: v => `${v}° limit`,
+  ratio: v => `${v} times`, inLastShort: (m, v) => `${v} ${m}`,
   failed: 'Did not work', shiftDown: 'Shift one degree down', shiftUp: 'Shift one degree up'
 };
 // The words the house's sensors write (the price level, the tomorrow line's lead word), as they
@@ -846,14 +848,20 @@ export function axisLabels(range, t0, t1, lang = 'et') {
 export const levelTone = (word, lang = 'et') => sensorWords(lang).tone[word] || 'mid';
 const cap = s => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
-// a value split for display: { value, unit } with the decimal comma, or the state word
-export function splitValue(st, decimals, lang = 'et') {
+const unitOf = st => ((st || {}).attributes || {}).unit_of_measurement || '';
+
+// a value split for display: { value, unit } with the decimal comma, or the state word; `scale`
+// and `unit` show it in another unit than the entity's (HA states carry no display precision,
+// so `decimals` sets it)
+export function splitValue(st, decimals, lang = 'et', { scale = 1, unit } = {}) {
   if (!hasValue(st)) return { value: stateWord(st, lang), unit: '' };
-  const n = formatNumber(st.state, decimals, lang);
+  const v = num(st.state), n = v === null ? null : formatNumber(scale === 1 ? st.state : String(v * scale), decimals, lang);
   if (n === null) return { value: stateWord(st, lang), unit: '' };
-  const u = (st.attributes || {}).unit_of_measurement || '';
+  const u = unit ?? unitOf(st);
   return u === '°C' ? { value: `${n}°`, unit: '' } : { value: n, unit: u };
 }
+// a split value as one string, "41 %" or "21,8°"
+const valueText = (st, decimals, lang, opts) => { const r = splitValue(st, decimals, lang, opts); return withUnit(r.value, r.unit); };
 
 /* ---------- A3: the history sheet ---------- */
 
@@ -1168,7 +1176,7 @@ h1{margin:0;font-size:34px;line-height:1.05;font-weight:700;letter-spacing:-0.02
 `;
   _watched() {
     const c = this._config;
-    return [...(c.people || []), ...(c.alarms || []), ...(c.faults || []), ...(c.status ? [c.status] : [])].map(x => x.entity).concat(c.outdoor ? [c.outdoor.entity] : []);
+    return [...(c.people || []), ...(c.alarms || []), ...(c.faults || []), ...(c.notes || []), ...(c.status ? [c.status] : [])].map(x => x.entity).concat(c.outdoor ? [c.outdoor.entity] : []);
   }
   _html(states) {
     const c = this._config, w = this._w, L = this._lang;
@@ -1180,6 +1188,8 @@ h1{margin:0;font-size:34px;line-height:1.05;font-weight:700;letter-spacing:-0.02
     };
     const list = [
       ...faultsOn(states, c.faults).map(f => chip(`f:${f.entity}`, f.entity, 'bad', 'alert', f.name, '')),
+      // a state worth knowing that is not a fault, while it is on
+      ...(c.notes || []).filter(n => stateOf(states, n.entity) === 'on').map(n => chip(`n:${n.entity}`, n.entity, '', n.icon || 'alert', n.name, '')),
       ...(c.people || []).map(p => { const s = stateOf(states, p.entity); return chip(`p:${p.entity}`, p.entity, s === 'home' ? 'ok' : '', 'person', p.name, s === 'home' ? w.home : hasValue(states[p.entity]) ? w.away : w.notKnown); }),
       ...(c.alarms || []).map(a => {
         const st = states[a.entity], s = (st || {}).state || '';
@@ -1248,6 +1258,12 @@ class StatusCard extends KheCard {
     return `<div class="glass box">${link ? `<button type="button" class="t" data-k="t">${title}</button>` : `<span class="t">${title}</span>`}<div class="dots">${dots}</div></div>`;
   }
 }
+
+// a progress track, the month card's and the reading card's meter
+const TRACK_CSS = `
+.track{position:relative;display:block;height:8px;border-radius:4px;background:var(--track);overflow:hidden}
+.track i{position:absolute;left:0;top:0;bottom:0;border-radius:4px}
+`;
 
 const PRICE_A3_CSS = `
 .stack{display:flex;flex-direction:column;gap:10px}
@@ -1676,14 +1692,81 @@ export function stepValue(v, dir, { min = -Infinity, max = Infinity, step = 1 } 
 // the write a settled stepper sends: none when the taps net to the value the entity has
 export const stepWrite = (pending, current) => (pending === null || pending === current ? null : pending);
 
-// the days card's own cells: [{ k, v, l }], a sensor's value with its unit, its share of another
-// (of the larger of the two, as splitRows does, so a delayed total cannot pass 100) or last
-// month's value by name; a last-month cell is left out on the first two days of a month
-export function dayCells(states, cells, now, tz, lang = 'et') {
+/* ---------- A3 Ventilatsioon: any unit, the meter, the overlay series and the ratio ---------- */
+
+// a reading cell's history sheet, in the entity's own unit
+export function cellSheet(x, states) {
+  return { title: x.title || x.name, entity: x.entity, more: x.entity, decimals: x.scale ? 0 : x.decimals ?? 1, unit: unitOf(states[x.entity]), color: x.color, history: { entity: x.entity, ...x.history } };
+}
+
+// the reading card's meter: { name, value, pct, note }, the value's share of `max` (100 by
+// default) held to 0-100, and no fill without a value
+export function meterRow(states, m, lang = 'et') {
+  const st = states[m.entity], v = hasValue(st) ? num(st.state) : null;
+  return { name: m.name || '', value: valueText(st, m.decimals ?? 0, lang, { unit: m.unit }), pct: v === null ? 0 : Math.max(0, Math.min(100, (v / (m.max || 100)) * 100)), note: m.note || '' };
+}
+
+const dailyKey = types => `daily:${types.join(',')}`;
+const seriesTypes = s => (s.peak ? [s.type, 'max'] : [s.type]);
+// the days card's requests: one daily request per set of types holding every series' and
+// overlay's statistic of those types, and the cutoff's hourly one
+export function daysRequests(conf, now, tz) {
+  const byType = new Map();
+  const add = (types, id) => {
+    const k = dailyKey(types);
+    if (!byType.has(k)) byType.set(k, { types, ids: [] });
+    if (!byType.get(k).ids.includes(id)) byType.get(k).ids.push(id);
+  };
+  for (const s of conf.series) {
+    add(seriesTypes(s), s.statistic);
+    if (s.overlay) add([s.overlay.type], s.overlay.statistic);
+  }
+  const reqs = Object.fromEntries([...byType].map(([k, r]) => [k, dailyRequest(r.ids, r.types, conf.days || 31, now, tz)]));
+  return conf.cutoff ? { ...reqs, cutoff: hourlyRequest(conf.cutoff, now) } : reqs;
+}
+
+// the overlay's value of each day, as the primary points' `o`
+export function withOverlay(pts, overlay) {
+  const by = new Map(overlay.map(p => [p.t, p.v]));
+  return pts.map(p => ({ ...p, o: by.get(p.t) ?? null }));
+}
+// the top of a days chart: its largest bar, dearest hour or overlay bar with headroom, 1 when all are 0
+export const daysTop = (pts, peak) => Math.max(0, ...pts.map(p => Math.max(p.v ?? 0, peak ? p.max ?? 0 : 0, p.o ?? 0))) * 1.05 || 1;
+// the primary sum over the overlay's on the complete days that have both; null unless the
+// overlay's sum is above 0
+export function dayRatio(pts) {
+  const full = pts.filter(p => p.v !== null && p.o != null && !p.late);
+  const a = full.reduce((x, p) => x + p.v, 0), b = full.reduce((x, p) => x + p.o, 0);
+  return b > 0 ? a / b : null;
+}
+// the ratio headline: [the ratio, the series' caption for the side of 1 the shown number is on]
+export function ratioHeadline(r, s, lang = 'et') {
+  if (r === null) return ['–', ''];
+  const d = r >= 10 ? 0 : 1, shown = Number(r.toFixed(d));
+  return [words(lang).ratio(fmtN(r, d, lang)), (shown < 1 ? s.caption_below : s.caption) || ''];
+}
+
+// the days card's headline while pointing at day j: [its value, its unit, the overlay's value,
+// the day and a note]; the headline itself (the average or the ratio) when j is null
+export function dayPoint(P, j) {
+  if (j === null) return P.avg;
+  const p = P.pts[j], last = j === P.pts.length - 1, w = words(P.lang);
+  const note = p.late ? (last && P.unfinished ? w.dayNotOver : last ? w.todayLate : w.late) : P.peak && p.max !== null ? w.dearestHourAt(P.fmt(p.max)) : '';
+  const over = P.over && p.o !== null ? `${P.over.name} ${withUnit(P.over.fmt(p.o), P.over.unit)}` : '';
+  return [p.v === null ? '–' : P.fmt(p.v), [P.unit, over, dayName(p.t, P.tz, P.lang), note].filter(Boolean).join(' · ')];
+}
+
+// the days card's own cells: [{ k, v, l, bad }], a sensor's value with its unit (or the cell's
+// `unit` and `decimals`), its share of another (of the larger of the two, as splitRows does, so a
+// delayed total cannot pass 100), last month's value by name, or `kind: 'avg'`, the series'
+// average the card passes in `ctx`; a last-month cell is left out on the first two days of a
+// month, a `note_last` note is empty then, and `bad` is set above `bad_above`
+export function dayCells(states, cells, now, tz, lang = 'et', ctx = {}) {
   const out = [], w = words(lang);
   for (const c of cells || []) {
-    const st = states[c.entity], unit = ((st || {}).attributes || {}).unit_of_measurement || '';
-    const show = v => (v === null ? '–' : `${formatNumber(String(v), undefined, lang)}${unit ? ` ${unit}` : ''}`);
+    if (c.kind === 'avg') { out.push({ k: c.name, v: ctx.avg ?? '–', l: c.note || '' }); continue; }
+    const st = states[c.entity], unit = c.unit ?? unitOf(st);
+    const show = v => (v === null ? '–' : `${formatNumber(String(v), c.decimals, lang)}${unit ? ` ${unit}` : ''}`);
     if (c.last) {
       if (earlyInMonth(now, tz)) continue;
       out.push({ k: c.name || cap(lastMonthName(now, tz, w.locale)), v: show(lastMonthValue(st, c.last, now, tz)), l: c.note || '' });
@@ -1695,7 +1778,13 @@ export function dayCells(states, cells, now, tz, lang = 'et') {
       const t = states[c.share_of], total = hasValue(t) ? num(t.state) : null, denom = Math.max(total ?? 0, v ?? 0);
       l = v !== null && total !== null && denom > 0 ? w.ofHouse(Math.round((v / denom) * 100)) : '';
     }
-    out.push({ k: c.name, v: show(v), l });
+    if (c.note_last) {
+      const lv = lastMonthValue(st, c.note_last, now, tz);
+      l = lv === null ? '' : w.inLastShort(inLastMonth(now, tz, lang), formatNumber(String(lv), c.decimals, lang));
+    }
+    const cell = { k: c.name, v: show(v), l };
+    if (c.bad_above != null && v !== null && v > c.bad_above) cell.bad = true;
+    out.push(cell);
   }
   return out;
 }
@@ -1761,7 +1850,7 @@ class LoadingCard extends KheCard {
 }
 
 // the price card's look (.main, .hd, .lab, .big, .badge, .hr), and the month's own parts
-const MONTH_CSS = `${PRICE_A3_CSS}
+const MONTH_CSS = `${PRICE_A3_CSS}${TRACK_CSS}
 .head{display:flex;flex-direction:column;gap:4px;padding:4px 4px 2px}
 h1{margin:0;font-size:34px;line-height:1.05;font-weight:700;letter-spacing:-0.022em}
 .date{font-size:15px;font-weight:600;color:var(--sub)}
@@ -1769,8 +1858,7 @@ h1{margin:0;font-size:34px;line-height:1.05;font-weight:700;letter-spacing:-0.02
 .main{padding:16px}
 .big .u{font-size:17px}
 .prog{display:flex;flex-direction:column;gap:6px}
-.track{position:relative;display:block;height:8px;border-radius:4px;background:var(--track);overflow:hidden}
-.track i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:#5e5ce6}
+.track i{background:#5e5ce6}
 .pl{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:600;color:var(--sub)}
 .cells{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .cells > span{display:flex;flex-direction:column;gap:1px;min-width:0}
@@ -1835,12 +1923,15 @@ svg.c{display:block;width:100%;height:120px;touch-action:pan-y}
 .stats > span{display:flex;flex-direction:column;gap:1px;min-width:0}
 .stats .k{font-size:13px;font-weight:600;color:var(--sub)}
 .stats .v{font-size:17px;font-weight:700}
+.stats .v.bad{color:var(--high)}
 .msg{display:flex;align-items:center;justify-content:center;height:120px;font-size:14px;color:var(--sub)}
 .foot{font-size:12px;color:var(--sub)}
 `;
 
 // daily bars of one statistic, or several behind a segmented control: the last `days` days in
-// HA's zone, the days past a delayed counter's cutoff lighter and out of the numbers
+// HA's zone, the days past a delayed counter's cutoff lighter and out of the numbers. A series'
+// `overlay` draws a second statistic as narrow bars in front, and `headline: 'ratio'` puts the
+// ratio of the two in the average's place.
 class DaysCard extends LoadingCard {
   static css = DAYS_CSS;
   _check(c) { if (!(c.series || []).length) throw new Error('khe-days-card: series is required'); }
@@ -1848,18 +1939,7 @@ class DaysCard extends LoadingCard {
     const c = this._config;
     return [...(c.series || []).map(s => s.today && s.today.entity), ...(c.cells || []).flatMap(x => [x.entity, x.share_of])].filter(Boolean);
   }
-  // one daily request per set of types, and the cutoff's hourly one
-  _requests(now, tz) {
-    const c = this._config, byType = new Map();
-    for (const s of c.series) {
-      const types = s.peak ? [s.type, 'max'] : [s.type];
-      const k = types.join(',');
-      if (!byType.has(k)) byType.set(k, { types, ids: [] });
-      byType.get(k).ids.push(s.statistic);
-    }
-    const reqs = Object.fromEntries([...byType].map(([k, r]) => [`daily:${k}`, dailyRequest(r.ids, r.types, c.days || 31, now, tz)]));
-    return c.cutoff ? { ...reqs, cutoff: hourlyRequest(c.cutoff, now) } : reqs;
-  }
+  _requests(now, tz) { return daysRequests(this._config, now, tz); }
   _html(states, pal) {
     const c = this._config, list = c.series, w = this._w, L = this._lang;
     const i = Math.min(this._pick || 0, list.length - 1), s = list[i];
@@ -1871,21 +1951,23 @@ class DaysCard extends LoadingCard {
     this._point = null;
     if (!d) return shell(`<div class="msg">${w.loading}</div>`);
     if (d.error) return shell(`<div class="msg">${w.dataFailed}</div>`);
-    const daily = d.res[`daily:${s.peak ? `${s.type},max` : s.type}`];
+    const daily = d.res[dailyKey(seriesTypes(s))], o = s.overlay;
     // a delayed counter's days after its cutoff are late; a price is known ahead
     // with no hour of data in two days the cutoff is today's start: only today is late, as it is
     // for a counter without a cutoff, whose today has not ended
     const today = dayStarts(1, d.now, d.tz)[0];
     const cutoff = s.type !== 'change' ? Infinity : c.cutoff ? dataCutoff(d.res.cutoff, c.cutoff) ?? today : today;
-    const pts = dailySeries(daily, s.statistic, s.type, c.days || 31, d.now, d.tz, cutoff, L);
-    const scale = s.scale || 1, dec = s.decimals ?? 1;
-    const stats = dayStats(pts);
-    // the entity cells do not need the statistics
-    const own = c.cells ? `<span class="hr"></span><span class="stats">${dayCells(states, c.cells, d.now, d.tz, L).map(x => `<span><span class="k">${esc(x.k)}</span><span class="v num">${esc(x.v)}</span><span class="sub">${esc(x.l)}</span></span>`).join('')}</span>` : '';
-    if (!stats) return shell(`<div class="msg">${w.noData}</div>${own}`);
+    const days = (res, id, type) => dailySeries(res, id, type, c.days || 31, d.now, d.tz, cutoff, L);
+    const pts = o ? withOverlay(days(daily, s.statistic, s.type), days(d.res[dailyKey([o.type])], o.statistic, o.type)) : days(daily, s.statistic, s.type);
+    const scale = s.scale || 1, dec = s.decimals ?? 1, u = s.unit ? ` ${s.unit}` : '';
     const fmt = v => fmtN(v * scale, dec, L);
+    const stats = dayStats(pts);
+    const cellHtml = x => `<span><span class="k">${esc(x.k)}</span><span class="v num${x.bad ? ' bad' : ''}">${esc(x.v)}</span><span class="sub">${esc(x.l)}</span></span>`;
+    const own = c.cells && dayCells(states, c.cells, d.now, d.tz, L, stats ? { avg: `${fmt(stats.avg)}${u}` } : {});
+    // the entity cells do not need the statistics
+    if (!stats) return shell(`<div class="msg">${w.noData}</div>${own ? `<span class="hr"></span><span class="stats">${own.map(cellHtml).join('')}</span>` : ''}`);
     const W = 341, H = 120, TOP = 8, BOT = 2, N = pts.length, GAP = 2, bw = (W - GAP * (N - 1)) / N;
-    const hi = Math.max(...pts.map(p => Math.max(p.v ?? 0, s.peak ? p.max ?? 0 : 0))) * 1.05 || 1;
+    const hi = daysTop(pts, s.peak);
     const y = v => H - BOT - (v / hi) * (H - TOP - BOT);
     const col = { cheap: pal.cheap, mid: pal.midBar, high: pal.highBar };
     const paths = new Map();
@@ -1898,27 +1980,41 @@ class DaysCard extends LoadingCard {
       paths.set(k, (paths.get(k) || '') + barRect(x, y(p.v), bw, Math.max(2, H - BOT - y(p.v))));
       if (s.peak && p.max !== null) peak += `M${x.toFixed(1)} ${y(p.max).toFixed(1)}h${bw.toFixed(1)}`;
     });
-    const bars = [...paths].map(([k, dd]) => { const [f, o] = k.split('|'); return `<path d="${dd}" fill="${f}"${o !== '1' ? ` fill-opacity="${o}"` : ''}/>`; }).join('');
+    // the overlay as narrow bars in front, the text colour at 0.55 unless it names one
+    if (o) {
+      const fill = o.color ? a3Color(o.color)[0] : pal.text, ow = bw * 0.4;
+      pts.forEach((p, j) => {
+        if (p.o === null) return;
+        const k = `${fill}|${(o.color ? 1 : 0.55) * (p.late ? 0.4 : 1)}`;
+        paths.set(k, (paths.get(k) || '') + barRect(j * (bw + GAP) + (bw - ow) / 2, y(p.o), ow, Math.max(1.5, H - BOT - y(p.o))));
+      });
+    }
+    const bars = [...paths].map(([k, dd]) => { const [f, op] = k.split('|'); return `<path d="${dd}" fill="${f}"${op !== '1' ? ` fill-opacity="${op}"` : ''}/>`; }).join('');
     const grid = [0.25, 0.5, 0.75].map(f => `M0 ${(TOP + (H - TOP - BOT) * f).toFixed(1)}H${W}`).join('');
     // pointing at a day shows its value in the average's place (_wire)
-    this._point = { pts, fmt, unit: s.unit || '', peak: s.peak, tz: d.tz, lang: L, avg: [fmt(stats.avg), s.caption || ''], step: bw + GAP, unfinished: !c.cutoff };
+    const head = s.headline === 'ratio' ? ratioHeadline(dayRatio(pts), s, L) : [fmt(stats.avg), s.caption || ''];
+    const over = o && { name: o.name || '', unit: o.unit || '', fmt: v => fmtN(v, o.decimals ?? 2, L) };
+    this._point = { pts, fmt, unit: s.unit || '', peak: s.peak, over, tz: d.tz, lang: L, avg: head, step: bw + GAP, unfinished: !c.cutoff };
     const sel = `<rect class="sel" y="0" width="${bw.toFixed(1)}" height="${H}" fill="${pal.text}" fill-opacity="0.1" visibility="hidden"/>`;
     const svg = `<svg class="c" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(s.aria || s.name)}">${sel}<path d="${grid}" stroke="${pal.hair}" fill="none" vector-effect="non-scaling-stroke"/>${bars}${peak ? `<path d="${peak}" stroke="${pal.text}" stroke-opacity="0.55" stroke-width="1.5" fill="none" vector-effect="non-scaling-stroke"/>` : ''}</svg>`;
     const marks = [0, Math.round(N / 4), Math.round(N / 2), Math.round((3 * N) / 4)].map(j => pts[j].label).concat(w.today);
     const axis = `<div class="ax" aria-hidden="true">${marks.map(l => `<span>${esc(l)}</span>`).join('')}</div>`;
-    const key = s.peak ? `<span class="key"><span><i style="width:10px;height:10px;border-radius:3px;background:${pal.sub}"></i>${w.dayAvg}</span><span><i style="width:12px;height:2px;background:${pal.text};opacity:.55"></i>${w.dearestHour}</span></span>` : '';
-    const u = s.unit ? ` ${s.unit}` : '';
+    const swatch = (bg, op = 1) => `<i style="width:10px;height:10px;border-radius:3px;background:${bg}${op !== 1 ? `;opacity:${op}` : ''}"></i>`;
+    const keyOf = (...items) => `<span class="key">${items.map(([i, t]) => `<span>${i}${esc(t)}</span>`).join('')}</span>`;
+    let key = '';
+    if (o) key = keyOf([swatch(a3Color(s.color)[0]), s.legend || s.name], [o.color ? swatch(a3Color(o.color)[0]) : swatch(pal.text, 0.55), o.name || '']);
+    else if (s.peak) key = keyOf([swatch(pal.sub), w.dayAvg], [`<i style="width:12px;height:2px;background:${pal.text};opacity:.55"></i>`, w.dearestHour]);
     let three;
-    if (c.cells) three = dayCells(states, c.cells, d.now, d.tz, L).map(x => [x.k, x.v, x.l]);
+    if (own) three = own;
     else if (s.peak) {
-      three = [[w.cheapestDay, stats.small], [w.dearestDay, stats.big], [w.dearestHour, stats.peak]].map(([k, x]) => [cap(k), x]).map(([k, x]) => [k, x ? fmt(x.v) : '–', x ? x.label : '']);
+      three = [[w.cheapestDay, stats.small], [w.dearestDay, stats.big], [w.dearestHour, stats.peak]].map(([k, x]) => ({ k: cap(k), v: x ? fmt(x.v) : '–', l: x ? x.label : '' }));
     } else {
       const t = s.today && states[s.today.entity];
       const tv = t && hasValue(t) ? (s.today.attribute ? parseEt((t.attributes || {})[s.today.attribute]) : num(t.state)) : null;
-      three = [[w.largest, `${fmt(stats.big.v)}${u}`, stats.big.label], [w.smallest, `${fmt(stats.small.v)}${u}`, stats.small.label], [w.todaySoFar, tv === null ? '–' : `${fmtN(tv, dec, L)}${u}`, w.dayNotOver]];
+      three = [[w.largest, `${fmt(stats.big.v)}${u}`, stats.big.label], [w.smallest, `${fmt(stats.small.v)}${u}`, stats.small.label], [w.todaySoFar, tv === null ? '–' : `${fmtN(tv, dec, L)}${u}`, w.dayNotOver]].map(([k, v, l]) => ({ k, v, l }));
     }
-    const cells = three.map(([k, v, l]) => `<span><span class="k">${esc(k)}</span><span class="v num">${esc(v)}</span><span class="sub">${esc(l)}</span></span>`).join('');
-    return shell(`<span class="avg"><span class="n num">${fmt(stats.avg)}</span><span class="u">${esc(s.caption || '')}</span></span><span>${svg}${axis}</span>${key}<span class="hr"></span><span class="stats">${cells}</span>${c.foot ? `<span class="foot">${esc(c.foot)}</span>` : ''}`);
+    const cells = three.map(cellHtml).join('');
+    return shell(`<span class="avg"><span class="n num">${esc(head[0])}</span><span class="u">${esc(head[1])}</span></span><span>${svg}${axis}</span>${key}<span class="hr"></span><span class="stats">${cells}</span>${c.foot ? `<span class="foot">${esc(c.foot)}</span>` : ''}`);
   }
   // pointing at a day shows it in the average's place
   _wire() {
@@ -1927,14 +2023,8 @@ class DaysCard extends LoadingCard {
     const n = this._root.querySelector('.avg .n'), u = this._root.querySelector('.avg .u'), sel = svg.querySelector('.sel');
     wirePoint(svg, f => Math.min(P.pts.length - 1, Math.floor(f * P.pts.length)), j => {
       sel.setAttribute('visibility', j === null ? 'hidden' : 'visible');
-      if (j === null) { [n.textContent, u.textContent] = P.avg; return; }
-      const p = P.pts[j];
-      sel.setAttribute('x', (j * P.step).toFixed(1));
-      const last = j === P.pts.length - 1;
-      const w = words(P.lang);
-      const note = p.late ? (last && P.unfinished ? w.dayNotOver : last ? w.todayLate : w.late) : P.peak && p.max !== null ? w.dearestHourAt(P.fmt(p.max)) : '';
-      n.textContent = p.v === null ? '–' : P.fmt(p.v);
-      u.textContent = [P.unit, dayName(p.t, P.tz, P.lang), note].filter(Boolean).join(' · ');
+      if (j !== null) sel.setAttribute('x', (j * P.step).toFixed(1));
+      [n.textContent, u.textContent] = dayPoint(P, j);
     });
   }
   _click(ev) {
@@ -1983,7 +2073,7 @@ class SplitCard extends KheCard {
 }
 
 // the reading card's look: the price card's head (.main, .hd, .lab, .big, .badge, .hr) and its own parts
-const READING_CSS = `${PRICE_A3_CSS}
+const READING_CSS = `${PRICE_A3_CSS}${TRACK_CSS}
 .main{padding:16px;box-sizing:border-box}
 .badge.off{background:var(--seg);color:var(--sub)}
 svg.ln{display:block;width:100%;height:88px;touch-action:pan-y}
@@ -1993,6 +2083,10 @@ svg.ln{display:block;width:100%;height:88px;touch-action:pan-y}
 .key i{display:inline-block;width:12px}
 .msg{display:flex;align-items:center;justify-content:center;height:88px;font-size:14px;color:var(--sub)}
 .cells{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.cells.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.meter{display:flex;flex-direction:column;gap:6px}
+.meter .mh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:15px;font-weight:600}
+.meter .mv{font-weight:700}
 .cells button{display:flex;flex-direction:column;gap:1px;min-width:0;min-height:44px}
 .cells .v{font-size:20px;font-weight:700;letter-spacing:-0.02em}
 .step{display:flex;align-items:center;justify-content:space-between;gap:12px}
@@ -2007,8 +2101,9 @@ svg.ln{display:block;width:100%;height:88px;touch-action:pan-y}
 
 const LW = 341, LH = 88, LTOP = 8, LBOT = 4;
 
-// One reading big, with a note, a chip, its hourly line, cells that open their history sheets and
-// a stepper: Soojuspump's Küte and Soe vesi (ADR-011). The stepper's value moves at once and is
+// One reading big, with a note, a chip, a meter, its hourly line, cells that open their history
+// sheets and a stepper: Soojuspump's Küte and Soe vesi (ADR-011), Ventilatsioon's Toaõhk and Seade.
+// Every value reads its entity's unit, or the config's `unit` after its `scale`. The stepper's value moves at once and is
 // written once the taps settle (STEP_SETTLE); a pending value outlives redraws.
 const STEP_SETTLE = 1500, STEP_WAIT = 60e3;
 class ReadingCard extends LoadingCard {
@@ -2016,7 +2111,7 @@ class ReadingCard extends LoadingCard {
   _check(c) { if (!c.entity) throw new Error('khe-reading-card: entity is required'); }
   _watched() {
     const c = this._config, chip = c.chip || {};
-    return [c.entity, (c.line || {}).statistic, chip.entity, chip.fault, ((c.note || {}).target || {}).entity, ...(c.cells || []).map(x => x.entity), (c.stepper || {}).entity].filter(Boolean);
+    return [c.entity, (c.line || {}).statistic, chip.entity, chip.fault, ((c.note || {}).target || {}).entity, (c.meter || {}).entity, ...(c.cells || []).map(x => x.entity), (c.stepper || {}).entity].filter(Boolean);
   }
   _requests(now) { const l = this._config.line; return l ? { line: lineRequest(l.statistic, l.hours || 48, now) } : {}; }
   _html(states, pal) {
@@ -2024,17 +2119,20 @@ class ReadingCard extends LoadingCard {
     this._actions = new Map();
     this._sheets = new Map();
     this._point = null;
-    const { value } = splitValue(st, c.decimals, L);
+    const value = valueText(st, c.decimals, L, c);
     const l = c.line, hours = (l && l.hours) || 48, floor = l ? l.floor : undefined;
-    const { chart = '', key = '', range = null } = l ? this._line(states, pal, l, hours, now) : {};
+    const { chart = '', key = '', range = null, unit = '' } = l ? this._line(states, pal, l, hours, now) : {};
     const n = c.note || {};
-    let note = '';
+    let note = n.text || '';
     if (n.target) {
       const t = attrText(states[n.target.entity], n.target.attribute, L);
       note = t ? `${w.target(t)}${floor != null ? w.notBelow(fmtN(floor, 0, L)) : ''}` : '';
-    } else if (n.range && range) note = w.rangeNote(hours, fmtN(range.lo, c.decimals ?? 1, L), fmtN(range.hi, c.decimals ?? 1, L));
+    } else if (n.range && range) {
+      const at = v => withUnit(fmtN(v, c.decimals ?? 1, L), unit);
+      note = w.rangeNote(hours, at(range.lo), at(range.hi));
+    }
     const top = `<span class="hd"><span class="l"><span class="lab">${esc(c.label || '')}</span><span class="big"><span class="n num">${esc(value)}</span></span>${note ? `<span class="sub">${esc(note)}</span>` : ''}</span>${this._chip(states)}</span>`;
-    const parts = [`${top}${chart ? `<span class="ch">${chart}</span>${key}` : ''}`];
+    const parts = [`${top}${c.meter ? this._meter(states) : ''}${chart ? `<span class="ch">${chart}</span>${key}` : ''}`];
     if ((c.cells || []).length) parts.push(this._cells(states));
     if (c.stepper) parts.push(this._stepper(states));
     return `<div class="glass main">${parts.join('<span class="hr"></span>')}</div>`;
@@ -2044,7 +2142,7 @@ class ReadingCard extends LoadingCard {
     const d = this._data, w = this._w, L = this._lang;
     if (!d) return { chart: `<span class="msg">${w.loading}</span>` };
     if (d.error) return { chart: `<span class="msg">${w.dataFailed}</span>` };
-    const lst = states[l.statistic], live = hasValue(lst) ? num(lst.state) : null;
+    const lst = states[l.statistic], live = hasValue(lst) ? num(lst.state) : null, unit = unitOf(lst);
     const series = lineSeries(d.res.line, l.statistic, live, now);
     const t0 = Math.floor(d.now / HOUR) * HOUR - hours * HOUR;
     const range = lineStats(series, t0, now), r = lineRange(range, l.floor);
@@ -2058,11 +2156,11 @@ class ReadingCard extends LoadingCard {
     const pts = series.points;
     this._point = {
       pick: f => nearest(pts, t0 + f * (now - t0)),
-      read: i => ({ x: ((pts[i].t - t0) / (now - t0)) * LW, v: `${fmtN(pts[i].v, dec, L)}°`, when: pts[i].live ? w.now : whenLabel(pts[i].t, '24h', true, now, L) })
+      read: i => ({ x: ((pts[i].t - t0) / (now - t0)) * LW, v: withUnit(fmtN(pts[i].v, dec, L), unit), when: pts[i].live ? w.now : whenLabel(pts[i].t, '24h', true, now, L) })
     };
     const chart = `<svg class="ln" viewBox="0 0 ${LW} ${LH}" preserveAspectRatio="none" role="img" aria-label="${esc(l.aria || this._config.label)}"><path d="${grid}" stroke="${pal.hair}" fill="none" vector-effect="non-scaling-stroke"/>${floor}<path d="${p.area}" fill="${color}" fill-opacity="0.16"/><path d="${p.line}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>${SEL(pal.text)}</svg><span class="lx" aria-hidden="true">${lineAxis(t0, now, L).map(x => `<span>${esc(x)}</span>`).join('')}</span>`;
     const key = floored ? `<span class="key"><span><i style="height:2px;background:${color}"></i>${esc(l.name || '')}</span><span><i style="border-top:1px dashed ${pal.sub}"></i>${esc(w.limit(fmtN(l.floor, 0, L)))}</span></span>` : '';
-    return { chart, key, range };
+    return { chart, key, range, unit };
   }
   // Küte sees, Küte väljas, or Küte seisab while the fault is on
   _chip(states) {
@@ -2075,13 +2173,19 @@ class ReadingCard extends LoadingCard {
     else [tone, word] = st.state === 'on' ? ['mid', ch.on] : ['off', ch.off];
     return `<span class="badge ${tone}">${esc(word)}</span>`;
   }
+  // the filter's clogging and the like: a share of its max in one neutral colour
+  _meter(states) {
+    const m = meterRow(states, this._config.meter, this._lang);
+    return `<span class="meter"><span class="mh"><span>${esc(m.name)}</span><span class="mv num">${esc(m.value)}</span></span><span class="track" aria-hidden="true"><i style="width:${m.pct.toFixed(1)}%;background:${a3Color('gray')[0]}"></i></span>${m.note ? `<span class="sub">${esc(m.note)}</span>` : ''}</span>`;
+  }
   _cells(states) {
-    const list = this._config.cells.map((x, i) => {
-      const st = states[x.entity], { value } = splitValue(st, x.decimals ?? 0, this._lang);
-      this._sheets.set(`c${i}`, { title: x.title || x.name, entity: x.entity, more: x.entity, decimals: 1, unit: '°C', color: x.color, history: { entity: x.entity, ...x.history } });
+    const cells = this._config.cells;
+    const list = cells.map((x, i) => {
+      const value = valueText(states[x.entity], x.decimals ?? 0, this._lang, x);
+      this._sheets.set(`c${i}`, cellSheet(x, states));
       return `<button type="button" class="press" data-k="c${i}" aria-label="${esc(this._w.history(`${x.name} ${value}`))}"><span class="lab">${esc(x.name)}</span><span class="v num">${esc(value)}</span><span class="sub">${esc(x.caption || '')}</span></button>`;
     });
-    return `<span class="cells">${list.join('')}</span>`;
+    return `<span class="cells${cells.length > 2 ? ' c3' : ''}">${list.join('')}</span>`;
   }
   _stepper(states) {
     const sp = this._config.stepper, { cur, lim } = stepState(states[sp.entity]), w = this._w;

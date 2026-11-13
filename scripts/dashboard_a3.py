@@ -1,12 +1,14 @@
 """A3, the house's Overview in A3's look, as data (ADR-005 to ADR-008, ADR-010, ADR-011).
 
 overview(house, people, model) is the Overview the house saves: dashboard_config.build()'s views
-with A3's views in place of Kodu's at the same paths (`kodu`, `energia`, `soojuspump`) and the 3D
-view moved last, which the public demo builds too (ADR-012). dashboard_config.build() itself
+with A3's views in place of Kodu's at the same paths (`kodu`, `energia`, `soojuspump`,
+`ventilatsioon`) and the 3D view moved last, which the public demo builds too (ADR-012). dashboard_config.build() itself
 stays Kodu with 3D first, the house's fallback. energia() is Energia: the month, the days, who used what and the price, from daily
 statistics. soojuspump(h) is Soojuspump: the status, the indoor and boiler temperatures as 48-hour
 lines from hourly statistics, the heating shift as a stepper, the boost and the boiler's
-electricity by the day.
+electricity by the day. ventilatsioon(h) is Ventilatsioon: the status, Kodu's mode tile, the room
+air as a 48-hour line, the unit with its filter as a meter, and whether it pays for itself as the
+heat it recovers against its electricity by the day.
 
 build(house, people, model) returns A3 as a one-view Lovelace config: the 3D house as
 the hero, then the page's title with the outdoor temperature, people, alarms and live faults as
@@ -39,6 +41,10 @@ Where each sheet reads its history, measured on the house on 2026-11-12
     boiler, ventilation and       statistics   change (hour, day), Energia's split rows
       afterheater this month
     estfeed price                 statistics   mean, max (day), Energia's price bars
+    the unit's recovered heat     statistics   change (day), Ventilatsioon's 16 days and ratio
+      and its own electricity
+    recovery, power, exchanger,   statistics   mean (5minute, hour, day), Ventilatsioon's cells
+      efficiency, filter
 """
 
 import copy
@@ -158,6 +164,25 @@ def boost(home):
         )
         out.append(c)
     return out
+
+
+def vent_tile(home, state_text, view=None):
+    """Kodu's ventilation modes as one wide A3 tile, Kodu's confirmations; the sheet counts the
+    modes but normal as on, and links to `view` when it has one."""
+    ms = modes(home)
+    history = {**ONOFF, "active": [m["option"] for m in ms if m["option"] != "normal"]}
+    return wide(
+        tile(
+            dc.MODE,
+            "Ventilatsioon",
+            icon="vent",
+            color="blue",
+            active=["*"],
+            state_text=state_text,
+            modes=ms,
+            history={**history, "view": view} if view else history,
+        )
+    )
 
 
 def tv(home):
@@ -306,7 +331,6 @@ def build(house, people, model):
         if model is not None
         else []
     )
-    mode_names = [m["option"] for m in modes(home)]
     controls = [
         heading("Juhtimine"),
         wide(
@@ -335,22 +359,7 @@ def build(house, people, model):
                 history={**ONOFF, "view": "/lovelace/pergola"},
             )
         ),
-        wide(
-            tile(
-                dc.MODE,
-                "Ventilatsioon",
-                icon="vent",
-                color="blue",
-                active=["*"],
-                state_text=[{"entity": dc.MODE_LABEL}],
-                modes=modes(home),
-                history={
-                    **ONOFF,
-                    "active": [o for o in mode_names if o != "normal"],
-                    "view": "/lovelace/ventilatsioon",
-                },
-            )
-        ),
+        vent_tile(home, [{"entity": dc.MODE_LABEL}], "/lovelace/ventilatsioon"),
         *boost(home),
         tv(home),
     ]
@@ -656,14 +665,197 @@ def soojuspump(h):
     }
 
 
+def vent_cell(entity, name, caption, **kw):
+    """A reading card's cell that opens its hourly means."""
+    return {
+        "entity": entity,
+        "name": name,
+        "caption": caption,
+        "color": "teal",
+        "history": MEAN,
+        **kw,
+    }
+
+
+def ventilatsioon(h):
+    """Ventilatsioon in A3's look (ADR-007, ADR-008, ADR-011): the status, the modes, the room air
+    as a 48-hour line, the unit, whether it pays for itself by the day, its alarms and the
+    settings row."""
+    home = dc.home(h)
+    v = dc.ventilatsioon
+    faults = [
+        {"entity": e, "name": n} for e, n in dc.FAULTS if e in (dc.VENT_FAULT, dc.VENT_WARNING)
+    ]
+    return {
+        "title": v["title"],
+        "path": v["path"],
+        "icon": v["icon"],
+        "type": "sections",
+        "max_columns": 2,
+        "background": BACKGROUND,
+        "sections": [
+            section(
+                [
+                    card(
+                        "chips-card",
+                        style="a3",
+                        title=v["title"],
+                        faults=faults,
+                        notes=[
+                            {"entity": dc.FLOW_DOWN, "name": "Õhuvool alandatud", "icon": "fan"}
+                        ],
+                        status={
+                            "entity": dc.VENT_POWER,
+                            "ok": "Korras, vigu ega hoiatusi pole",
+                            "off": "Seade väljas",
+                        },
+                        grid_options={"columns": "full"},
+                    ),
+                    vent_tile(
+                        home, [{"entity": dc.MODE_LABEL}, {"entity": dc.ECO, "label": "ECO"}]
+                    ),
+                    heading("Toaõhk"),
+                    card(
+                        "reading-card",
+                        label="Niiskus",
+                        entity=dc.HUMIDITY,
+                        decimals=0,
+                        note={"range": True},
+                        line={
+                            "statistic": dc.HUMIDITY,
+                            "hours": 48,
+                            "color": "teal",
+                            "aria": "Niiskus 48 tundi",
+                        },
+                        cells=[
+                            vent_cell(dc.SUPPLY, "Tuppa", "sissepuhe", decimals=1),
+                            vent_cell(dc.EXTRACT, "Toast", "väljatõmme", decimals=1),
+                            vent_cell(dc.OUTDOOR, "Väljas", "välisõhk", decimals=1),
+                        ],
+                        grid_options={"columns": "full"},
+                    ),
+                    heading("Seade"),
+                    card(
+                        "reading-card",
+                        label="Kasutegur",
+                        entity=dc.EFFICIENCY,
+                        decimals=0,
+                        note={"text": "soojusvaheti"},
+                        meter={
+                            "entity": dc.FILTER,
+                            "name": "Filter",
+                            "note": "ummistunud",
+                            "max": 100,
+                        },
+                        cells=[
+                            vent_cell(
+                                dc.RECOVERY,
+                                "Tagastab",
+                                "soojust praegu",
+                                scale=0.001,
+                                unit="kW",
+                                decimals=1,
+                                color="green",
+                            ),
+                            vent_cell(
+                                dc.VENT_POWER_USE, "Võtab", "elektrit praegu", color="indigo"
+                            ),
+                            vent_cell(dc.EXCHANGER, "Vaheti", "lahti", color="blue"),
+                        ],
+                        grid_options={"columns": "full"},
+                    ),
+                ]
+            ),
+            section(
+                [
+                    heading("Kas tasub end ära"),
+                    card(
+                        "days-card",
+                        days=16,
+                        series=[
+                            {
+                                "name": "kWh",
+                                "legend": "tagastatud soojus",
+                                "statistic": dc.RECOVERED,
+                                "type": "change",
+                                "unit": "kWh",
+                                "decimals": 1,
+                                "color": "green",
+                                "headline": "ratio",
+                                "caption": "rohkem soojust tagasi, kui seade elektrit võtab",
+                                "caption_below": "vähem soojust tagasi, kui seade elektrit võtab",
+                                "aria": "Tagastatud soojus ja seadme elekter päevade kaupa",
+                                "overlay": {
+                                    "statistic": dc.AHU_ENERGY,
+                                    "type": "change",
+                                    "name": "seadme elekter",
+                                    "unit": "kWh",
+                                    "decimals": 2,
+                                },
+                            }
+                        ],
+                        cells=[
+                            {"kind": "avg", "name": "Tagastas", "note": "päevas keskmiselt"},
+                            {
+                                "name": "Elekter sel kuul",
+                                "entity": dc.VENT_MONTH,
+                                "unit": "kWh",
+                                "decimals": 1,
+                                "note_last": "last_period",
+                            },
+                            {
+                                "name": "Järelküte",
+                                "entity": dc.HEATER_MONTH,
+                                "unit": "kWh",
+                                "note": "sel kuul",
+                                "bad_above": 0,
+                            },
+                        ],
+                        grid_options={"columns": "full"},
+                    ),
+                    wide(
+                        tile(
+                            dc.ACTIVE_ALARMS,
+                            "Aktiivsed alarmid",
+                            icon="alert",
+                            color="red",
+                            active=["*"],
+                            visibility=[
+                                {"condition": "state", "entity": dc.ACTIVE_ALARMS, "state_not": ""}
+                            ],
+                        )
+                    ),
+                    wide(
+                        tile(
+                            dc.MODE,
+                            "Seaded",
+                            icon="tune",
+                            active=[],
+                            state_text="Ajakava, ECO, kamin, eemal, taimerid",
+                            chevron=True,
+                            tap_action={
+                                "action": "navigate",
+                                "navigation_path": "/lovelace/komfovent-seaded",
+                            },
+                        )
+                    ),
+                ]
+            ),
+        ],
+    }
+
+
 def overview(house, people, model):
     """The house's Overview: dashboard_config.build() with A3's views in place of Kodu's (`kodu`,
-    `energia`, `soojuspump`) and the 3D view (`maja-3d`) last. A fresh copy every call."""
+    `energia`, `soojuspump`, `ventilatsioon`) and the 3D view (`maja-3d`) last. A fresh copy every
+    call."""
     config = dc.build(house, people, model)
+    h = dc.House(house, people)
     a3 = {
         "kodu": build(house, people, model)["views"][0],
         "energia": energia(),
-        "soojuspump": soojuspump(dc.House(house, people)),
+        "soojuspump": soojuspump(h),
+        "ventilatsioon": ventilatsioon(h),
     }
     views = [a3.get(v["path"], v) for v in config["views"]]
     config["views"] = sorted(views, key=lambda v: v["path"] == "maja-3d")
