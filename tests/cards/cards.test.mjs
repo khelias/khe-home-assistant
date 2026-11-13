@@ -1183,3 +1183,37 @@ test('Pergola: a date and time without an offset is HA wall clock, and one hour 
   assert.equal(A3.words('et').nextHours(1), 'Järgmine tund');
   assert.equal(A3.words('en').nextHours(14), 'Next 14 hours');
 });
+
+test("Pergola: a 'when' tile's clock is HA's day, turning at HA's midnight; other tiles have none", () => {
+  const ny = 'America/New_York';
+  const [k1, end] = A3.tileDay(ruleConf, Date.parse('2026-11-14T04:59:00Z'), ny);
+  assert.equal(k1, '2026-11-13');
+  assert.equal(end, Date.parse('2026-11-14T05:00:00Z'));
+  assert.equal(A3.tileDay(ruleConf, Date.parse('2026-11-14T05:00:00Z'), ny)[0], '2026-11-14');
+  // Tallinn's midnight is no change for a New York house
+  assert.equal(A3.tileDay(ruleConf, Date.parse('2026-11-13T22:30:00Z'), ny)[0], '2026-11-13');
+  assert.deepEqual(A3.tileDay({ entity: LIGHT, state_text: ['state'] }, Date.now(), ny), [0, Infinity]);
+  assert.deepEqual(A3.tileDay({ entity: LIGHT }, Date.now(), ny), [0, Infinity]);
+});
+
+test('Pergola: the forecast card draws loading, the chart, and the cells with "Prognoos pole teada" for an empty or failed answer', () => {
+  const conf = { entity: FC_ID, hours: 14, cells: [{ entity: 'sensor.r', name: 'Praegu', decimals: 1, note_above: { value: 0, above: 'sajab', below: 'ei saja' } }] };
+  const states = { 'sensor.r': st('0.4', { unit_of_measurement: 'mm' }) };
+  const hass = { config: { time_zone: TZ } };
+  const draw = (data, lang) => A3.forecastA3Markup(conf, states, data, lang, hass);
+  const now = Date.now();
+  const live = answer(hoursFrom(new Date(now).getUTCHours(), [0, 0.4, 0]).map((r, i) => ({ ...r, datetime: new Date(Math.floor(now / 3600e3) * 3600e3 + i * 3600e3).toISOString() })));
+  assert.match(draw(null).html, /class="msg">Laen/);
+  const ok = draw({ res: { fc: live }, now, tz: TZ });
+  assert.match(ok.html, /<svg class="fc"/);
+  assert.match(ok.html, />0,4 mm</);
+  assert.match(ok.html, /data-k="c0"/);
+  for (const data of [{ error: true }, { res: { fc: answer([]) }, now, tz: TZ }]) {
+    const m = draw(data);
+    assert.match(m.html, /class="msg">Prognoos pole teada</);
+    assert.doesNotMatch(m.html, /<svg/);
+    assert.match(m.html, /Praegu.*0,4 mm.*sajab/);
+    assert.deepEqual([...m.sheets.keys()], ['c0']);
+  }
+  assert.match(draw({ error: true }, 'en').html, /Forecast not known/);
+});

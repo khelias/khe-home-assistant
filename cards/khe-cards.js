@@ -650,6 +650,15 @@ export function tileWatched(c) {
   return [...new Set([c.entity, c.modes_entity, ...parts.map(partEntity), ...parts.flatMap(partIfs).map(x => x.entity)].filter(Boolean))];
 }
 
+// a tile's clock: [the day key in HA's zone, the day's end] while a part reads 'when' (today or
+// yesterday), else [0, Infinity]
+export function tileDay(c, now, tz) {
+  const sc = c.state_text;
+  if (!Array.isArray(sc) || !sc.some(p => p && p.format === 'when')) return [0, Infinity];
+  const p = zoneParts(now, tz);
+  return [`${p.y}-${p.m}-${p.d}`, dayStart(p.y, p.m, p.d + 1, tz)];
+}
+
 class TileCard extends KheCard {
   static css = `
 :host{height:100%}
@@ -676,14 +685,11 @@ ha-card.modes{display:flex;flex-direction:column;gap:10px;padding:12px}
   _check(c) { if (!c.entity) throw new Error('khe-tile-card: entity is required'); }
   _watched() { return tileWatched(this._config); }
   // a 'when' part reads 'täna' or 'eile', so the tile redraws when HA's day changes
+  // the day's key until its end, so a push in the house does no date formatting
   _clock() {
-    const sc = this._config.state_text, now = Date.now();
-    if (!this._hass || !Array.isArray(sc) || !sc.some(p => p && p.format === 'when')) return 0;
-    // the day's key until its end, so a push in the house does no date formatting
-    if (!this._day || now >= this._day[1]) {
-      const tz = tzOf(this._hass), p = zoneParts(now, tz);
-      this._day = [`${p.y}-${p.m}-${p.d}`, dayStart(p.y, p.m, p.d + 1, tz)];
-    }
+    const now = Date.now();
+    if (!this._hass) return 0;
+    if (!this._day || now >= this._day[1]) this._day = tileDay(this._config, now, tzOf(this._hass));
     return this._day[0];
   }
   // the size for a hand-written config; the generator's grid_options win in HA and the demo
@@ -2566,6 +2572,26 @@ class ReadingCard extends LoadingCard {
   }
 }
 
+// the forecast card: loading, the chart, or without hours "Prognoos pole teada"; then the cells
+function forecastA3(card, states, pal) {
+  const c = card._config, d = card._data, w = card._w;
+  card._actions = new Map();
+  card._sheets = new Map();
+  card._point = null;
+  const rows = d && !d.error ? forecastHours(d.res.fc, c.entity, Date.now(), c.hours || 14) : [];
+  const top = !d ? `<span class="msg">${w.loading}</span>` : rows.length ? card._chart(rows, pal) : `<span class="msg">${w.noWeather}</span>`;
+  const parts = [top];
+  if ((c.cells || []).length) parts.push(cellRow(card, states, c.cells));
+  return `<div class="glass main">${parts.join('<span class="hr"></span>')}</div>`;
+}
+
+// the forecast card's markup for a config, states and loaded data, without an element (the tests')
+export function forecastA3Markup(conf, states, data, lang = 'et', hass = {}) {
+  const card = { _config: conf, _lang: lang, _w: words(lang), _hass: { states, ...hass }, _data: data };
+  card._chart = (rows, pal) => ForecastCard.prototype._chart.call(card, rows, pal);
+  return { html: forecastA3(card, states, a3Palette(false)), sheets: card._sheets };
+}
+
 // the price card's head and the reading card's cells, with the forecast chart
 const FORECAST_CSS = `${READING_CSS}
 svg.fc{display:block;width:100%;height:${FH}px;touch-action:pan-y}
@@ -2580,17 +2606,7 @@ class ForecastCard extends LoadingCard {
   _check(c) { if (!c.entity) throw new Error('khe-forecast-card: entity is required'); }
   _watched() { const c = this._config; return [c.entity, ...(c.cells || []).map(x => x.entity)]; }
   _requests() { return { fc: forecastRequest(this._config.entity) }; }
-  _html(states, pal) {
-    const c = this._config, d = this._data, w = this._w;
-    this._actions = new Map();
-    this._sheets = new Map();
-    this._point = null;
-    const rows = d && !d.error ? forecastHours(d.res.fc, c.entity, Date.now(), c.hours || 14) : [];
-    const top = !d ? `<span class="msg">${w.loading}</span>` : rows.length ? this._chart(rows, pal) : `<span class="msg">${w.noWeather}</span>`;
-    const parts = [top];
-    if ((c.cells || []).length) parts.push(cellRow(this, states, c.cells));
-    return `<div class="glass main">${parts.join('<span class="hr"></span>')}</div>`;
-  }
+  _html(states, pal) { return forecastA3(this, states, pal); }
   _chart(rows, pal) {
     const w = this._w, L = this._lang, tz = tzOf(this._hass), sum = forecastSummary(rows), P = forecastPaths(rows);
     this._point = { rows, slot: P.slot, tz };

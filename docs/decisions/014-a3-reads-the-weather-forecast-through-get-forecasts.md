@@ -11,9 +11,10 @@ mockup draws the next hours as A3's own chart: precipitation bars, a
 temperature line and a mark under each rainy hour. HA's own weather card
 draws none of that and does not take A3's look.
 
-Since HA 2023.9 a weather entity carries no forecast attribute. The forecast
-is read through the `weather.get_forecasts` service with a response, or by
-subscribing to `weather/subscribe_forecast`. The house's `weather.forecast_kodu`
+A weather entity's forecast attribute was deprecated in HA 2023.9 and
+removed in 2024.4; the forecast is read through the `weather.get_forecasts`
+service with a response (2023.12), or by subscribing to
+`weather/subscribe_forecast`. The house's `weather.forecast_kodu`
 answers the service with hourly rows of `datetime`, `temperature`,
 `precipitation` and `condition` (measured 2026-11-13).
 

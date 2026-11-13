@@ -8,7 +8,7 @@ statistics. soojuspump(h) is Soojuspump: the status, the indoor and boiler tempe
 lines from hourly statistics, the heating shift as a stepper, the boost and the boiler's
 electricity by the day. ventilatsioon(h) is Ventilatsioon: the status, Kodu's mode tile, the room
 air as a 48-hour line, the unit with its filter as a meter, and whether it pays for itself as the
-heat it recovers against its electricity by the day. pergola(h) is Pergola: whether it rains, the
+heat it recovers against its electricity by the day. pergola() is Pergola: whether it rains, the
 roof's three commands, the light with its tone, the next 14 hours' forecast read through
 weather.get_forecasts with the rain sensors and the outdoor temperature as cells, and the two
 rules with their switches and when they last ran.
