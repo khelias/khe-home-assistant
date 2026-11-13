@@ -19,11 +19,11 @@ import copy
 import dashboard_demo as dd
 
 DATE = "2026-11-14"
-# older than the 3D view's 15-minute motion glow, so no room glows before the story
-QUIET_AGO = 30
+QUIET_AGO = dd.QUIET_AGO
 HOUSE_LIGHTS = ("light.test_living", "light.test_bedroom")
 
 ALARM = "alarm_control_panel.test_alarm"
+GARAGE = "alarm_control_panel.demo_garage"
 CARPORT = "binary_sensor.test_carport_motion"
 HALL = "binary_sensor.test_hall_motion"
 LIVING = "binary_sensor.test_living_motion"
@@ -174,6 +174,49 @@ SCENARIOS = [
             put(19, SMOKE_HALL, "off", "Suitsu enam pole ja andurid on jälle korras."),
             put(19.5, SMOKE_GROUP, "off"),
             put(23, HALL, "off"),
+        ],
+    },
+    {
+        "id": "valve-sisenemine",
+        "title": "Keegi tuleb, kui kõik on ära",
+        "summary": "Maja on valves ja välisuks avaneb.",
+        "view": "valve",
+        "time": None,
+        "start": {
+            ALARM: {"state": "armed_away"},
+            HALL: {"state": "off", "ago": QUIET_AGO},
+            LIVING: {"state": "off", "ago": QUIET_AGO},
+        },
+        "steps": [
+            step(2, "Maja on valves ja kedagi pole kodus."),
+            put(4, FRONT_DOOR, "on", "Välisuks avaneb."),
+            put(
+                5,
+                ALARM,
+                "pending",
+                "Valvepaneel annab sisenemise viivituse, koodi võib veel sisestada.",
+            ),
+            put(7, HALL, "on", "Eeskojas on liikumine."),
+            put(9, FRONT_DOOR, "off"),
+            put(10, HALL, "off"),
+            put(11, LIVING, "on", "Liikumine jõuab köök-elutuppa."),
+            put(14, ALARM, "triggered", "Koodi ei sisestatud ja valvepaneel läheb häiresse."),
+            put(15, SIREN, "on", "Välissireen hakkab tööle."),
+            step(18, "Liikumise kaart näitab, kus andur enne häiret viimati käivitus."),
+        ],
+    },
+    {
+        "id": "valve-uks",
+        "title": "Uks jäi lahti",
+        "summary": "Garaaž on valves ja terrassi uks jääb lahti.",
+        "view": "valve",
+        "time": None,
+        "start": {ALARM: {"state": "disarmed"}, GARAGE: {"state": "armed_away"}},
+        "steps": [
+            step(2, "Garaaž on valves, maja mitte."),
+            put(4, TERRACE_DOOR, "on", "Terrassi uks avatakse ja jääb lahti."),
+            step(7, "Üks valve on peal, nii et lahtine uks on punane."),
+            put(12, TERRACE_DOOR, "off", "Terrassi uks suletakse."),
         ],
     },
     {

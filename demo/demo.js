@@ -307,7 +307,7 @@ function controls(e, st) {
     case 'climate': return `<div class="thermostat">${thermostat(e, st)}${modeButtons(a.hvac_modes || [], s, 'hvac')}</div>`;
     case 'water_heater': return `<div class="thermostat">${thermostat(e, st)}${modeButtons(a.operation_list || [], s, 'op')}</div>`;
     case 'alarm_control_panel':
-      return `<div class="pill seg" role="group" aria-label="${t.arming}">${btn('arm_away', t.state.armed_away, `aria-pressed="${s === 'armed_away'}"`)}${btn('arm_home', t.state.armed_home, `aria-pressed="${s === 'armed_home'}"`)}${btn('disarm', t.state.disarmed, `aria-pressed="${s === 'disarmed'}"`)}</div>`
+      return `<div class="pill seg" role="group" aria-label="${t.arming}">${btn('arm_away', t.state.armed_away, `aria-pressed="${s === 'armed_away'}"`)}${btn('arm_home', t.state.armed_home, `aria-pressed="${s === 'armed_home'}"`)}${btn('arm_night', t.state.armed_night, `aria-pressed="${s === 'armed_night'}"`)}${btn('disarm', t.state.disarmed, `aria-pressed="${s === 'disarmed'}"`)}</div>`
         + (s === 'disarmed' ? '' : `<div class="row">${btn('trigger', t.testAlarm, s === 'triggered' ? 'disabled' : '')}</div>`);
     case 'binary_sensor':
       if (a.device_class === 'door') return `<div class="row">${btn('flip', on ? t.closeDoor : t.openDoor)}</div><p class="note">${t.simSensor}</p>`;
@@ -346,7 +346,7 @@ function act(e, what) {
     if (d === 'sensor') return sim.set(e, (Math.round((Number(st.state) + sign * 0.5) * 10) / 10).toFixed(1));
     return call(d, 'set_temperature', { temperature: a.temperature + sign * (d === 'water_heater' ? 1 : 0.5) });
   }
-  if (what === 'arm_home' || what === 'arm_away' || what === 'disarm' || what === 'trigger') return call('alarm_control_panel', `alarm_${what}`);
+  if (what === 'arm_home' || what === 'arm_away' || what === 'arm_night' || what === 'disarm' || what === 'trigger') return call('alarm_control_panel', `alarm_${what}`);
   if (what === 'install') return call('update', 'install');
   if (what === 'press') return call('button', 'press');
   if (what === 'flip') return sim.set(e, st.state === 'on' ? 'off' : 'on');

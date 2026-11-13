@@ -2,13 +2,14 @@
 // khe-price-card, khe-tile-card and, for Kodu A3, khe-chips-card, khe-heading-card and
 // khe-status-card, with `style: a3` drawing glass boxes and a tap opening a history sheet;
 // Energia's month, days and split cards (ADR-008), a days card's long-range sheet (ADR-013),
-// Soojuspump's reading card (ADR-011) and Pergola's forecast card (ADR-014).
+// Soojuspump's reading card (ADR-011), Pergola's forecast card (ADR-014) and Valve's motion card
+// with the cells-only reading card, both on state history (ADR-015).
 // The A2 and A3 designs are linked from the ADRs. Actions go through HA as a hass-action event, so HA runs the confirmation,
 // more-info, navigation and service call. No build step and no CDN; the pure helpers are
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 16;
+export const KHE_CARDS_VERSION = 17;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -133,6 +134,11 @@ const ET = {
   nextHours: n => (n === 1 ? 'Järgmine tund' : `Järgmised ${n} tundi`), dry: 'Kuiv', dryAt: s => `kuiv kell ${s}`, allDry: 'kogu aeg kuiv', noWeather: 'Prognoos pole teada',
   precipKey: 'sademed mm', tempKey: 'temperatuur', rainKey: 'vihm või lumi',
   forecastAria: n => `Tunniprognoos ${n} tundi: sademed tulpadena, temperatuur joonena`,
+  motionNow: 'Liikumine praegu', lastMotion: v => `Viimane liikumine ${v}`, minAgo: n => `${n} min tagasi`, quiet: 'Vaikne',
+  noMotion: 'Ööpäeva jooksul liikumist pole', over24h: 'üle 24 h', nowRow: 'praegu', alarmIn: n => `Häire, ${n}`,
+  pendingIn: n => `Sisenemise viivitus, ${n}`, firedAt: t => `andur käivitus kell ${t}`, firedUnknown: 'andur pole teada',
+  planAria: l => (l ? `Maja plaan, liikumise tee viimase veerandtunniga: ${l}` : 'Maja plaan, viimase veerandtunniga liikumist pole'),
+  motionRow: (n, l) => `${n}, viimati ${l}, ajalugu`,
   conditions: {
     'clear-night': 'selge', cloudy: 'pilves', exceptional: 'erakordne ilm', fog: 'udu', hail: 'rahe', lightning: 'äike',
     'lightning-rainy': 'äike ja vihm', partlycloudy: 'vahelduv pilvisus', pouring: 'paduvihm', rainy: 'vihm', snowy: 'lumi',
@@ -186,6 +192,11 @@ const EN = {
   nextHours: n => (n === 1 ? 'Next hour' : `Next ${n} hours`), dry: 'Dry', dryAt: s => `dry ${s}`, allDry: 'dry throughout', noWeather: 'Forecast not known',
   precipKey: 'precipitation mm', tempKey: 'temperature', rainKey: 'rain or snow',
   forecastAria: n => `Hourly forecast, ${n} hours: precipitation as bars, temperature as a line`,
+  motionNow: 'Motion now', lastMotion: v => `Last motion ${v}`, minAgo: n => `${n} min ago`, quiet: 'Quiet',
+  noMotion: 'No motion in the last day', over24h: 'over 24 h', nowRow: 'now', alarmIn: n => `Alarm, ${n}`,
+  pendingIn: n => `Entry delay, ${n}`, firedAt: t => `sensor fired at ${t}`, firedUnknown: 'sensor not known',
+  planAria: l => (l ? `House plan, the path of motion in the last quarter hour: ${l}` : 'House plan, no motion in the last quarter hour'),
+  motionRow: (n, l) => `${n}, last ${l}, history`,
   conditions: {
     'clear-night': 'clear', cloudy: 'cloudy', exceptional: 'exceptional weather', fog: 'fog', hail: 'hail', lightning: 'thunder',
     'lightning-rainy': 'thunder and rain', partlycloudy: 'partly cloudy', pouring: 'downpour', rainy: 'rain', snowy: 'snow',
@@ -344,7 +355,7 @@ export function chips(states, conf, lang = 'et') {
 
 /* ---------- price: the bars ---------- */
 
-const HOUR = 3600e3;
+const HOUR = 3600e3, DAY = 24 * HOUR;
 const PRICE_SCALE = 0.32;
 // the generator passes the bands it also colours Energia's chart with
 export const priceLevel = (t, [mid, high] = [0.15, 0.25]) => (t < mid ? 'cheap' : t < high ? 'mid' : 'high');
@@ -372,8 +383,14 @@ export function priceBars(prices, now = new Date(), bands) {
 const DEFAULT_ACTIVE = ['on', 'playing', 'armed_*', 'heat', 'performance'];
 // a state list entry ending in * matches a prefix, so ['*'] lights any available state
 export function tileActive(st, active = DEFAULT_ACTIVE) {
-  if (!hasValue(st)) return false;
-  return active.some(a => (a.endsWith('*') ? st.state.startsWith(a.slice(0, -1)) : st.state === a));
+  return hasValue(st) && active.some(a => stateIs(st.state, a));
+}
+
+// a state against a pattern: a `*` at the end matches a prefix, a `!` in front negates
+export function stateIs(s, pattern) {
+  const not = pattern.startsWith('!'), p = not ? pattern.slice(1) : pattern;
+  const hit = p.endsWith('*') ? (s || '').startsWith(p.slice(0, -1)) : s === p;
+  return not ? !hit : hit;
 }
 
 // A moment as the house says it, in HA's zone: 'täna 14:19', 'eile 21:00', '20.09 kell 20:17'; a
@@ -803,6 +820,8 @@ export function historyRequest(h, range, now = Date.now()) {
 }
 
 const num = v => (v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
+// a compressed history row's moment in ms (minimal_response: `lu`, the first row also `lc`)
+const rowTime = r => Math.round((r.lu ?? r.lc ?? 0) * 1000);
 // a state's number, null without a value
 const numOf = st => (hasValue(st) ? num(st.state) : null);
 
@@ -820,7 +839,7 @@ export function seriesFrom(resp, h) {
     return { kind: 'line', points: rows.map(r => ({ t: r.start, v: num(r.mean), min: num(r.min), max: num(r.max) })) };
   }
   const known = rows.filter(r => !NO_VALUE.has(r.s));
-  const t = r => Math.round((r.lu ?? r.lc ?? 0) * 1000);
+  const t = rowTime;
   if (known.length && known.every(r => num(r.s) !== null)) {
     return { kind: 'line', points: rows.map(r => ({ t: t(r), v: NO_VALUE.has(r.s) ? null : num(r.s) })), stepped: true };
   }
@@ -1326,7 +1345,8 @@ h1{margin:0;font-size:34px;line-height:1.05;font-weight:700;letter-spacing:-0.02
 `;
   _watched() {
     const c = this._config;
-    return [...(c.people || []), ...(c.alarms || []), ...(c.faults || []), ...(c.notes || []), ...(c.status ? [c.status] : [])].map(x => x.entity).concat(c.outdoor ? [c.outdoor.entity] : []);
+    const mapped = ((c.status || {}).map || []).flatMap(r => r.entities || []);
+    return [...(c.people || []), ...(c.alarms || []), ...(c.faults || []), ...(c.notes || []), ...(c.status ? [c.status] : [])].map(x => x.entity).concat(c.outdoor ? [c.outdoor.entity] : [], mapped).filter(Boolean);
   }
   _html(states) {
     const c = this._config, w = this._w, L = this._lang;
@@ -1524,6 +1544,7 @@ const TILE_A3_CSS = `
 .seg{display:grid;grid-auto-columns:minmax(0,1fr);grid-auto-flow:column;gap:2px;padding:2px;border-radius:12px;background:var(--seg)}
 .seg button{height:40px;border-radius:10px;font-size:14px;font-weight:600;text-align:center}
 .seg button[aria-pressed="true"]{background:var(--segOn);box-shadow:var(--segShadow);cursor:default}
+.seg button[aria-current="true"]{background:var(--segOn);box-shadow:var(--segShadow)}
 .sw{flex:none;display:flex;align-items:center;width:51px;height:44px}
 .sw i{position:relative;display:block;width:51px;height:31px;border-radius:16px;background:var(--track);transition:background 200ms ease-out}
 .sw i::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:14px;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,0.2);transition:left 200ms ease-out}
@@ -1586,8 +1607,7 @@ function tileA3(card, states, pal) {
     const of = c.modes_entity || c.entity, current = stateOf(states, of);
     below += `<span class="seg" role="group" aria-label="${esc(w.mode(name))}">${c.modes.map((m, i) => {
       card._actions.set(`m${i}`, modeAction(of, m, current));
-      const pressed = m.tap_action ? '' : ` aria-pressed="${m.option === current}"`;
-      return `<button type="button" class="press" data-k="m${i}"${pressed}>${esc(m.name)}</button>`;
+      return `<button type="button" class="press" data-k="m${i}"${modeLook(m, current)}>${esc(m.name)}</button>`;
     }).join('')}</span>`;
   }
   if (c.switch) card._actions.set('sw', actionDetail(c.entity, { action: 'toggle' }));
@@ -1595,6 +1615,17 @@ function tileA3(card, states, pal) {
   const chev = c.chevron ? `<span class="chev" aria-hidden="true">${icon('chevron', 14, 'currentColor')}</span>` : '';
   if (c.wide) return `<div class="${cls}"><span class="row">${discEl}${body}${extra}${corner}${sw}${chev}</span>${below}</div>`;
   return `<div class="${cls}"><span class="top">${discEl}${corner}</span>${body}${below}</div>`;
+}
+
+// A mode button's state attributes: a select's option is pressed while it is the current one; a
+// mode with its own tap_action is a command and is never pressed, unless it names an `option`
+// too: then it is marked current while the entity is in it (an alarm's mode opening HA's dialog),
+// in its `color` if it has one, and says it opens a dialog when its tap is more-info.
+function modeLook(m, current) {
+  if (!m.tap_action) return ` aria-pressed="${m.option === current}"`;
+  const on = m.option !== undefined && m.option === current;
+  const [bg, fg] = on && m.color ? a3Color(m.color) : [];
+  return `${on ? ' aria-current="true"' : ''}${m.tap_action.action === 'more-info' ? ' aria-haspopup="dialog"' : ''}${bg ? ` style="background:${bg};color:${fg}"` : ''}`;
 }
 
 // the A3 tile's markup and its taps for a config and states, without an element (the tests')
@@ -1809,7 +1840,7 @@ const localZone = () => (LOCAL_ZONE ??= Intl.DateTimeFormat().resolvedOptions().
 // 'täna' or 'eile' for a moment in a zone, null for an earlier day
 function dayWord(t, now, lang, tz) {
   const date = x => { const p = zoneParts(x, tz); return Date.UTC(p.y, p.m - 1, p.d); };
-  const k = Math.round((date(now) - date(t)) / (24 * HOUR)), w = words(lang);
+  const k = Math.round((date(now) - date(t)) / DAY), w = words(lang);
   return k === 0 ? w.today : k === 1 ? w.yesterday : null;
 }
 // the index of the point with a value nearest to t, null when none has one; on a stepped line the
@@ -1911,16 +1942,48 @@ export const stepWrite = (pending, current) => (pending === null || pending === 
 
 /* ---------- A3 Ventilatsioon: any unit, the meter, the overlay series and the ratio ---------- */
 
-// a reading cell's history sheet, in the entity's own unit
-export function cellSheet(x, states) {
-  return { title: x.title || x.name, entity: x.entity, more: x.entity, decimals: x.scale ? 0 : x.decimals ?? 1, unit: unitOf(states[x.entity]), color: x.color, history: { entity: x.entity, ...x.history } };
+// a reading cell's history sheet, in the entity's own unit; a cell with its own `words` says its
+// state in them there too
+export function cellSheet(x, states, lang = 'et') {
+  const spec = { title: x.title || x.name, entity: x.entity, more: x.entity, decimals: x.scale ? 0 : x.decimals ?? 1, unit: unitOf(states[x.entity]), color: x.color, history: { entity: x.entity, ...x.history } };
+  if (x.words) spec.text = now => cellValue(x, now, lang);
+  return spec;
+}
+
+// a cell's value: its own word for the state (`words: { off: 'kinni' }`), else the value with its unit
+export function cellValue(x, states, lang = 'et') {
+  const st = states[x.entity];
+  if (x.words && st && Object.hasOwn(x.words, st.state)) return x.words[st.state];
+  return valueText(st, x.decimals ?? 0, lang, x);
+}
+
+// a cell's tone: 'bad' while one of its `bad_if` rules holds (a rule is one { entity, state } or a
+// list of them that must all hold, `entity` the cell's own by default; stateIs patterns), 'good'
+// while its state is in `good`, else ''
+export function cellTone(x, states) {
+  const rules = (x.bad_if || []).map(r => (Array.isArray(r) ? r : [r]));
+  if (rules.some(r => r.every(c => stateIs(stateOf(states, c.entity || x.entity), c.state)))) return 'bad';
+  return (x.good || []).includes(stateOf(states, x.entity)) ? 'good' : '';
 }
 
 // the reading card's cell row: two to a row, three side by side
 export const cellsClass = n => (n > 2 ? 'cells c3' : 'cells');
 
-// a cell's note: its `caption`, or by its value with `note_above: { value, above, below }`
-export function cellNote(x, states) {
+// a cell's note: its `caption`, by its value with `note_above: { value, above, below }`, another
+// entity's value after a label with `note: { entity, label }`, or when it last turned on with
+// `note: { last_on: true, label }` from the card's history (ctx.lastOn(entity), ADR-015): the
+// time today, the day before it, "üle 24 h" without one
+export function cellNote(x, states, lang = 'et', ctx = {}) {
+  const o = x.note;
+  if (o && o.last_on) {
+    const t = ctx.lastOn ? ctx.lastOn(x.entity) : undefined;
+    if (t === undefined) return '';
+    return t === null ? words(lang).over24h : [o.label, shortWhen(t, ctx.now ?? Date.now(), lang, ctx.tz)].filter(Boolean).join(' ');
+  }
+  if (o && o.entity) {
+    const st = states[o.entity];
+    return hasValue(st) ? [o.label, valueText(st, o.decimals ?? x.decimals ?? 0, lang, {})].filter(Boolean).join(' ') : '';
+  }
   const n = x.note_above;
   if (!n) return x.caption || '';
   const v = numOf(states[x.entity]);
@@ -1928,11 +1991,11 @@ export function cellNote(x, states) {
 }
 
 // the reading and forecast cards' cells: each a button that opens its history sheet
-function cellRow(card, states, cells) {
+function cellRow(card, states, cells, ctx = {}) {
   const list = cells.map((x, i) => {
-    const value = valueText(states[x.entity], x.decimals ?? 0, card._lang, x);
-    card._sheets.set(`c${i}`, cellSheet(x, states));
-    return `<button type="button" class="press" data-k="c${i}" aria-label="${esc(card._w.history(`${x.name} ${value}`))}"><span class="lab">${esc(x.name)}</span><span class="v num">${esc(value)}</span><span class="sub">${esc(cellNote(x, states))}</span></button>`;
+    const value = cellValue(x, states, card._lang), tone = cellTone(x, states), note = cellNote(x, states, card._lang, ctx);
+    card._sheets.set(`c${i}`, cellSheet(x, states, card._lang));
+    return `<button type="button" class="press" data-k="c${i}" aria-label="${esc(card._w.history(`${x.name} ${value}`))}"><span class="lab">${esc(x.name)}</span><span class="v num${tone ? ` ${tone}` : ''}">${esc(value)}</span><span class="sub">${esc(note)}</span></button>`;
   });
   return `<span class="${cellsClass(cells.length)}">${list.join('')}</span>`;
 }
@@ -2116,11 +2179,17 @@ export function forecastPoint(rows, i, lang = 'et', tz = localZone()) {
 
 // the chips card's status line: { tone, text }; ok only while `entity` is on and every fault reads
 // off. With `above`, a number: above it the `on` text (tone 'on', a blue dot), at or below it `ok`.
+// With `map: [{ entities, state, text, tone }]`, the first rule one of whose entities is in its
+// state (a `*` ends a prefix) wins; tone ok, info (a blue dot) or bad. Faults win over all.
 export function statusLine(states, conf, lang = 'et') {
   const s = conf.status, w = words(lang);
   if (!s) return null;
   const faults = conf.faults || [];
   if (faultsOn(states, faults).length) return { tone: 'bad', text: s.bad || w.fault };
+  if (s.map) {
+    const hit = s.map.find(r => (r.entities || []).some(e => stateIs(stateOf(states, e), r.state)));
+    return hit ? { tone: hit.tone === 'info' ? 'on' : hit.tone, text: hit.text } : { tone: 'off', text: w.stateUnknown };
+  }
   if (s.above !== undefined) {
     const v = numOf(states[s.entity]);
     if (v === null) return { tone: 'off', text: w.stateUnknown };
@@ -2154,22 +2223,44 @@ const fmtN = (v, d, lang) => formatNumber(v.toFixed(d), d, lang);
 // a card that loads recorder data before it draws: the load runs when the HA-zone hour changes,
 // a result redraws the card, a newer load wins; after an error the next try waits a minute.
 // _requests() names its messages ({ cutoff: msg, ... }); the data has the responses by those names.
+// A card with _historyIds() also reads their state history (ADR-015): under the name `hist`, not
+// shared, reloaded when it is connected again with data older than five minutes, its live
+// off-to-on changes merged in between, and redrawn on a minute key of its own.
 class LoadingCard extends KheCard {
   static a3only = true;
-  _clock() { return this._hass ? hourKeyOf(Date.now(), tzOf(this._hass)) : 0; }
+  _loadKey() { return this._hass ? hourKeyOf(Date.now(), tzOf(this._hass)) : 0; }
+  _clock() { return this._hist().length && this._hass ? minuteKeyOf(Date.now()) : this._loadKey(); }
   _requests() { return {}; }
+  _historyIds() { return []; }
+  // the history entities, once per config
+  _hist() { return (this._hids ??= this._config ? this._historyIds() : []); }
   // another config asks for other data
-  setConfig(config) { this._loadedFor = null; this._data = null; super.setConfig(config); }
+  setConfig(config) { this._loadedFor = null; this._data = null; this._live = {}; this._prev = null; this._hids = null; super.setConfig(config); }
+  set hass(hass) {
+    const ids = this._hist();
+    if (ids.length) {
+      const seen = liveOn(this._prev, hass.states, ids), day = Date.now() - DAY;
+      for (const [id, t] of Object.entries(seen)) this._live[id] = [...(this._live[id] || []).filter(x => x > day), t];
+      this._prev = Object.fromEntries(ids.map(id => [id, hass.states[id]]));
+    }
+    super.hass = hass;
+  }
+  get hass() { return this._hass; }
   _draw() { this._ensure(); super._draw(); }
   _ensure() {
     if (!this._hass || !this._config || !this.isConnected) return;
-    const hour = this._clock(), now = Date.now();
+    const hour = this._loadKey(), now = Date.now();
     if (this._loadedFor === hour || now < (this._retryAt || 0)) return;
     this._loadedFor = hour;
-    const tz = tzOf(this._hass), token = (this._token = {});
-    const named = Object.entries(this._requests(now, tz));
-    Promise.all(named.map(([, m]) => fetchShared(this._hass, m, hour)))
-      .then(res => ({ res: Object.fromEntries(named.map(([k], i) => [k, res[i]])), now, tz }), () => ({ error: true }))
+    const tz = tzOf(this._hass), token = (this._token = {}), ids = this._hist();
+    const named = Object.entries({ ...this._requests(now, tz), ...(ids.length ? { hist: stateHistoryRequest(ids, now) } : {}) });
+    Promise.all(named.map(([k, m]) => (k === 'hist' ? this._hass.callWS(m) : fetchShared(this._hass, m, hour))))
+      .then(res => {
+        const out = Object.fromEntries(named.map(([k], i) => [k, res[i]]));
+        // the raw rows are not kept: only their off-to-on changes
+        if (out.hist) out.hist = onTimes(out.hist, ids);
+        return { res: out, now, tz };
+      }, () => ({ error: true }))
       .then(d => {
         if (this._token !== token) return;
         this._data = d;
@@ -2177,7 +2268,18 @@ class LoadingCard extends KheCard {
         super._draw();
       });
   }
-  connectedCallback() { this._draw(); }
+  // each history entity's off-to-on changes in ms, the loaded ones and the live ones since; null
+  // until a history has loaded
+  _onTimes() {
+    const d = this._data;
+    if (!d || d.error || !d.res.hist) return null;
+    const day = Date.now() - DAY;
+    return Object.fromEntries(Object.entries(d.res.hist).map(([id, t]) => [id, mergeTimes(t, this._live[id] || []).filter(x => x > day)]));
+  }
+  connectedCallback() {
+    if (this._config && this._hist().length && historyStale(this._data, Date.now())) this._loadedFor = null;
+    this._draw();
+  }
 }
 
 // the price card's look (.main, .hd, .lab, .big, .badge, .hr), and the month's own parts
@@ -2218,7 +2320,7 @@ class MonthCard extends LoadingCard {
       const tone = r > 1.03 ? 'high' : r < 0.97 ? 'good' : 'mid';
       badge = `<span class="badge ${tone}">${esc(w.compare[tone](lastName))}</span>`;
     }
-    const [m0, m1] = monthSpan(now, tz), days = Math.round((m1 - m0) / (24 * HOUR));
+    const [m0, m1] = monthSpan(now, tz), days = Math.round((m1 - m0) / DAY);
     const pace = monthPace(cost, cutoff, now, tz);
     const monthName = cap(new Intl.DateTimeFormat(w.locale, { month: 'long', timeZone: tz }).format(new Date(now)));
     this._sheets = new Map(c.usage_history ? [['m', usageSheet(c.month, c.usage_history, L)]] : []);
@@ -2422,6 +2524,8 @@ svg.ln{display:block;width:100%;height:88px;touch-action:pan-y}
 .meter .mv{font-weight:700}
 .cells button{display:flex;flex-direction:column;gap:1px;min-width:0;min-height:44px}
 .cells .v{font-size:20px;font-weight:700;letter-spacing:-0.02em}
+.cells .v.bad{color:var(--high)}
+.cells .v.good{color:var(--good)}
 .step{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .step .t{display:flex;flex-direction:column;gap:1px;min-width:0}
 .step .nm{font-size:15px;font-weight:600}
@@ -2441,17 +2545,25 @@ const LW = 341, LH = 88, LTOP = 8, LBOT = 4;
 const STEP_SETTLE = 1500, STEP_WAIT = 60e3;
 class ReadingCard extends LoadingCard {
   static css = READING_CSS;
-  _check(c) { if (!c.entity) throw new Error('khe-reading-card: entity is required'); }
+  _check(c) { if (!c.entity && !(c.cells || []).length) throw new Error('khe-reading-card: entity or cells is required'); }
   _watched() {
-    const c = this._config, chip = c.chip || {};
-    return [c.entity, (c.line || {}).statistic, chip.entity, chip.fault, ((c.note || {}).target || {}).entity, (c.meter || {}).entity, ...(c.cells || []).map(x => x.entity), (c.stepper || {}).entity].filter(Boolean);
+    const c = this._config, chip = c.chip || {}, cells = c.cells || [];
+    const ruled = cells.flatMap(x => (x.bad_if || []).flat().map(r => r.entity));
+    return [...new Set([c.entity, (c.line || {}).statistic, chip.entity, chip.fault, ((c.note || {}).target || {}).entity, (c.meter || {}).entity, ...cells.map(x => x.entity), ...cells.map(x => (x.note || {}).entity), ...ruled, (c.stepper || {}).entity].filter(Boolean))];
   }
+  _historyIds() { return (this._config.cells || []).filter(x => (x.note || {}).last_on).map(x => x.entity); }
   _requests(now) { const l = this._config.line; return l ? { line: lineRequest(l.statistic, l.hours || 48, now) } : {}; }
   _html(states, pal) {
     const c = this._config, now = Date.now(), st = states[c.entity], w = this._w, L = this._lang;
     this._actions = new Map();
     this._sheets = new Map();
     this._point = null;
+    // the cells alone (Valve's doors and Süsteem), with the note's text under them
+    if (!c.entity) {
+      const parts = [this._cells(states)];
+      if ((c.note || {}).text) parts.push(`<span class="sub">${esc(c.note.text)}</span>`);
+      return `<div class="glass main">${parts.join('<span class="hr"></span>')}</div>`;
+    }
     const value = valueText(st, c.decimals, L, c);
     const l = c.line, hours = (l && l.hours) || 48, floor = l ? l.floor : undefined;
     const { chart = '', key = '', range = null, unit = '' } = l ? this._line(states, pal, l, hours, now) : {};
@@ -2512,7 +2624,11 @@ class ReadingCard extends LoadingCard {
     const m = meterRow(states, this._config.meter, this._lang);
     return `<span class="meter"><span class="mh"><span>${esc(m.name)}</span><span class="mv num">${esc(m.value)}</span></span><span class="track" aria-hidden="true"><i style="width:${m.pct.toFixed(1)}%;background:${a3Color('gray')[0]}"></i></span>${m.note ? `<span class="sub">${esc(m.note)}</span>` : ''}</span>`;
   }
-  _cells(states) { return cellRow(this, states, this._config.cells); }
+  _cells(states) {
+    const on = this._onTimes();
+    const lastOn = on ? id => { const t = on[id] || []; return t.length ? t[t.length - 1] : null; } : () => undefined;
+    return cellRow(this, states, this._config.cells, { lastOn, now: Date.now(), tz: tzOf(this._hass) });
+  }
   _stepper(states) {
     const sp = this._config.stepper, { cur, lim } = stepState(states[sp.entity]), w = this._w;
     const p = this._pend;
@@ -2570,6 +2686,13 @@ class ReadingCard extends LoadingCard {
       n.textContent = r.v;
     });
   }
+}
+
+// the reading card's markup for a config, states and loaded data (`hist` the off-to-on times),
+// without an element (the tests')
+export function readingA3Markup(conf, states, data, lang = 'et', hass = {}) {
+  const card = Object.assign(Object.create(ReadingCard.prototype), { _config: conf, _lang: lang, _w: words(lang), _hass: { states, ...hass }, _data: data, _live: {} });
+  return { html: card._html(states, a3Palette(false)), sheets: card._sheets, history: card._hist() };
 }
 
 // the forecast card: loading, the chart, or without hours "Prognoos pole teada"; then the cells
@@ -2636,6 +2759,380 @@ class ForecastCard extends LoadingCard {
   }
 }
 
+/* ---------- A3 Valve (ADR-015): state history, the house plan and the trail through it ---------- */
+
+const FRESH = 5 * 60e3;
+
+// the WebSocket message for the state history of many entities over the last 24 hours
+export const stateHistoryRequest = (ids, now) => ({
+  type: 'history/history_during_period', start_time: new Date(now - DAY).toISOString(), end_time: new Date(now).toISOString(),
+  entity_ids: ids, minimal_response: true, no_attributes: true
+});
+
+// each entity's off-to-on changes in ms, oldest first; its first row is its state at the start of
+// the period, not an event, and a change from unavailable is none
+export function onTimes(resp, ids) {
+  const out = {};
+  for (const id of ids) {
+    const rows = (resp && resp[id]) || [], t = [];
+    for (let i = 1; i < rows.length; i++) if (rows[i].s === 'on' && rows[i - 1].s === 'off') t.push(rowTime(rows[i]));
+    out[id] = t;
+  }
+  return out;
+}
+
+// two lists of moments as one, oldest first, a moment in both (to the second) once
+export function mergeTimes(a, b) {
+  const seen = new Set(), out = [];
+  for (const t of [...a, ...b].sort((x, y) => x - y)) {
+    const k = Math.round(t / 1000);
+    if (!seen.has(k)) { seen.add(k); out.push(t); }
+  }
+  return out;
+}
+
+// { entity: ms } of the entities that went from off to on between two hass states, at their
+// last_changed; none on the first states seen
+export function liveOn(prev, states, ids) {
+  const out = {};
+  if (!prev) return out;
+  for (const id of ids) {
+    const p = prev[id], n = states[id];
+    if (p && n && p !== n && p.state === 'off' && n.state === 'on') { const t = Date.parse(n.last_changed); if (Number.isFinite(t)) out[id] = t; }
+  }
+  return out;
+}
+
+// whether a history card's data is older than five minutes (it reloads when connected again)
+export const historyStale = (data, now) => !!data && !data.error && now - data.now > FRESH;
+// the minute key a history card redraws on, apart from the hour it loads on
+export const minuteKeyOf = now => Math.floor(now / 60e3);
+
+// the start of the hour that holds `now` in a zone, which a half-hour zone puts at :30
+const hourStartIn = (now, tz) => { const p = zoneParts(now, tz); return now - (p.min * 60 + p.s) * 1000 - (now % 1000); };
+// 24 counts, one per hour of the zone, the last the hour now
+export function hourlyCounts(times, now, tz) {
+  const end = hourStartIn(now, tz) + HOUR, bins = new Array(24).fill(0);
+  for (const t of times) {
+    const i = 23 - Math.floor((end - 1 - t) / HOUR);
+    if (i >= 0 && t <= now) bins[i] += 1;
+  }
+  return bins;
+}
+// the first hour of each bin as the zone's clock reads it
+export const binHours = (now, tz) => { const end = hourStartIn(now, tz) + HOUR; return Array.from({ length: 24 }, (_, i) => hourOfDay(end - (24 - i) * HOUR, tz)); };
+
+const clockAt = (t, tz) => { const p = zoneParts(t, tz); return `${hh(p.h)}:${hh(p.min)}`; };
+// a moment as a row or a note says it: the time today, the day word before it otherwise
+export function shortWhen(t, now, lang = 'et', tz = localZone()) {
+  const day = dayWord(t, now, lang, tz), at = clockAt(t, tz);
+  return day === words(lang).today ? at : day ? `${day} ${at}` : whenText(new Date(t).toISOString(), lang, tz, now);
+}
+// how long ago, for the headline: minutes within the hour, else the moment
+export function agoText(t, now, lang = 'et', tz = localZone()) {
+  const m = Math.floor((now - t) / 60e3);
+  return m < 60 ? words(lang).minAgo(Math.max(1, m)) : whenText(new Date(t).toISOString(), lang, tz, now);
+}
+
+// The rows: [{ entity, name, times, on, last }], `last` the moment of the last motion (now while
+// on), null without one in 24 hours
+export function motionRows(conf, states, on, now) {
+  return (conf.groups || []).flatMap(g => g.rooms.map(r => {
+    const times = (on && on[r.entity]) || [], live = stateOf(states, r.entity) === 'on';
+    return { entity: r.entity, name: r.name, group: g.name, times, on: live, last: live ? now : times.length ? times[times.length - 1] : null };
+  }));
+}
+
+// The headline: { tone, label, big, note }. While a partition is pending or triggered (bad), the
+// room that fired last before it changed; while a PIR is on, the rooms in motion now; else the last
+// motion and how long ago; quiet without any in 24 hours.
+export function motionHeadline(rows, states, alarms, now, lang = 'et', tz = localZone()) {
+  const w = words(lang);
+  const alarm = (alarms || []).find(a => ['triggered', 'pending'].includes(stateOf(states, a.entity)));
+  if (alarm) {
+    const st = states[alarm.entity], since = Date.parse(st.last_changed) + 1000;
+    let best = null;
+    for (const r of rows) for (const t of r.times) if (t <= since && (!best || t > best.t)) best = { t, name: r.name, entity: r.entity };
+    const label = st.state === 'triggered' ? w.alarmIn(alarm.name) : w.pendingIn(alarm.name);
+    return { tone: 'bad', label, big: best ? best.name : cap(w.notKnown), note: best ? w.firedAt(clockAt(best.t, tz)) : w.firedUnknown, entity: best ? best.entity : null };
+  }
+  const live = rows.filter(r => r.on).sort((a, b) => (states[b.entity].last_changed || '').localeCompare(states[a.entity].last_changed || ''));
+  if (live.length) return { tone: 'live', label: w.motionNow, big: joinEt(live.map(r => r.name), lang), note: '' };
+  const last = rows.filter(r => r.last !== null).sort((a, b) => b.last - a.last)[0];
+  if (last) return { tone: 'last', label: w.lastMotion(agoText(last.last, now, lang, tz)), big: last.name, note: '' };
+  return { tone: 'quiet', label: w.noMotion, big: w.quiet, note: '' };
+}
+
+// a row's last time: 'praegu' while on, the time, or 'üle 24 h'
+export const rowLast = (r, now, lang = 'et', tz = localZone()) => (r.on ? words(lang).nowRow : r.last === null ? words(lang).over24h : shortWhen(r.last, now, lang, tz));
+
+// The plan slice the generator passes (ADR-015): { rooms: [{ id, name, rects: [[x0, z0, x1, z1]] }],
+// walls: [{ a: [x, z], b: [x, z], t, doors: [[c, w]] }], pirs: [{ entity, room }] }, in metres.
+// The route graph: a node at each rect's centre; rects of one room that touch, and two rooms'
+// rects that share an edge with no wall along a stretch of it (an open passage), joined through
+// the middle of that stretch; a door joined to the rects on both sides through a point just off
+// its wall each way.
+const EPS = 0.02, GAP = 0.4, OPEN = 0.6, STEP = 0.1;
+const centreOf = r => [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2];
+const inRect = (p, r) => p[0] >= r[0] - EPS && p[0] <= r[2] + EPS && p[1] >= r[1] - EPS && p[1] <= r[3] + EPS;
+const area = r => (r[2] - r[0]) * (r[3] - r[1]);
+// where two rects meet along x (axis 0) or z (1): { axis, at, lo, hi, gap }, gap up to a wall's width
+export function sharedEdge(A, B) {
+  for (const axis of [0, 1]) {
+    const o = 1 - axis, lo = Math.max(A[o], B[o]), hi = Math.min(A[o + 2], B[o + 2]);
+    if (hi - lo <= EPS) continue;
+    for (const [P, Q] of [[A, B], [B, A]]) {
+      const gap = Q[axis] - P[axis + 2];
+      if (gap >= -EPS && gap <= GAP) return { axis, at: P[axis + 2] + gap / 2, lo, hi, gap: Math.max(0, gap) };
+    }
+  }
+  return null;
+}
+// whether a wall stands at point p of a shared edge
+const walled = (p, walls, gap) => walls.some(w => {
+  const dx = w.b[0] - w.a[0], dz = w.b[1] - w.a[1], len = Math.hypot(dx, dz) || 1;
+  const u = ((p[0] - w.a[0]) * dx + (p[1] - w.a[1]) * dz) / len;
+  if (u < -EPS || u > len + EPS) return false;
+  return Math.abs((p[0] - w.a[0]) * dz - (p[1] - w.a[1]) * dx) / len <= (w.t || 0) / 2 + gap / 2 + 0.05;
+});
+// the middle of the longest stretch of a shared edge with no wall, null when shorter than OPEN
+function openStretch(e, walls) {
+  let best = null, run = null;
+  for (let v = e.lo + STEP / 2; v < e.hi; v += STEP) {
+    const p = e.axis === 0 ? [e.at, v] : [v, e.at];
+    if (walled(p, walls, e.gap)) { run = null; continue; }
+    if (!run) run = [v, v];
+    run[1] = v;
+    if (!best || run[1] - run[0] > best[1] - best[0]) best = [...run];
+  }
+  if (!best || best[1] - best[0] + STEP < OPEN) return null;
+  const m = (best[0] + best[1]) / 2;
+  return e.axis === 0 ? [e.at, m] : [m, e.at];
+}
+
+// the graph of a plan object, built once: the plan is the card's config
+const GRAPHS = new WeakMap();
+const graphOf = plan => { if (!GRAPHS.has(plan)) GRAPHS.set(plan, planGraph(plan)); return GRAPHS.get(plan); };
+
+export function planGraph(plan) {
+  const nodes = [], adj = [];
+  const add = p => { nodes.push(p); adj.push([]); return nodes.length - 1; };
+  const link = (i, j) => { const d = Math.hypot(nodes[i][0] - nodes[j][0], nodes[i][1] - nodes[j][1]); adj[i].push([j, d]); adj[j].push([i, d]); };
+  const rects = [];
+  for (const room of plan.rooms || []) for (const r of room.rects) rects.push({ room: room.id, r, node: add(centreOf(r)) });
+  const walls = plan.walls || [];
+  for (let i = 0; i < rects.length; i++) {
+    for (let j = i + 1; j < rects.length; j++) {
+      const A = rects[i], B = rects[j], e = sharedEdge(A.r, B.r);
+      if (!e) continue;
+      const mid = A.room === B.room ? (e.axis === 0 ? [e.at, (e.lo + e.hi) / 2] : [(e.lo + e.hi) / 2, e.at]) : openStretch(e, walls);
+      if (!mid) continue;
+      const m = add(mid);
+      link(A.node, m); link(m, B.node);
+    }
+  }
+  for (const w of walls) {
+    const dx = w.b[0] - w.a[0], dz = w.b[1] - w.a[1], len = Math.hypot(dx, dz) || 1, ux = dx / len, uz = dz / len;
+    for (const [c] of w.doors || []) {
+      const p = [w.a[0] + ux * c, w.a[1] + uz * c], off = (w.t || 0) / 2 + 0.15, door = add(p);
+      for (const s of [1, -1]) {
+        const q = [p[0] - uz * off * s, p[1] + ux * off * s], hit = rects.find(x => inRect(q, x.r));
+        if (!hit) continue;
+        const qi = add(q);
+        link(door, qi); link(qi, hit.node);
+      }
+    }
+  }
+  // a room's anchor: its largest rect's centre
+  const anchor = {};
+  for (const x of rects) if (!anchor[x.room] || area(x.r) > area(rects.find(y => y.node === anchor[x.room]).r)) anchor[x.room] = x.node;
+  return { nodes, adj, rects, anchor };
+}
+
+// the shortest path between two nodes as their points, null when none reaches
+export function shortestPath(g, from, to) {
+  const n = g.nodes.length, dist = new Array(n).fill(Infinity), prev = new Array(n).fill(-1), done = new Array(n).fill(false);
+  dist[from] = 0;
+  for (;;) {
+    let u = -1;
+    for (let i = 0; i < n; i++) if (!done[i] && dist[i] < Infinity && (u < 0 || dist[i] < dist[u])) u = i;
+    if (u < 0 || u === to) break;
+    done[u] = true;
+    for (const [v, d] of g.adj[u]) if (dist[u] + d < dist[v]) { dist[v] = dist[u] + d; prev[v] = u; }
+  }
+  if (dist[to] === Infinity) return null;
+  const path = [];
+  for (let v = to; v >= 0; v = prev[v]) path.unshift(g.nodes[v]);
+  return path;
+}
+
+// The trail: the rooms with motion in the last `minutes`, each once by its last motion, the last
+// five; a PIR not in the plan stays out, two PIRs in one room light it together. rows' `last`
+// is the PIR's last motion. Returns [{ room, t }], oldest first.
+export function trailRooms(plan, rows, now, minutes = 15, most = 5) {
+  const roomOf = new Map((plan.pirs || []).map(p => [p.entity, p.room])), last = new Map();
+  for (const r of rows) {
+    const room = roomOf.get(r.entity);
+    if (!room || r.last === null || r.last < now - minutes * 60e3) continue;
+    if (!last.has(room) || r.last > last.get(room)) last.set(room, r.last);
+  }
+  return [...last].map(([room, t]) => ({ room, t })).sort((a, b) => a.t - b.t).slice(-most);
+}
+
+// the trail's runs of points: consecutive rooms joined by the shortest path between their anchors,
+// a hop with no path a gap between two runs
+export function trailRuns(g, rooms) {
+  const runs = [];
+  let run = null;
+  rooms.forEach((x, i) => {
+    const a = g.anchor[x.room];
+    if (a === undefined) return;
+    if (!run || i === 0) { run = [g.nodes[a]]; runs.push(run); return; }
+    const from = g.anchor[rooms[i - 1].room], path = from === undefined ? null : shortestPath(g, from, a);
+    if (path) run.push(...path.slice(1));
+    else { run = [g.nodes[a]]; runs.push(run); }
+  });
+  return runs;
+}
+
+// a Catmull-Rom curve through points as SVG cubic Béziers; a lone point is a dot
+export function catmullRom(pts) {
+  const f = v => v.toFixed(1);
+  if (pts.length < 2) return pts.length ? `M${f(pts[0][0])} ${f(pts[0][1])}h0.01` : '';
+  let d = `M${f(pts[0][0])} ${f(pts[0][1])}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    d += `C${f(p1[0] + (p2[0] - p0[0]) / 6)} ${f(p1[1] + (p2[1] - p0[1]) / 6)} ${f(p2[0] - (p3[0] - p1[0]) / 6)} ${f(p2[1] - (p3[1] - p1[1]) / 6)} ${f(p2[0])} ${f(p2[1])}`;
+  }
+  return d;
+}
+
+// a rect as a plate in px, a rounded rectangle inset from its edges; an edge where another rect of
+// the same room meets it reaches over the seam instead, with square corners there
+function platePath(r, siblings, X, Z) {
+  const meets = side => siblings.some(o => { const e = sharedEdge(r, o); if (!e) return false; const axis = side % 2 === 0 ? 0 : 1, far = side >= 2; return e.axis === axis && Math.abs(e.at - (far ? r[axis + 2] : r[axis])) <= GAP; });
+  const m = [0, 1, 2, 3].map(meets); // left, top, right, bottom
+  const x0 = X(r[0]) + (m[0] ? -1 : 2), z0 = Z(r[1]) + (m[1] ? -1 : 2), x1 = X(r[2]) - (m[2] ? -1 : 2), z1 = Z(r[3]) - (m[3] ? -1 : 2);
+  const q = Math.max(0, Math.min(7, (x1 - x0) / 2, (z1 - z0) / 2));
+  const k = (a, b) => (m[a] || m[b] ? 0 : q), f = v => v.toFixed(1);
+  const [tl, tr, br, bl] = [k(0, 1), k(2, 1), k(2, 3), k(0, 3)];
+  return `M${f(x0 + tl)} ${f(z0)}H${f(x1 - tr)}Q${f(x1)} ${f(z0)} ${f(x1)} ${f(z0 + tr)}V${f(z1 - br)}Q${f(x1)} ${f(z1)} ${f(x1 - br)} ${f(z1)}H${f(x0 + bl)}Q${f(x0)} ${f(z1)} ${f(x0)} ${f(z1 - bl)}V${f(z0 + tl)}Q${f(x0)} ${f(z0)} ${f(x0 + tl)} ${f(z0)}Z`;
+}
+
+const TEAL = '#30b0c7', PW = 330, PH = 360;
+// The plan's SVG: every room rect as the house's faint outline, the sensed rooms as plates (the
+// trail's tinted, the room in motion now filled), the trail as one curve fading in from its start
+// with a dot at each room it passed and a ring where it ends, and the sensed rooms' names.
+// { svg, aria }; '' without a plan or a sensed room.
+export function planSvg(plan, rows, now, pal, lang = 'et', minutes = 15) {
+  const w = words(lang);
+  const sensed = new Set((plan && plan.pirs || []).map(p => p.room));
+  const rooms = ((plan && plan.rooms) || []).filter(r => sensed.has(r.id));
+  if (!rooms.length) return { svg: '', aria: '' };
+  const all = rooms.flatMap(r => r.rects);
+  const bx0 = Math.min(...all.map(r => r[0])), bz0 = Math.min(...all.map(r => r[1])), bx1 = Math.max(...all.map(r => r[2])), bz1 = Math.max(...all.map(r => r[3]));
+  const K = Math.min(PW / (bx1 - bx0), PH / (bz1 - bz0)), pad = 4;
+  const X = x => pad + (x - bx0) * K, Z = z => pad + (z - bz0) * K, vw = (bx1 - bx0) * K + 2 * pad, vh = (bz1 - bz0) * K + 2 * pad;
+  const g = graphOf(plan), trail = trailRooms(plan, rows, now, minutes), runs = trailRuns(g, trail);
+  const roomOf = new Map(plan.pirs.map(p => [p.entity, p.room])), nowRooms = new Set(rows.filter(r => r.on).map(r => roomOf.get(r.entity)).filter(Boolean));
+  const inTrail = new Set(trail.map(x => x.room));
+  const c = pal.dark
+    ? { house: 'rgba(255,255,255,0.05)', room: 'rgba(255,255,255,0.10)', trail: 'rgba(48,176,199,0.22)' }
+    : { house: 'rgba(60,60,67,0.06)', room: 'rgba(255,255,255,0.92)', trail: 'rgba(48,176,199,0.16)' };
+  const f = v => v.toFixed(1);
+  const outline = (plan.rooms || []).flatMap(r => r.rects).map(r => `M${f(X(r[0]))} ${f(Z(r[1]))}H${f(X(r[2]))}V${f(Z(r[3]))}H${f(X(r[0]))}Z`).join('');
+  const plates = rooms.map(room => {
+    const fill = nowRooms.has(room.id) ? TEAL : inTrail.has(room.id) ? c.trail : c.room;
+    return `<path d="${room.rects.map(r => platePath(r, room.rects.filter(o => o !== r), X, Z)).join('')}" fill="${fill}"/>`;
+  }).join('');
+  const P = p => [X(p[0]), Z(p[1])];
+  const pts = runs.map(run => run.map(P)), flat = pts.flat();
+  let curve = '';
+  if (flat.length) {
+    const [s, e] = [flat[0], flat[flat.length - 1]];
+    const grad = `<linearGradient id="trail" gradientUnits="userSpaceOnUse" x1="${f(s[0])}" y1="${f(s[1])}" x2="${f(e[0] + (e[0] === s[0] && e[1] === s[1] ? 1 : 0))}" y2="${f(e[1])}"><stop offset="0" stop-color="${TEAL}" stop-opacity="0.15"/><stop offset="1" stop-color="${TEAL}"/></linearGradient>`;
+    const stops = trail.slice(0, -1).map((x, i) => { const a = P(g.nodes[g.anchor[x.room]]); return `<circle cx="${f(a[0])}" cy="${f(a[1])}" r="4" fill="${TEAL}" fill-opacity="${(0.35 + (0.5 * i) / Math.max(1, trail.length - 1)).toFixed(2)}"/>`; }).join('');
+    const live = nowRooms.size > 0;
+    curve = `<defs>${grad}</defs><path d="${pts.map(catmullRom).join('')}" fill="none" stroke="url(#trail)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>${stops}${live ? `<circle class="ring" cx="${f(e[0])}" cy="${f(e[1])}" r="7" fill="none" stroke="${TEAL}" stroke-width="2"/>` : ''}<circle cx="${f(e[0])}" cy="${f(e[1])}" r="7" fill="${pal.dark ? '#1c1c1e' : '#fff'}" stroke="${TEAL}" stroke-width="3"/>`;
+  }
+  const labels = rooms.map(room => {
+    const a = g.nodes[g.anchor[room.id]], on = nowRooms.has(room.id);
+    return `<text x="${f(X(a[0]))}" y="${f(Z(a[1]) + (inTrail.has(room.id) && !on ? -12 : 0))}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="${on ? 700 : 600}" fill="${on ? '#fff' : inTrail.has(room.id) ? pal.text : pal.sub}">${esc(room.name)}</text>`;
+  }).join('');
+  const names = trail.map(x => (plan.rooms.find(r => r.id === x.room) || {}).name).filter(Boolean);
+  const aria = w.planAria(joinEt(names, lang));
+  return { svg: `<svg class="plan" viewBox="0 0 ${f(vw)} ${f(vh)}" role="img" aria-label="${esc(aria)}"><path d="${outline}" fill="${c.house}"/>${plates}${curve}${labels}</svg>`, aria };
+}
+
+const MOTION_CSS = `${PRICE_A3_CSS}
+.main{padding:16px;box-sizing:border-box}
+.msg{display:flex;align-items:center;justify-content:center;min-height:88px;font-size:14px;color:var(--sub)}
+.hd .big{align-items:center;gap:9px}
+.hd .big .n{font-size:26px;line-height:1.12;letter-spacing:-0.022em}
+.hd.bad .lab,.hd.bad .n{color:var(--high)}
+.dotlive{flex:none;width:10px;height:10px;border-radius:5px;background:${TEAL};animation:pulse 1.8s ease-out infinite}
+svg.plan{display:block;width:100%;height:auto;max-height:420px}
+.ring{transform-box:fill-box;transform-origin:center;animation:ring 2s ease-out infinite}
+.grp{margin:8px 0 2px;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--sub)}
+.rows{display:flex;flex-direction:column;gap:2px}
+.mr,.mx{display:grid;grid-template-columns:108px minmax(0,1fr) 58px;align-items:center;gap:8px}
+.mr{min-height:32px;width:100%}
+.mr .nm{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mr .st{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:1.5px;height:18px}
+.mr .st i{border-radius:2px;background:var(--track)}
+.mr .lt{font-size:13px;font-weight:600;text-align:right;color:var(--sub)}
+.mr .lt.now{color:${TEAL}}
+.mr.bad .nm,.mr.bad .lt{color:var(--high)}
+.mx{font-size:11px;font-weight:600;color:var(--sub)}
+.mx .h{display:flex;justify-content:space-between}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(48,176,199,0.55)}70%{box-shadow:0 0 0 7px rgba(48,176,199,0)}100%{box-shadow:0 0 0 0 rgba(48,176,199,0)}}
+@keyframes ring{0%{transform:scale(1);opacity:0.7}100%{transform:scale(2.8);opacity:0}}
+@media (prefers-reduced-motion: reduce){.dotlive,.ring{animation:none}.ring{opacity:0}}
+`;
+
+// a row's 24 cells: teal, stronger with more motion in the hour
+const cellsOf = counts => counts.map(v => `<i${v ? ` style="background:${TEAL};opacity:${Math.min(1, 0.28 + v / 70).toFixed(2)}"` : ''}></i>`).join('');
+
+// Valve's motion (ADR-015): the headline, the plan with the trail of the last `minutes`, and a row
+// per room with its 24 hourly counts and its last time, which opens the PIR's history sheet.
+// Config: { plan, groups: [{ name, rooms: [{ entity, name }] }], alarms: [{ entity, name }], minutes }.
+class MotionCard extends LoadingCard {
+  static css = MOTION_CSS;
+  _check(c) { if (!(c.groups || []).length) throw new Error('khe-motion-card: groups is required'); }
+  _historyIds() { return (this._config.groups || []).flatMap(g => g.rooms.map(r => r.entity)); }
+  _watched() { return [...this._historyIds(), ...(this._config.alarms || []).map(a => a.entity)]; }
+  _html(states, pal) { return motionA3(this, states, pal, this._onTimes(), Date.now()); }
+}
+
+function motionA3(card, states, pal, on, now) {
+  const c = card._config, w = card._w, L = card._lang, tz = tzOf(card._hass);
+  card._actions = new Map();
+  card._sheets = new Map();
+  if (!on && !(card._data && card._data.error)) return `<div class="glass main"><span class="msg">${w.loading}</span></div>`;
+  const rows = motionRows(c, states, on || {}, now);
+  const head = on ? motionHeadline(rows, states, c.alarms, now, L, tz) : { tone: 'last', label: w.dataFailed, big: '', note: '' };
+  const hot = head.entity;
+  const top = `<span class="hd${head.tone === 'bad' ? ' bad' : ''}"><span class="l"><span class="lab">${esc(head.label)}</span><span class="big">${head.tone === 'live' ? '<span class="dotlive" aria-hidden="true"></span>' : ''}<span class="n">${esc(head.big)}</span></span>${head.note ? `<span class="sub">${esc(head.note)}</span>` : ''}</span></span>`;
+  const plan = c.plan && on ? planSvg(c.plan, rows, now, pal, L, c.minutes || 15).svg : '';
+  let i = 0;
+  const groups = (c.groups || []).map(g => {
+    const list = rows.filter(r => r.group === g.name).map(r => {
+      const k = `r${i++}`, last = on ? rowLast(r, now, L, tz) : '–';
+      card._sheets.set(k, { title: r.name, entity: r.entity, more: r.entity, decimals: 0, unit: '', color: 'teal', history: { entity: r.entity, source: 'history' } });
+      return `<button type="button" class="mr press${hot && hot === r.entity ? ' bad' : ''}" data-k="${k}" aria-label="${esc(w.motionRow(r.name, last))}"><span class="nm">${esc(r.name)}</span><span class="st" aria-hidden="true">${cellsOf(on ? hourlyCounts(r.times, now, tz) : new Array(24).fill(0))}</span><span class="lt num${r.on ? ' now' : ''}">${esc(last)}</span></button>`;
+    }).join('');
+    return `<span class="grp">${esc(g.name)}</span>${list}`;
+  }).join('');
+  const hours = binHours(now, tz), axis = `<span class="mx" aria-hidden="true"><span></span><span class="h">${[0, 6, 12, 18].map(k => `<span>${hours[k]}</span>`).join('')}<span>${w.now}</span></span><span></span></span>`;
+  return `<div class="glass main">${top}${plan}<span class="rows">${groups}</span>${axis}</div>`;
+}
+
+// the motion card's markup for a config, states and on-times, without an element (the tests')
+export function motionA3Markup(conf, states, on, now, lang = 'et', hass = {}) {
+  const card = { _config: conf, _lang: lang, _w: words(lang), _hass: { states, ...hass }, _data: on ? {} : null };
+  return { html: motionA3(card, states, a3Palette(false), on, now), sheets: card._sheets };
+}
+
 const ELEMENTS = [
   ['khe-summary-card', SummaryCard, 'KHE summary', 'The house in one sentence, with summary chips.'],
   ['khe-price-card', PriceCard, 'KHE price', 'The electricity price now, the hourly bars and the cheapest windows.'],
@@ -2647,7 +3144,8 @@ const ELEMENTS = [
   ['khe-days-card', DaysCard, 'KHE days', 'Daily bars of a statistic, several behind a switch (A3).'],
   ['khe-split-card', SplitCard, 'KHE split', "Who used the month's energy (A3)."],
   ['khe-reading-card', ReadingCard, 'KHE reading', 'One reading with its hourly line, cells and a stepper (A3).'],
-  ['khe-forecast-card', ForecastCard, 'KHE forecast', "The next hours' precipitation and temperature from a weather entity, with cells (A3)."]
+  ['khe-forecast-card', ForecastCard, 'KHE forecast', "The next hours' precipitation and temperature from a weather entity, with cells (A3)."],
+  ['khe-motion-card', MotionCard, 'KHE motion', 'Where there was motion: a trail through the house plan and each room by the hour (A3).']
 ];
 if (typeof customElements !== 'undefined') {
   window.customCards = window.customCards || [];

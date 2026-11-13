@@ -33,8 +33,18 @@ WAN = "sensor.unifi_gateway_cloudflare_wan_latentsus"
 # The ids and labels that name the house's own devices, once each, so that the demo
 # (dashboard_demo.py) can map them without spelling them out.
 SMOKE = "binary_sensor.suitsuandurid"
+# the alarm panel's own sensors: its link as the integration reports it and as the template that
+# reads it as connected, its battery and its mains supply, tamper and the outdoor siren
+VALVE_LINK_RAW = "sensor.valve_uhendus"
+VALVE_LINK = "binary_sensor.valve_uhendus"
+VALVE_BATTERY = "sensor.valve_aku"
+VALVE_SUPPLY = "sensor.valve_toide"
+TAMPER = "binary_sensor.valve_rikkumine"
+SIREN = "binary_sensor.valissireen"
 SMOKE_GROUP = "Suitsuandurid"
 ALARMS = [("alarm_control_panel.maja", "Maja"), ("alarm_control_panel.garaaz", "Garaaž")]
+# the modes the house arms and disarms in, as HA's alarm states
+ALARM_MODES = ["armed_away", "armed_home", "armed_night", "disarmed"]
 ROOF = "cover.pergola_katus"
 ROOF_NAME = "Pergola katus"
 PERGOLA_LIGHT = "light.pergola_valgustus"
@@ -1262,6 +1272,25 @@ PRIVATE = [
     "binary_sensor.magamistuba_4",
     "binary_sensor.kontor_liikumine",
 ]
+# Each PIR's room by the house model's public room names (its rooms layer), for a motion list that
+# has no model to name them from; with the model, A3's Valve names a room by the model's own name.
+MOTION_ROOMS = dict(
+    zip(
+        SHARED + PRIVATE,
+        [
+            "Köök",
+            "Elutuba",
+            "Koridor",
+            "Garaaž",
+            "Tehnoruum",
+            "Magamistuba 1",
+            "Magamistuba 2",
+            "Magamistuba 3",
+            "Kabinet",
+        ],
+        strict=True,
+    )
+)
 
 
 # A history graph is the wrong instrument for motion. A PIR is on for seconds,
@@ -1286,7 +1315,7 @@ def armed(entity, name):
         "features": [
             {
                 "type": "alarm-modes",
-                "modes": ["armed_away", "armed_home", "armed_night", "disarmed"],
+                "modes": list(ALARM_MODES),
             }
         ],
     }
@@ -1320,7 +1349,7 @@ valve = {
     "badges": [
         *ALARM_BADGES,
         rare(SMOKE, "Tulekahju", state="on"),
-        rare("sensor.valve_uhendus", "Ühendus katkes", state_not="online"),
+        rare(VALVE_LINK_RAW, "Ühendus katkes", state_not="online"),
     ],
     "sections": [
         # Tiles rather than keypad cards: the keypad is a tall block to look at all
@@ -1350,8 +1379,8 @@ valve = {
                 {
                     "type": "horizontal-stack",
                     "cards": [
-                        nowrite("sensor.valve_aku", "Aku", vertical=True),
-                        nowrite("binary_sensor.valve_uhendus", "Ühendus", vertical=True),
+                        nowrite(VALVE_BATTERY, "Aku", vertical=True),
+                        nowrite(VALVE_LINK, "Ühendus", vertical=True),
                     ],
                 },
                 # Smoke was a badge only, which meant it was invisible until the house
@@ -1361,8 +1390,8 @@ valve = {
                     "type": "horizontal-stack",
                     "cards": [
                         tile(SMOKE, SMOKE_GROUP, vertical=True),
-                        tile("binary_sensor.valve_rikkumine", "Rikkumine", vertical=True),
-                        tile("binary_sensor.valissireen", "Sireen", vertical=True),
+                        tile(TAMPER, "Rikkumine", vertical=True),
+                        tile(SIREN, "Sireen", vertical=True),
                     ],
                 },
             ],

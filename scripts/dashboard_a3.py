@@ -1,8 +1,8 @@
-"""A3, the house's Overview in A3's look, as data (ADR-005 to ADR-008, ADR-010, ADR-011, ADR-014).
+"""A3, the house's Overview in A3's look, as data (ADR-005 to ADR-008, ADR-010, ADR-011, ADR-014, ADR-015).
 
 overview(house, people, model) is the Overview the house saves: dashboard_config.build()'s views
 with A3's views in place of Kodu's at the same paths (`kodu`, `energia`, `soojuspump`,
-`ventilatsioon`, `pergola`) and the 3D view moved last, which the public demo builds too (ADR-012). dashboard_config.build() itself
+`ventilatsioon`, `pergola`, `valve`) and the 3D view moved last, which the public demo builds too (ADR-012). dashboard_config.build() itself
 stays Kodu with 3D first, the house's fallback. energia() is Energia: the month, the days, who used what and the price, from daily
 statistics. soojuspump(h) is Soojuspump: the status, the indoor and boiler temperatures as 48-hour
 lines from hourly statistics, the heating shift as a stepper, the boost and the boiler's
@@ -11,7 +11,11 @@ air as a 48-hour line, the unit with its filter as a meter, and whether it pays 
 heat it recovers against its electricity by the day. pergola() is Pergola: whether it rains, the
 roof's three commands, the light with its tone, the next 14 hours' forecast read through
 weather.get_forecasts with the rain sensors and the outdoor temperature as cells, and the two
-rules with their switches and when they last ran.
+rules with their switches and when they last ran. valve(model) is Valve: the status over both
+partitions, Maja and Garaaž with their modes (a tap opens HA's dialog, which takes the code), the
+doors with when they last opened, the nine PIRs as a trail through the house plan with each room's
+hourly motion, and the panel's own sensors; the plan is plan_slice(), a slice of the model with
+its rooms, walls and doors and each PIR's room, never its devices (ADR-015).
 
 build(house, people, model) returns A3 as a one-view Lovelace config: the 3D house as
 the hero, then the page's title with the outdoor temperature, people, alarms and live faults as
@@ -50,6 +54,8 @@ Where each sheet reads its history, measured on the house on 2026-11-12
       efficiency, filter
     rain now, rain in two hours   statistics   mean (5minute, hour, day), Pergola's cells (mm)
     the weather forecast          get_forecasts hourly, Pergola's forecast card (ADR-014)
+    PIRs, doors                   history      24 h of off-to-on changes, Valve (ADR-015)
+    the panel's sensors           history      on/off; the battery from statistics (mean)
 """
 
 import copy
@@ -1000,10 +1006,218 @@ def pergola():
     }
 
 
+# the alarm's modes as its tiles offer them, its second line by mode, and what it is doing, which
+# the tiles and the status line both say
+ALARM_MODES = list(zip(dc.ALARM_MODES, ["Eemal", "Kodus", "Öö", "Maas"], strict=True))
+ALARM_DOING = [
+    ("triggered", "Häire", "bad"),
+    ("pending", "Sisenemise viivitus", "bad"),
+    ("arming", "Valvesse minek", "info"),
+]
+ALARM_LINE = list(
+    zip(dc.ALARM_MODES, ["Eemal valves", "Kodus valves", "Öö valves", "Valvest maas"], strict=True)
+) + [(state, text) for state, text, _ in ALARM_DOING]
+DOOR_KINDS = ("door", "glassdoor")
+
+
+def plan_slice(model, pirs):
+    """What the motion card draws the house plan and its trail from (ADR-015): every room's id,
+    name and rects, every wall with its door openings as [c, w], and the room of each PIR in
+    `pirs` that the model places in one of its rooms. None without a model or without such a PIR.
+    Never the model's devices or anything else of it."""
+    if not model:
+        return None
+    rooms = model.get("rooms", [])
+    ids = {r["id"] for r in rooms}
+    where = {d["entity"]: d.get("room") for d in model.get("devices", [])}
+    placed = [{"entity": e, "room": where[e]} for e in pirs if where.get(e) in ids]
+    if not placed:
+        return None
+    walls = [
+        {
+            "a": w["a"],
+            "b": w["b"],
+            "t": w.get("t", 0),
+            "doors": [[o["c"], o["w"]] for o in w.get("openings", []) if o["kind"] in DOOR_KINDS],
+        }
+        for w in model.get("walls", [])
+    ]
+    return {
+        "rooms": [{"id": r["id"], "name": r["name"], "rects": r["rects"]} for r in rooms],
+        "walls": walls,
+        "pirs": placed,
+    }
+
+
+def motion_names(plan):
+    """Each PIR's row name: its room's name in the plan when no other PIR shares the room, else
+    the public room name in dashboard_config (as without a plan)."""
+    names = dict(dc.MOTION_ROOMS)
+    if plan:
+        room = {r["id"]: r["name"] for r in plan["rooms"]}
+        count = {}
+        for p in plan["pirs"]:
+            count[p["room"]] = count.get(p["room"], 0) + 1
+        names.update({p["entity"]: room[p["room"]] for p in plan["pirs"] if count[p["room"]] == 1})
+    return names
+
+
+def alarm_tile(entity, name):
+    """A partition: its mode by name or what it is doing, and its four modes marked by state; any tap
+    opens HA's more-info dialog, whose keypad takes the code (the card never sees one)."""
+    return wide(
+        tile(
+            entity,
+            name,
+            icon="shield",
+            icon_on="shield-check",
+            color="teal",
+            state_text=[{"text": text, "if": [{"state": state}]} for state, text in ALARM_LINE],
+            modes=[
+                {
+                    "name": n,
+                    "option": state,
+                    "tap_action": {"action": "more-info"},
+                    **({"color": "teal"} if state != "disarmed" else {}),
+                }
+                for state, n in ALARM_MODES
+            ],
+        )
+    )
+
+
+def armed_rules(entity, state="on"):
+    """A cell's bad_if: the entity in `state` while either partition is armed."""
+    return [
+        [{"entity": entity, "state": state}, {"entity": a, "state": "armed_*"}]
+        for a, _ in dc.ALARMS
+    ]
+
+
+def fault_cell(entity, name, words, color):
+    """A Süsteem cell that reads fine while off: green in its words, red while on or unavailable."""
+    return {
+        "entity": entity,
+        "name": name,
+        "words": words,
+        "good": ["off"],
+        "bad_if": [{"state": "on"}, {"state": "unavailable"}],
+        "history": ONOFF,
+        "color": color,
+    }
+
+
+def valve(model):
+    """Valve in A3's look (ADR-007, ADR-015): the status over both partitions, Maja and Garaaž with
+    their modes, the doors with when they last opened, the motion card with the trail through the
+    house plan and each room by the hour, and the panel's own sensors."""
+    v = dc.valve
+    pirs = dc.SHARED + dc.PRIVATE
+    plan = plan_slice(model, pirs)
+    names = motion_names(plan)
+    alarms = [e for e, _ in dc.ALARMS]
+    status = [
+        {"entities": alarms, "state": state, "text": text, "tone": tone}
+        for state, text, tone in [
+            *ALARM_DOING,
+            ("armed_*", "Valves", "info"),
+            ("disarmed", "Valvest maas", "ok"),
+        ]
+    ]
+    doors = [
+        {
+            "entity": e,
+            "name": n,
+            "words": {"off": "kinni", "on": "lahti"},
+            "note": {"last_on": True, "label": "avati"},
+            "bad_if": armed_rules(e),
+            "history": ONOFF,
+            "color": "blue",
+        }
+        for e, n in dc.DOORS
+    ]
+    korras = {"off": "korras"}
+    system = [
+        fault_cell(dc.SMOKE, dc.SMOKE_GROUP, {"off": "korras", "on": "tulekahju"}, "red"),
+        {
+            "entity": dc.VALVE_BATTERY,
+            "name": "Aku",
+            "decimals": 1,
+            "note": {"entity": dc.VALVE_SUPPLY, "label": "toide", "decimals": 1},
+            "history": MEAN,
+            "color": "green",
+        },
+        {
+            "entity": dc.VALVE_LINK,
+            "name": "Ühendus",
+            "words": {"on": "olemas", "off": "katkes"},
+            "good": ["on"],
+            "bad_if": [{"state": "off"}, {"entity": dc.VALVE_LINK_RAW, "state": "!online"}],
+            "history": ONOFF,
+            "color": "blue",
+        },
+        fault_cell(dc.TAMPER, "Rikkumine", korras, "red"),
+        fault_cell(dc.SIREN, "Sireen", korras, "red"),
+    ]
+    motion = card(
+        "motion-card",
+        **({"plan": plan} if plan else {}),
+        groups=[
+            {"name": label, "rooms": [{"entity": e, "name": names[e]} for e in ents]}
+            for label, ents in (("Ühisruumid", dc.SHARED), ("Toad", dc.PRIVATE))
+        ],
+        alarms=[{"entity": e, "name": n} for e, n in dc.ALARMS],
+        minutes=15,
+        grid_options={"columns": "full"},
+    )
+    notice = "Teavitus tuleb tulekahjust, häirest, paanikanupust, toite kadumisest ja rikkumisest."
+    return {
+        "title": v["title"],
+        "path": v["path"],
+        "icon": v["icon"],
+        "type": "sections",
+        "max_columns": 2,
+        "background": BACKGROUND,
+        "sections": [
+            section(
+                [
+                    card(
+                        "chips-card",
+                        style="a3",
+                        title=v["title"],
+                        status={"map": status},
+                        faults=[
+                            {"entity": dc.SMOKE, "name": "Tulekahju"},
+                            {"entity": dc.VALVE_LINK, "name": "Ühendus katkes", "bad": "off"},
+                        ],
+                        grid_options={"columns": "full"},
+                    ),
+                    *[alarm_tile(e, n) for e, n in dc.ALARMS],
+                    heading("Uksed"),
+                    card("reading-card", cells=doors, grid_options={"columns": "full"}),
+                ]
+            ),
+            section(
+                [
+                    heading("Liikumine"),
+                    motion,
+                    heading("Süsteem"),
+                    card(
+                        "reading-card",
+                        cells=system,
+                        note={"text": notice},
+                        grid_options={"columns": "full"},
+                    ),
+                ]
+            ),
+        ],
+    }
+
+
 def overview(house, people, model):
     """The house's Overview: dashboard_config.build() with A3's views in place of Kodu's (`kodu`,
-    `energia`, `soojuspump`, `ventilatsioon`, `pergola`) and the 3D view (`maja-3d`) last. A fresh copy every
-    call."""
+    `energia`, `soojuspump`, `ventilatsioon`, `pergola`, `valve`) and the 3D view (`maja-3d`) last.
+    A fresh copy every call."""
     config = dc.build(house, people, model)
     h = dc.House(house, people)
     a3 = {
@@ -1012,6 +1226,7 @@ def overview(house, people, model):
         "soojuspump": soojuspump(h),
         "ventilatsioon": ventilatsioon(h),
         "pergola": pergola(),
+        "valve": valve(model),
     }
     views = [a3.get(v["path"], v) for v in config["views"]]
     config["views"] = sorted(views, key=lambda v: v["path"] == "maja-3d")

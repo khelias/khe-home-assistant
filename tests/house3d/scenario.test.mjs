@@ -121,7 +121,7 @@ test('an unknown service or entity throws before any state changes', () => {
 for (const lang of ['et', 'en']) {
   test(`every built scenario plays to its end (${lang})`, () => {
     const { scenarios, data } = built[lang];
-    assert.equal(scenarios.length, 6);
+    assert.equal(scenarios.length, 8);
     for (const s of scenarios) {
       const { c, sim } = setup(data);
       let ended = false, times = 0;

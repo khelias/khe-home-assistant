@@ -38,6 +38,10 @@ LABELS = {
     dc.SMOKE_GROUP: "Suitsuandur",
     dict(dc.BASE_UPDATES)["update.komfovent_update"]: "Ventilatsiooniseade",
     dc.ROOF_NAME: "Terrassi katus",
+    # the motion rows the test house has no room for keep the demo's own names
+    dc.MOTION_ROOMS[dc.PRIVATE[1]]: "Tuba 1",
+    dc.MOTION_ROOMS[dc.PRIVATE[2]]: "Tuba 2",
+    dc.MOTION_ROOMS[dc.PRIVATE[3]]: "Töötuba",
 }
 
 
@@ -84,6 +88,9 @@ entry(dc.ALARMS[1][0], "alarm_control_panel.demo_garage", "armed_away", "Garaaž
 binary(dc.DOORS[0][0], "binary_sensor.test_front_door", "off", "Välisuks", "door")
 binary(dc.DOORS[1][0], "binary_sensor.test_terrace_door", "off", "Terrassi uks", "door")
 binary(dc.DOORS[2][0], "binary_sensor.demo_back_door", "off", "Tagauks", "door")
+# minutes since each door last closed; the back door has not opened in a day
+for (real, _), ago in zip(dc.DOORS, [47, 190, 1600], strict=True):
+    CATALOGUE[real]["ago"] = ago
 # five of them are the test house's own, so the 3D view and the motion list agree; two are on,
 # so the 3D view shows motion now
 MOTION = [
@@ -102,20 +109,26 @@ for real, (demo, name, ago, state) in zip(dc.SHARED + dc.PRIVATE, MOTION, strict
     entry(real, demo, state, name, device_class="motion")
     CATALOGUE[real]["ago"] = ago
 binary(dc.SMOKE, "binary_sensor.demo_smoke_group", "off", "Suitsuandur", "smoke")
-binary("binary_sensor.valissireen", "binary_sensor.demo_siren", "off", "Sireen", "sound")
-binary("binary_sensor.valve_rikkumine", "binary_sensor.demo_tamper", "off", "Rikkumine", "tamper")
-binary(
-    "binary_sensor.valve_uhendus", "binary_sensor.demo_alarm_link", "on", "Ühendus", "connectivity"
-)
+binary(dc.SIREN, "binary_sensor.demo_siren", "off", "Sireen", "sound")
+binary(dc.TAMPER, "binary_sensor.demo_tamper", "off", "Rikkumine", "tamper")
+binary(dc.VALVE_LINK, "binary_sensor.demo_alarm_link", "on", "Ühendus", "connectivity")
 entry(
-    "sensor.valve_aku",
+    dc.VALVE_BATTERY,
     "sensor.demo_alarm_battery",
     "13.6",
     "Aku",
     unit_of_measurement="V",
     device_class="voltage",
 )
-entry("sensor.valve_uhendus", "sensor.demo_alarm_link_state", "online", "Ühendus")
+entry(
+    dc.VALVE_SUPPLY,
+    "sensor.demo_alarm_supply",
+    "13.1",
+    "Toide",
+    unit_of_measurement="V",
+    device_class="voltage",
+)
+entry(dc.VALVE_LINK_RAW, "sensor.demo_alarm_link_state", "online", "Ühendus")
 
 # faults and data flags
 binary(
@@ -803,9 +816,23 @@ def _walk(o, key=None):
     return o
 
 
+def _real_ids(model):
+    """The test house with its devices under the house's own ids where the catalogue maps one to
+    them, so the generator places the PIRs in its rooms (the plan slice) by the ids it knows; the
+    walk maps them back."""
+    if not model:
+        return model
+    real = {e["id"]: r for r, e in CATALOGUE.items() if r in dc.SHARED + dc.PRIVATE}
+    out = dict(model)
+    out["devices"] = [
+        {**d, "entity": real.get(d["entity"], d["entity"])} for d in out.get("devices", [])
+    ]
+    return out
+
+
 def demo_config(model):
     """The house's Overview for the demo house, every id and private label replaced."""
-    return _walk(a3.overview(DEMO_HOUSE, DEMO_PEOPLE, model))
+    return _walk(a3.overview(DEMO_HOUSE, DEMO_PEOPLE, _real_ids(model)))
 
 
 # A starting state per fixture device the catalogue does not cover, varied by position in the
@@ -881,8 +908,37 @@ def demo_states(model):
 # `drift` over a few days. counter: kWh per hour, its state the sum since the day's or the month's
 # start; `last` names last month's attribute (a utility meter's `last_period`, Daikin's month
 # names). cost: a counter's kWh times the price. price: € per kWh with all fees, with a morning
-# and an evening peak. duty: an on/off entity's daily hours on.
+# and an evening peak. duty: an on/off entity's daily hours on. pulses: a PIR's or a door's short
+# on-events (ADR-015), `hours` [[from, to, per hour]] of the day, the same on every load, ending at
+# its catalogue state `ago` minutes back and none in the QUIET_AGO minutes before it.
 RECORDER_ZONE = "Europe/Tallinn"
+# older than the 3D view's 15-minute motion glow: the 3D scenarios start with every PIR off this long
+QUIET_AGO = 30
+# each PIR's day in dashboard_config.SHARED + PRIVATE order, then each door's
+PULSES = [
+    [[6, 9, 12], [16, 21, 20]],
+    [[7, 9, 6], [17, 23, 25]],
+    [[6, 9, 15], [15, 23, 12]],
+    [[7, 8, 3], [17, 18, 3]],
+    [[6, 8, 10], [20, 22, 8]],
+    [[6, 7, 6], [21, 23, 8]],
+    [[7, 8, 8], [19, 21, 10]],
+    [[7, 8, 6], [18, 21, 8]],
+    [[9, 12, 10], [13, 17, 8]],
+]
+DOOR_PULSES = [[[7, 9, 2], [15, 19, 2]], [[12, 20, 1]], []]
+
+
+def _pulses(real, hours, seed):
+    e = CATALOGUE[real]
+    return {
+        "kind": "pulses",
+        "hours": hours,
+        "seed": seed,
+        "state": e["state"],
+        "ago": e.get("ago", 0),
+        "quiet": QUIET_AGO,
+    }
 
 
 def _wave_profile(level, amp, peak, drift=0.0, decimals=1):
@@ -945,6 +1001,16 @@ def demo_recorder():
         ids[dc.PERGOLA_LIGHT]: {"kind": "duty", "on": [[17, 23]], "states": ["off", "on"]},
         ids[dc.TV]: {"kind": "duty", "on": [[7, 8], [19, 22]], "states": ["off", "playing"]},
         ids[dc.MODE]: {"kind": "duty", "on": [[18, 19]], "states": ["normal", "kitchen"]},
+        **{
+            ids[real]: _pulses(real, hours, i)
+            for i, (real, hours) in enumerate(
+                zip(
+                    dc.SHARED + dc.PRIVATE + [e for e, _ in dc.DOORS],
+                    PULSES + DOOR_PULSES,
+                    strict=True,
+                )
+            )
+        },
     }
     return {
         "zone": RECORDER_ZONE,
@@ -1063,7 +1129,10 @@ def _word(s):
     # a word the house writes in lower case (a price level) reads as a raw key otherwise
     if s in en.WORDS:
         return en.WORDS[s]
-    if RAW.match(s) or NUMBER.match(s) or WHEN.match(s) or s in en.SAME:
+    # a state pattern: a "!" in front negates, a "*" at the end matches a prefix
+    if RAW.match(s.removeprefix("!").removesuffix("*")):
+        return s
+    if NUMBER.match(s) or WHEN.match(s) or s in en.SAME:
         return s
     if s not in en.WORDS:
         raise KeyError(f"no English for the state word {s!r} (add it to dashboard_demo_en.WORDS)")

@@ -28,9 +28,11 @@ This file holds rules and pointers; the reference lives in:
   the demo as the house's Overview, the cards in both languages
   ([ADR-012](docs/decisions/012-the-demo-is-the-houses-overview.md)),
   a days card's sheet over 30 days, 90 days and 12 months
-  ([ADR-013](docs/decisions/013-days-cards-open-a-long-range-sheet.md))
-  and the weather forecast read through `get_forecasts`
+  ([ADR-013](docs/decisions/013-days-cards-open-a-long-range-sheet.md)),
+  the weather forecast read through `get_forecasts`
   ([ADR-014](docs/decisions/014-a3-reads-the-weather-forecast-through-get-forecasts.md))
+  and page cards reading state history, with the house plan as a slice
+  ([ADR-015](docs/decisions/015-a3-page-cards-read-state-history.md))
 - [ROADMAP.md](ROADMAP.md) - house automation, near-term and the long form
 
 House documentation (HA rollout, dashboard layout, HVAC protocols, energy)
@@ -45,8 +47,9 @@ own.
 cards/             the dashboard's own Lovelace cards (khe-cards.js, ADR-002,
                    ADR-005, ADR-008, ADR-011): summary, price, tile, chips,
                    heading, status, Energia's month, days and split, and
-                   Soojuspump's and Ventilatsioon's reading and
-                   Pergola's forecast (ADR-014), with the
+                   Soojuspump's and Ventilatsioon's reading,
+                   Pergola's forecast (ADR-014) and Valve's motion
+                   with the house plan (ADR-015), with the
                    history sheet (a days card's over 30 days, 90 days
                    and 12 months, ADR-013), their words in Estonian and English by
                    their `language` config (ADR-012); A3 draws with them;
@@ -70,8 +73,8 @@ house3d/           3D house view: engine (core house3d.js, scene/ layer
                    placement page, vendored three.js
 scripts/           dashboard_config.py (the HA Overview as data, no I/O),
                    dashboard_a3.py (A3, Energia, Soojuspump,
-                   Ventilatsioon and Pergola in A3's look from the same
-                   entities, and
+                   Ventilatsioon, Pergola and Valve in A3's look from the
+                   same entities, the plan slice, and
                    overview(), what the house saves, ADR-005, ADR-007,
                    ADR-008, ADR-011),
                    ha-dashboard.py (reads the private inputs, saves either),

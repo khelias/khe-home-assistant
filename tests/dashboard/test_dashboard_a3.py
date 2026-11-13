@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 import dashboard_a3 as a3
 import dashboard_config as dc
+import house3d_model
 
 HOUSE = {
     "cams": [["cam_one", "Üks"], ["cam_two", "Kaks"]],
@@ -254,10 +255,12 @@ class Build(unittest.TestCase):
             | kodu_entities(SOOJUSPUMP)
             | ids(VENTILATSIOON)
             | ids(PERGOLA)
+            | ids(VALVE)
         )
         self.assertEqual(quoted & spelled, set())
 
 
+VALVE = a3.valve(MODEL)
 OVERVIEW = a3.overview(HOUSE, PEOPLE, MODEL)
 BUILT = dc.build(HOUSE, PEOPLE, MODEL)
 
@@ -280,6 +283,7 @@ class Overview(unittest.TestCase):
             "soojuspump": SOOJUSPUMP,
             "ventilatsioon": VENTILATSIOON,
             "pergola": PERGOLA,
+            "valve": VALVE,
         }
         built = [swapped.get(v["path"], v) for v in BUILT["views"] if v["path"] != "maja-3d"]
         self.assertEqual(OVERVIEW["views"][:-1], built)
@@ -696,3 +700,148 @@ class Pergola(unittest.TestCase):
         before = copy.deepcopy(dc.pergola)
         a3.pergola()
         self.assertEqual(dc.pergola, before)
+
+
+FIXTURE = house3d_model.with_room_names(
+    house3d_model.merge(
+        house3d_model.read_layers(ROOT / "tests/house3d/fixture-model.md"), house3d_model.CARD
+    )
+)
+FIXTURE_PIRS = [d["entity"] for d in FIXTURE["devices"] if d["type"] == "motion"]
+
+
+def placed(model, pirs):
+    """The fixture house with its PIRs under the given ids, in order."""
+    out = copy.deepcopy(model)
+    rename = dict(zip(FIXTURE_PIRS, pirs, strict=False))
+    for d in out["devices"]:
+        d["entity"] = rename.get(d["entity"], d["entity"])
+    return out
+
+
+class Valve(unittest.TestCase):
+    def test_every_stock_valve_entity_is_on_the_page(self):
+        stock = {i for i in ids(dc.valve) if not i.startswith("mdi:")}
+        self.assertIn(dc.VALVE_LINK_RAW, stock)
+        self.assertEqual(stock - ids(without_sheets(VALVE)), set())
+
+    def test_stock_title_path_and_icon_two_columns_and_a3s_background(self):
+        for k in ("title", "path", "icon"):
+            self.assertEqual(VALVE[k], dc.valve[k])
+        self.assertEqual(VALVE["max_columns"], 2)
+        self.assertEqual(VALVE["background"], VIEW["background"])
+        types = {c["type"] for s in VALVE["sections"] for c in s["cards"]}
+        self.assertTrue(all(t.startswith("custom:khe-") for t in types))
+
+    def test_the_alarm_tiles_open_more_info_and_the_page_calls_no_service(self):
+        for e, n in dc.ALARMS:
+            (t,) = tiles_of(VALVE, e)
+            self.assertEqual(t["name"], n)
+            self.assertNotIn("tap_action", t, "the body opens more-info by default")
+            self.assertEqual([m["option"] for m in t["modes"]], [s for s, _ in a3.ALARM_MODES])
+            for m in t["modes"]:
+                self.assertEqual(m["tap_action"], {"action": "more-info"})
+        for c in walk(VALVE):
+            for act in card_actions(c):
+                self.assertNotEqual(act.get("action"), "perform-action", c.get("type"))
+                self.assertNotEqual(act.get("action"), "toggle", c.get("type"))
+
+    def test_the_status_runs_alarm_to_disarmed_over_both_partitions(self):
+        (chips,) = [c for c in walk(VALVE) if c.get("type") == "custom:khe-chips-card"]
+        rules = chips["status"]["map"]
+        self.assertEqual(
+            [r["state"] for r in rules], ["triggered", "pending", "arming", "armed_*", "disarmed"]
+        )
+        for r in rules:
+            self.assertEqual(r["entities"], [e for e, _ in dc.ALARMS])
+        self.assertEqual({f["entity"] for f in chips["faults"]}, {dc.SMOKE, dc.VALVE_LINK})
+
+    def test_a_door_is_red_while_open_and_either_partition_armed(self):
+        (doors,) = [
+            c
+            for c in walk(VALVE)
+            if c.get("type") == "custom:khe-reading-card"
+            and any(x["entity"] == dc.DOORS[0][0] for x in c.get("cells", []))
+        ]
+        self.assertNotIn("entity", doors)
+        self.assertEqual([x["entity"] for x in doors["cells"]], [e for e, _ in dc.DOORS])
+        for x in doors["cells"]:
+            self.assertEqual(x["note"], {"last_on": True, "label": "avati"})
+            self.assertEqual(
+                x["bad_if"],
+                [
+                    [{"entity": x["entity"], "state": "on"}, {"entity": a, "state": "armed_*"}]
+                    for a, _ in dc.ALARMS
+                ],
+            )
+
+    def test_the_system_cells_and_the_notice(self):
+        cards = [c for c in walk(VALVE) if c.get("type") == "custom:khe-reading-card"]
+        system = cards[-1]
+        self.assertEqual(
+            [x["entity"] for x in system["cells"]],
+            [dc.SMOKE, dc.VALVE_BATTERY, dc.VALVE_LINK, dc.TAMPER, dc.SIREN],
+        )
+        self.assertEqual(system["cells"][1]["note"]["entity"], dc.VALVE_SUPPLY)
+        self.assertIn("Teavitus tuleb", system["note"]["text"])
+
+    def test_without_a_model_the_motion_card_has_no_plan_and_the_public_names(self):
+        (motion,) = [c for c in walk(a3.valve(None)) if c.get("type") == "custom:khe-motion-card"]
+        self.assertNotIn("plan", motion)
+        rows = [r for g in motion["groups"] for r in g["rooms"]]
+        self.assertEqual([r["entity"] for r in rows], dc.SHARED + dc.PRIVATE)
+        self.assertEqual(
+            [r["name"] for r in rows], [dc.MOTION_ROOMS[e] for e in dc.SHARED + dc.PRIVATE]
+        )
+        self.assertEqual([g["name"] for g in motion["groups"]], ["Ühisruumid", "Toad"])
+        self.assertEqual(motion["alarms"], [{"entity": e, "name": n} for e, n in dc.ALARMS])
+
+    def test_the_slice_has_rooms_walls_doors_and_placed_pirs_and_never_the_devices(self):
+        pirs = dc.SHARED + dc.PRIVATE
+        model = placed(FIXTURE, pirs)
+        sl = a3.plan_slice(model, pirs)
+        self.assertEqual(sorted(sl), ["pirs", "rooms", "walls"])
+        self.assertNotIn('"devices"', json.dumps(sl))
+        for w in sl["walls"]:
+            self.assertEqual(sorted(w), ["a", "b", "doors", "t"])
+        # every string is a room id, a room name or a placed PIR's id
+        room_ids = {r["id"] for r in sl["rooms"]}
+        names = {r["name"] for r in sl["rooms"]}
+        strings = {v for d in walk(sl) for v in d.values() if isinstance(v, str)}
+        self.assertEqual(strings - room_ids - names - {p["entity"] for p in sl["pirs"]}, set())
+        # only the PIRs the model places in a room, in the card's order
+        where = {d["entity"]: d["room"] for d in model["devices"]}
+        self.assertEqual(
+            sl["pirs"], [{"entity": e, "room": where[e]} for e in pirs if where.get(e) in room_ids]
+        )
+        self.assertIsNone(a3.plan_slice(None, pirs))
+        self.assertIsNone(a3.plan_slice(FIXTURE, ["binary_sensor.nowhere"]))
+
+    def test_rows_take_their_rooms_name_unless_two_pirs_share_it(self):
+        pirs = dc.SHARED + dc.PRIVATE
+        sl = a3.plan_slice(placed(FIXTURE, pirs), pirs)
+        names = a3.motion_names(sl)
+        rooms = {r["id"]: r["name"] for r in sl["rooms"]}
+        count = {}
+        for p in sl["pirs"]:
+            count[p["room"]] = count.get(p["room"], 0) + 1
+        for p in sl["pirs"]:
+            expected = rooms[p["room"]] if count[p["room"]] == 1 else dc.MOTION_ROOMS[p["entity"]]
+            self.assertEqual(names[p["entity"]], expected)
+        self.assertIn(2, count.values(), "the fixture has a room with two PIRs")
+        (motion,) = [
+            c
+            for c in walk(a3.valve(placed(FIXTURE, pirs)))
+            if c.get("type") == "custom:khe-motion-card"
+        ]
+        self.assertEqual(motion["plan"], sl)
+
+    def test_the_cards_plan_fixture_is_the_test_houses_slice(self):
+        pirs = FIXTURE_PIRS + ["binary_sensor.demo_room_a_motion"]
+        fixture = json.loads((ROOT / "tests/cards/fixtures/plan.json").read_text())
+        self.assertEqual(fixture, a3.plan_slice(FIXTURE, pirs))
+
+    def test_stock_valve_is_unchanged(self):
+        before = copy.deepcopy(dc.valve)
+        a3.valve(FIXTURE)
+        self.assertEqual(dc.valve, before)

@@ -217,3 +217,26 @@ test("a rule's last run keeps its clock time across the October change", () => {
   const before = rec.dated(Date.parse('2026-10-25T09:00:00Z'), { comma: false })[P.RAIN_RULE].attributes.last_triggered;
   assert.equal(before, '2026-10-24T11:19:00.000Z');
 });
+
+test("motion and doors (ADR-015): pulses by the hour that end at the catalogue's state and age, quiet before it", async () => {
+  const now = Date.parse('2026-11-13T15:24:00Z');
+  const pulses = Object.entries(spec.profiles).filter(([, p]) => p.kind === 'pulses');
+  assert.equal(pulses.length, 12, 'nine PIRs and three doors');
+  const msg = { type: 'history/history_during_period', start_time: new Date(now - 86400e3).toISOString(), entity_ids: pulses.map(([id]) => id), minimal_response: true, no_attributes: true };
+  const hist = await rec.callWS(msg, now), again = await rec.callWS(msg, now);
+  assert.deepEqual(hist, again, 'the same on every load');
+  const on = cards.onTimes(hist, pulses.map(([id]) => id));
+  for (const [id, p] of pulses) {
+    const rows = hist[id], last = rows.at(-1);
+    assert.equal(rows[0].s, 'off', `${id} starts off`);
+    assert.deepEqual(Object.keys(last).sort(), ['lu', 's']);
+    assert.equal(last.s, p.state, `${id} ends at its state`);
+    if (p.ago < 24 * 60) assert.equal(Math.round(last.lu), Math.round((now - p.ago * 60e3) / 1000), `${id} last changed ${p.ago} min ago`);
+    for (let i = 1; i < rows.length; i++) assert.ok(rows[i].lu >= rows[i - 1].lu, `${id} in order`);
+    const quiet = now - Math.max(p.ago, p.quiet) * 60e3 - 60e3, events = on[id];
+    assert.ok(events.slice(0, -1).every(t => t < quiet), `${id}: only its last change in the quiet minutes`);
+    if (p.hours.length && p.ago < 600) assert.ok(events.length >= 2, `${id} moves during the day`);
+  }
+  const back = pulses.find(([, p]) => !p.hours.length);
+  assert.equal(on[back[0]].length, 0, 'the back door has not opened in a day');
+});

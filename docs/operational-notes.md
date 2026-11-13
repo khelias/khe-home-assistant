@@ -194,7 +194,11 @@ its series' sheet over 30 days, 90 days and 12 months
 Pergola `custom:khe-forecast-card`, the weather entity's hourly forecast
 read through `weather.get_forecasts`
 ([ADR-014](decisions/014-a3-reads-the-weather-forecast-through-get-forecasts.md)),
-with the reading card's cells. Kodu was drawn
+with the reading card's cells, and for Valve `custom:khe-motion-card`, the
+house plan with the trail of the last 15 minutes and each room's hourly
+motion, beside the reading card's cells alone (no big value) for the doors
+and the panel, both on 24 hours of state history
+([ADR-015](decisions/015-a3-page-cards-read-state-history.md)). Kodu was drawn
 with them on 2026-10-17 and went back to stock cards the next day; A3
 uses them. Deploy replaces `www/khe-cards/` in HA's config volume, so HA
 serves them as `/local/khe-cards/`, and a change arrives without a restart.
@@ -313,7 +317,12 @@ behind every value and device. It replaced the Bubble Card trial of
   `row_span`. On Pergola compare the forecast's hours with a direct
   `weather.get_forecasts` call through `ha-ws.py` (`call_service` with
   `return_response`, ADR-014) and point an hour; a blank chart with the
-  cells still drawn means the call or its response changed.
+  cells still drawn means the call or its response changed. On Valve
+  compare a room's strip and last time and a door's "avati" with a direct
+  `history/history_during_period` read through `ha-ws.py` (ADR-015); blank
+  strips with the rooms still named mean its compressed rows changed. Tap a
+  mode on Maja and close HA's dialog without a code: the tile hands HA a
+  more-info, and HA's keypad is the frontend's.
 - **Energia** ([ADR-008](decisions/008-a3-page-cards-read-statistics.md)):
   the month card reads `maja_sel_kuul`, `maja_eelmine_kuu`, `maja_tana` and
   `maja_eile` with their `kulu` and `hind` attributes; the days cards read
@@ -368,6 +377,26 @@ behind every value and device. It replaced the Bubble Card trial of
   the conditions pass, so it is the last close command or the last time the
   light came on; `input_datetime.pergola_vihmateade` is only the last
   notification and is not shown. The settings subview is still Kodu's.
+- **Valve** ([ADR-015](decisions/015-a3-page-cards-read-state-history.md)):
+  the status runs over both partitions (`status.map`): "Häire" or
+  "Sisenemise viivitus" red, "Valvesse minek" or "Valves" blue, "Valvest
+  maas" green, the smoke and the link as fault chips. Maja and Garaaž are
+  wide tiles with Eemal, Kodus, Öö and Maas; any tap opens HA's more-info,
+  whose keypad takes the code, which the house asks for arming too
+  (`code_arm_required`), so the card never sees one. The doors are a
+  cells-only reading card: "kinni" or "lahti", red while open and either
+  partition armed, and "avati" from the last off-to-on in the card's own
+  history. The motion card reads the nine PIRs' 24 hours: a PIR's
+  `last_changed` is reset by every restart, so the last motion is the last
+  off-to-on in the history, and several rooms fire in one minute when the
+  panel's link returns, so the trail takes each room once by its last
+  motion, at most five. It is drawn through the plan slice the generator
+  cuts from the model (rooms, walls with their doors, each PIR's room),
+  along the doors and the open passages; the garage has no opening and
+  stands alone. A row's name is its room's name in the model when no other
+  PIR shares the room, else the public name in `dashboard_config`. Süsteem
+  shows the smoke group, the battery with the mains supply, the link,
+  tamper and the siren, and which events notify (`paradox.yaml`).
 
 ## The 3D house view (`house3d`)
 

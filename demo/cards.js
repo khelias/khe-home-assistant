@@ -18,7 +18,7 @@ const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
 const dtf = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 // the house's own cards (cards/khe-cards.js), drawn by themselves as HA mounts a custom: type
-const KHE_TYPES = ['summary', 'price', 'tile', 'chips', 'heading', 'status', 'month', 'days', 'split', 'reading', 'forecast'].map(k => `custom:khe-${k}-card`);
+const KHE_TYPES = ['summary', 'price', 'tile', 'chips', 'heading', 'status', 'month', 'days', 'split', 'reading', 'forecast', 'motion'].map(k => `custom:khe-${k}-card`);
 export const CARD_TYPES = ['tile', 'heading', 'horizontal-stack', 'vertical-stack', 'entities', 'markdown', 'button', 'statistics-graph', 'history-graph', 'custom:apexcharts-card', 'picture-glance', 'custom:advanced-camera-card', 'custom:house3d-card', ...KHE_TYPES];
 export const FEATURE_TYPES = ['cover-open-close', 'light-brightness', 'select-options', 'numeric-input', 'target-temperature', 'bar-gauge', 'alarm-modes'];
 export const ACTIONS = ['more-info', 'toggle', 'navigate', 'perform-action', 'url', 'none'];

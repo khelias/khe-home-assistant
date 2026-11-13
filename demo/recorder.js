@@ -102,6 +102,25 @@ export function createRecorder(spec, { zoneParts, dayStart, lastMonthName }) {
     }
     return out;
   }
+  // a PIR's or a door's rows (ADR-015): off at the start, short on-events by its hours of the day
+  // (how many in an hour varies by the hour, the same on every load), none in the quiet minutes
+  // before its last change, which is its catalogue state `ago` minutes back
+  const frac = x => { const v = Math.sin(x * 12.9898) * 43758.5453; return v - Math.floor(v); };
+  function pulses(p, start, end, now) {
+    const last = now - p.ago * 60e3, stop = now - Math.max(p.ago, p.quiet || 0) * 60e3 - 60e3;
+    const rows = [{ s: 'off', lu: start / 1000 }], add = (t, s) => { if (t > start && t <= end) rows.push({ s, lu: t / 1000 }); };
+    for (let h = Math.floor(start / HOUR) * HOUR; h < stop; h += HOUR) {
+      const at = hourOf(h), rate = ((p.hours || []).find(([a, b]) => at >= a && at < b) || [0, 0, 0])[2];
+      const n = Math.round(rate * (0.4 + 1.2 * frac(h / HOUR + p.seed * 7.3)));
+      for (let k = 0; k < n; k++) {
+        const t = h + ((k + 0.2 + 0.6 * frac(h / HOUR + k + p.seed)) / n) * HOUR;
+        if (t + 45e3 < stop) { add(t, 'on'); add(t + 45e3, 'off'); }
+      }
+    }
+    if (p.state === 'on') add(last, 'on');
+    else { add(last - 40e3, 'on'); add(last, 'off'); }
+    return rows;
+  }
   function history(msg, now) {
     const start = Date.parse(msg.start_time), end = Math.min(msg.end_time ? Date.parse(msg.end_time) : now, now);
     const out = {};
@@ -111,6 +130,8 @@ export function createRecorder(spec, { zoneParts, dayStart, lastMonthName }) {
       const rows = [];
       if (p.kind === 'wave') {
         for (let t = Math.ceil(start / FIVE) * FIVE; t <= end; t += FIVE) rows.push({ s: at(id, t).toFixed(p.decimals), lu: t / 1000 });
+      } else if (p.kind === 'pulses') {
+        rows.push(...pulses(p, start, end, now));
       } else if (p.kind === 'duty') {
         const on = t => p.on.some(([a, b]) => hourOf(t) >= a && hourOf(t) < b);
         let last = null;
