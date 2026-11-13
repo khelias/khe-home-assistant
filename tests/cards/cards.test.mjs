@@ -1317,6 +1317,17 @@ test('Valve: a room with no way to the next is a gap in the trail, not a reason 
   assert.equal((V.catmullRom(runs[1]).match(/C/g) || []).length, runs[1].length - 1);
 });
 
+test('Valve: two rooms are one walk only when they are next to each other and the second fired soon after the first', () => {
+  const g = fixtureGraph(), sensed = new Set(PLAN.pirs.map(p => p.room));
+  const at = (room, t, times = [t]) => ({ room, t, times });
+  const walk = V.trailRuns(g, [at('r1', min(5)), at('r3', min(4))], sensed);
+  assert.equal(walk.length, 1, 'kitchen to hall a minute later: one person');
+  assert.equal(V.trailRuns(g, [at('r1', min(9)), at('r3', min(1))], sensed).length, 2, 'the hall fired eight minutes after the kitchen: two people');
+  assert.equal(V.trailRuns(g, [at('r1', min(9)), at('r3', min(1), [min(8), min(1)])], sensed).length, 1, 'the hall fired a minute after the kitchen, and again since');
+  assert.equal(V.trailRuns(g, [at('r1', min(3)), at('r5', min(2))], sensed).length, 2, "kitchen to the children's room crosses the hall, which did not fire: two people");
+  assert.equal(V.trailRuns(g, [at('r1', min(3)), at('r5', min(2))]).length, 1, 'without the sensed rooms a path alone joins them');
+});
+
 const row = (entity, last, on = false) => ({ entity, name: entity, times: last === null ? [] : [last], on, last: on ? T0 : last });
 
 test('Valve: the trail is each room once by its last motion, the last five, inside 15 minutes', () => {
@@ -1335,18 +1346,18 @@ test('Valve: the trail is each room once by its last motion, the last five, insi
 });
 
 test('Valve: the plan fills the room in motion now, tints the trail, and is left out without a slice', () => {
-  const rows = [row('binary_sensor.test_hall_motion', min(6)), row('binary_sensor.test_kitchen_motion', null, true), row('binary_sensor.test_living_motion', null)];
+  const rows = [row('binary_sensor.test_hall_motion', min(1)), row('binary_sensor.test_kitchen_motion', null, true), row('binary_sensor.test_living_motion', null)];
   const p = V.planSvg(PLAN, rows, T0, V.a3Palette(false));
   assert.match(p.svg, /<svg class="plan"/);
   assert.match(p.svg, /fill="rgba\(48,176,199,0\.55\)"\/>/, 'r1 tinted strongly while its kitchen PIR is on');
   assert.match(p.svg, /fill="rgba\(48,176,199,0\.18\)"\/>/, 'the hall tinted for the trail');
   assert.match(p.svg, /fill="#55555b"\/>/, 'the outer walls');
-  assert.match(p.svg, /stroke="url\(#trail\)"/);
+  assert.match(p.svg, /stroke="url\(#trail0\)"/, 'the hall a minute before the kitchen: one walk');
   assert.match(p.svg, /class="ring"/);
   assert.equal(p.aria, 'Maja plaan, liikumise tee viimase veerandtunniga: Eeskoda ja Pere köök-elutuba');
   assert.deepEqual(V.planSvg(null, rows, T0, V.a3Palette(false)), { svg: '', aria: '' });
   const quiet = V.planSvg(PLAN, [row('binary_sensor.test_hall_motion', min(60))], T0, V.a3Palette(false));
-  assert.doesNotMatch(quiet.svg, /url\(#trail\)/);
+  assert.doesNotMatch(quiet.svg, /url\(#trail/);
   assert.match(quiet.aria, /pole$/);
 });
 

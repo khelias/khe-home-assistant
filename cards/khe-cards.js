@@ -3019,28 +3019,38 @@ export function shortestPath(g, from, to) {
 
 // The trail: the rooms with motion in the last `minutes`, each once by its last motion, the last
 // five; a PIR not in the plan stays out, two PIRs in one room light it together. rows' `last`
-// is the PIR's last motion. Returns [{ room, t }], oldest first.
+// is the PIR's last motion and `times` its motions. Returns [{ room, t, times }], oldest first.
 export function trailRooms(plan, rows, now, minutes = 15, most = 5) {
-  const roomOf = new Map((plan.pirs || []).map(p => [p.entity, p.room])), last = new Map();
+  const roomOf = new Map((plan.pirs || []).map(p => [p.entity, p.room])), last = new Map(), times = new Map();
   for (const r of rows) {
     const room = roomOf.get(r.entity);
     if (!room || r.last === null || r.last < now - minutes * 60e3) continue;
     if (!last.has(room) || r.last > last.get(room)) last.set(room, r.last);
+    times.set(room, [...(times.get(room) || []), ...(r.times || []), r.last]);
   }
-  return [...last].map(([room, t]) => ({ room, t })).sort((a, b) => a.t - b.t).slice(-most);
+  return [...last].map(([room, t]) => ({ room, t, times: times.get(room) })).sort((a, b) => a.t - b.t).slice(-most);
 }
 
-// the trail's runs of points: consecutive rooms joined by the shortest path between their anchors,
-// a hop with no path a gap between two runs
-export function trailRuns(g, rooms) {
+// one person's walk from a room to the next: the next room fired soon after the first one's last
+// motion (or just before it, as two PIRs overlap at a door)
+const STEP_AFTER = 120e3, STEP_BEFORE = 30e3;
+
+// The trail's runs of points. Two consecutive rooms are one person's walk, joined by the shortest
+// path between their anchors, only when that path crosses no third room with a PIR (which would
+// have fired on the way) and the next room fired within two minutes of the first one's last
+// motion; anything else, or no path at all, starts a run of its own: several people are several
+// short trails, not one line through the house.
+export function trailRuns(g, rooms, sensed = null) {
   const runs = [];
   let run = null;
+  const crosses = (path, a, b) => sensed && path.some(p => g.rects.some(x => x.room !== a && x.room !== b && sensed.has(x.room) && p[0] > x.r[0] + EPS && p[0] < x.r[2] - EPS && p[1] > x.r[1] + EPS && p[1] < x.r[3] - EPS));
+  const soon = (prev, x) => !x.times || x.times.some(t => t >= prev.t - STEP_BEFORE && t <= prev.t + STEP_AFTER);
   rooms.forEach((x, i) => {
     const a = g.anchor[x.room];
     if (a === undefined) return;
     if (!run || i === 0) { run = [g.nodes[a]]; runs.push(run); return; }
-    const from = g.anchor[rooms[i - 1].room], path = from === undefined ? null : shortestPath(g, from, a);
-    if (path) run.push(...path.slice(1));
+    const prev = rooms[i - 1], from = g.anchor[prev.room], path = from === undefined ? null : shortestPath(g, from, a);
+    if (path && !crosses(path, prev.room, x.room) && soon(prev, x)) run.push(...path.slice(1));
     else { run = [g.nodes[a]]; runs.push(run); }
   });
   return runs;
@@ -3106,8 +3116,9 @@ export function houseRects(plan, box) {
 const TEAL = '#30b0c7', PW = 330, PH = 360;
 // The plan's SVG, drawn as a floor plan: the house's floor, the rooms on the trail tinted to their
 // walls' middle (the room in motion now stronger), the walls at their thickness with the door
-// openings cut out, the trail as one curve fading in from its start with a dot at each room it
-// passed and a ring where it ends, and the sensed rooms' names, lifted over the trail's dots.
+// openings cut out, the trail as one curve per walk (trailRuns) fading in from its start, a dot at
+// each room it passed and at each walk's end, a ring at the latest while there is motion, and the
+// sensed rooms' names, lifted over the trail's dots.
 // { svg, aria }; '' without a plan or a sensed room.
 export function planSvg(plan, rows, now, pal, lang = 'et', minutes = 15) {
   const w = words(lang);
@@ -3119,7 +3130,7 @@ export function planSvg(plan, rows, now, pal, lang = 'et', minutes = 15) {
   const bx0 = Math.min(...all.map(r => r[0])) - HALF_WALL, bz0 = Math.min(...all.map(r => r[1])) - HALF_WALL, bx1 = Math.max(...all.map(r => r[2])) + HALF_WALL, bz1 = Math.max(...all.map(r => r[3])) + HALF_WALL;
   const K = Math.min(PW / (bx1 - bx0), PH / (bz1 - bz0)), pad = 4;
   const X = x => pad + (x - bx0) * K, Z = z => pad + (z - bz0) * K, vw = (bx1 - bx0) * K + 2 * pad, vh = (bz1 - bz0) * K + 2 * pad;
-  const g = graphOf(plan), trail = trailRooms(plan, rows, now, minutes), runs = trailRuns(g, trail);
+  const g = graphOf(plan), trail = trailRooms(plan, rows, now, minutes), runs = trailRuns(g, trail, sensed);
   const roomOf = new Map(plan.pirs.map(p => [p.entity, p.room])), nowRooms = new Set(rows.filter(r => r.on).map(r => roomOf.get(r.entity)).filter(Boolean));
   const inTrail = new Set(trail.map(x => x.room));
   const c = pal.dark
@@ -3137,14 +3148,20 @@ export function planSvg(plan, rows, now, pal, lang = 'et', minutes = 15) {
     for (const q of wallPieces(wl, box, 2.2 / K) || []) walls[(wl.t || 0) > 0.3 ? 'outer' : 'inner'] += `M${q.map(p => P(p).map(f).join(' ')).join('L')}Z`;
   }
   const plates = `${tints}<path d="${walls.inner}" fill="${c.inner}"/><path d="${walls.outer}" fill="${c.outer}"/>`;
-  const pts = runs.map(run => run.map(P)), flat = pts.flat();
+  // each run fades in from its start and ends in a dot; the latest one, while there is motion, rings
+  const pts = runs.map(run => run.map(P));
   let curve = '';
-  if (flat.length) {
-    const [s, e] = [flat[0], flat[flat.length - 1]];
-    const grad = `<linearGradient id="trail" gradientUnits="userSpaceOnUse" x1="${f(s[0])}" y1="${f(s[1])}" x2="${f(e[0] + (e[0] === s[0] && e[1] === s[1] ? 1 : 0))}" y2="${f(e[1])}"><stop offset="0" stop-color="${TEAL}" stop-opacity="0.15"/><stop offset="1" stop-color="${TEAL}"/></linearGradient>`;
-    const stops = trail.slice(0, -1).map((x, i) => { const a = P(g.nodes[g.anchor[x.room]]); return `<circle cx="${f(a[0])}" cy="${f(a[1])}" r="4" fill="${TEAL}" fill-opacity="${(0.35 + (0.5 * i) / Math.max(1, trail.length - 1)).toFixed(2)}"/>`; }).join('');
-    const live = nowRooms.size > 0;
-    curve = `<defs>${grad}</defs><path d="${pts.map(catmullRom).join('')}" fill="none" stroke="url(#trail)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>${stops}${live ? `<circle class="ring" cx="${f(e[0])}" cy="${f(e[1])}" r="7" fill="none" stroke="${TEAL}" stroke-width="2"/>` : ''}<circle cx="${f(e[0])}" cy="${f(e[1])}" r="7" fill="${pal.dark ? '#1c1c1e' : '#fff'}" stroke="${TEAL}" stroke-width="3"/>`;
+  if (pts.length) {
+    const live = nowRooms.size > 0, ends = new Set();
+    curve = pts.map((run, i) => {
+      const [s, e] = [run[0], run[run.length - 1]], id = `trail${i}`, latest = i === pts.length - 1;
+      ends.add(`${f(e[0])} ${f(e[1])}`);
+      const line = run.length > 1 ? `<defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${f(s[0])}" y1="${f(s[1])}" x2="${f(e[0])}" y2="${f(e[1])}"><stop offset="0" stop-color="${TEAL}" stop-opacity="0.15"/><stop offset="1" stop-color="${TEAL}"/></linearGradient></defs><path d="${catmullRom(run)}" fill="none" stroke="url(#${id})" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>` : '';
+      return `${line}${latest && live ? `<circle class="ring" cx="${f(e[0])}" cy="${f(e[1])}" r="7" fill="none" stroke="${TEAL}" stroke-width="2"/>` : ''}<circle cx="${f(e[0])}" cy="${f(e[1])}" r="${latest ? 7 : 6}" fill="${pal.dark ? '#1c1c1e' : '#fff'}" stroke="${TEAL}" stroke-width="3"/>`;
+    }).join('');
+    const stops = trail.map((x, i) => ({ a: P(g.nodes[g.anchor[x.room]]), i })).filter(({ a }) => !ends.has(`${f(a[0])} ${f(a[1])}`))
+      .map(({ a, i }) => `<circle cx="${f(a[0])}" cy="${f(a[1])}" r="4" fill="${TEAL}" fill-opacity="${(0.35 + (0.5 * i) / Math.max(1, trail.length - 1)).toFixed(2)}"/>`).join('');
+    curve = `${stops}${curve}`;
   }
   const labels = rooms.map(room => {
     const a = g.nodes[g.anchor[room.id]], on = nowRooms.has(room.id);
