@@ -1,6 +1,6 @@
 {
- "_about": "The hourly answer of weather.get_forecasts (call_service with return_response) for the house's weather entity, captured from the live house on 2026-11-13 at 17:20 Europe/Tallinn, the entity id replaced, only the four fields the card reads kept (values only).",
- "now": 1794583200000,
+ "_about": "The hourly answer of weather.get_forecasts (call_service with return_response) for the house's weather entity, captured from the live house on 2026-11-13 at 16:20 Europe/Tallinn, when its first row is the next hour, the entity id replaced, only the four fields the card reads kept (values only).",
+ "now": 1794579600000,
  "response": {
   "weather.test_forecast": {
    "forecast": [

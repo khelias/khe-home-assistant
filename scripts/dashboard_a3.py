@@ -917,7 +917,7 @@ def pergola():
                             icon="roof",
                             color="teal",
                             active=[],
-                            state_text="Poole peal peata Stopiga · asendit seade ei teata",
+                            state_text="Poole peal peata Stopiga · asend pole teada",
                             modes=[
                                 {"name": "Ava", "tap_action": roof_action("cover.open_cover")},
                                 {"name": "Stopp", "tap_action": roof_action("cover.stop_cover")},

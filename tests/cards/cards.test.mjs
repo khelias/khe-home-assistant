@@ -1015,10 +1015,11 @@ test('Pergola: the forecast request is a get_forecasts call with its response', 
 test('Pergola: the house forecast from the hour now, 14 hours, its total and the dry stretch', () => {
   const rows = fcRows();
   assert.equal(rows.length, 14);
-  // 15:20 UTC: the 15:00 row is the hour now
+  // at 14:20 UTC the house answers from the next hour, 15:00; an hour on, 15:00 is the hour now
   assert.equal(new Date(rows[0].t).toISOString(), '2026-11-13T15:00:00.000Z');
-  assert.equal(A3.forecastHours(FC, FC_ID, FC.now + 3600e3).length, 14);
-  assert.equal(new Date(A3.forecastHours(FC, FC_ID, FC.now + 3600e3)[0].t).toISOString(), '2026-11-13T16:00:00.000Z');
+  assert.equal(new Date(A3.forecastHours(FC, FC_ID, FC.now + 3600e3)[0].t).toISOString(), '2026-11-13T15:00:00.000Z');
+  assert.equal(new Date(A3.forecastHours(FC, FC_ID, FC.now + 2 * 3600e3)[0].t).toISOString(), '2026-11-13T16:00:00.000Z');
+  assert.equal(A3.forecastHours(FC, FC_ID, FC.now + 2 * 3600e3).length, 14);
   const s = A3.forecastSummary(rows);
   assert.equal(Number(s.total.toFixed(1)), 2.7);
   // dry 15-17 UTC is 17-19 in Tallinn, the first two dry hours

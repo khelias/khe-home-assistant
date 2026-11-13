@@ -123,9 +123,7 @@ EN = {
     "Kahe tunniga": "In two hours",
     "Kuiv": "Dry",
     "Mida see ise teeb": "What it does by itself",
-    "Poole peal peata Stopiga · asendit seade ei teata": (
-        "Stop it halfway with Stop · the roof reports no position"
-    ),
+    "Poole peal peata Stopiga · asend pole teada": "Stop halfway with Stop · position not known",
     "Pooled eraldi, vihmateade, õhtune valgus": "Each side, rain notice, evening light",
     "Soe": "Warm",
     "Valge": "White",
