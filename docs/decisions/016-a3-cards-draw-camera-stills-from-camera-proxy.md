@@ -21,9 +21,11 @@ flash it.
 ## Decision
 
 1. **The cameras card reads each camera's current `entity_picture`** from
-   `hass` at the moment it loads a still, adds a time parameter so no cache
-   answers, and a `width` for a thumbnail. It depends on the proxy's token
-   and its rotation as HA's own image element does.
+   `hass` at the moment it loads a still and adds a time parameter so no
+   cache answers. It depends on the proxy's token and its rotation as HA's
+   own image element does. The house's NVR ignores the proxy's `width`:
+   every still, a thumbnail's too, is a 1920x1080 frame of 90 to 160 KB
+   (measured 2026-11-13), so the card asks none.
 2. **It polls on its own timers**: the large still every 10 s, the
    thumbnails every 30 s, only while the card is on the page and the tab
    visible; becoming visible or connected loads every still at once. No
@@ -53,7 +55,8 @@ flash it.
   and leaves the names and the system cells; the HA bump check in
   `docs/operational-notes.md` opens Kaamerad and watches the stills refresh
   across a token rotation.
-- Each open Kaamerad tab asks the NVR's substreams through HA for one
-  large still every 10 s and the others every 30 s.
+- Each open Kaamerad tab asks the NVR through HA for one large still every
+  10 s and the others every 30 s: with four cameras about 27 KB/s while the
+  page is in front.
 - Camera motion is not on the page: it fires about every 30 s, rain or not.
   A "what happened at night" needs the cameras' smart detection first.

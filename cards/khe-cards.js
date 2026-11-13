@@ -9,7 +9,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 21;
+export const KHE_CARDS_VERSION = 22;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -3249,11 +3249,11 @@ export function motionA3Markup(conf, states, on, now, lang = 'et', hass = {}) {
 const pictureOf = st => (st && st.attributes && st.attributes.entity_picture) || null;
 
 // a camera's still: the state's entity_picture (the camera_proxy URL with its rotating token) with
-// a time parameter so no cache answers, and a width for a thumbnail; null without a picture
-export function cameraUrl(st, t, width) {
+// a time parameter so no cache answers; null without a picture. The house's NVR ignores `width`:
+// a thumbnail is the same 1920x1080 frame (2026-11-13).
+export function cameraUrl(st, t) {
   const pic = pictureOf(st);
-  if (!pic) return null;
-  return `${pic}${pic.includes('?') ? '&' : '?'}t=${t}${width ? `&width=${width}` : ''}`;
+  return pic ? `${pic}${pic.includes('?') ? '&' : '?'}t=${t}` : null;
 }
 
 // what a camera's slot shows, { kind, text }: 'live' its still; 'stale' the last good still dimmed,
@@ -3268,7 +3268,7 @@ export function cameraSlot(st, last, failed, lang = 'et', tz = localZone()) {
 // the thumbnails under a hero: the other cameras in the config's order
 export const cameraThumbs = (n, hero) => [...Array(n).keys()].filter(i => i !== hero);
 
-const CAM_HERO = 10e3, CAM_THUMB = 30e3, THUMB_WIDTH = 320;
+const CAM_HERO = 10e3, CAM_THUMB = 30e3;
 const CAMERAS_CSS = `
 .cams{display:flex;flex-direction:column;gap:8px;padding:8px;border-radius:26px}
 .hero,.th{position:relative;display:block;width:100%;overflow:hidden;background:#2c2c32}
@@ -3355,19 +3355,19 @@ class CamerasCard extends KheCard {
     const want = this.isConnected && !!this._cams && !document.hidden && this._config.cameras.some(c => pictureOf(states[c.entity]));
     if (want === !!this._timers) return;
     if (!want) { this._stop(); return; }
-    const thumbs = () => cameraThumbs(this._config.cameras.length, this._hero).forEach(i => this._load(i, THUMB_WIDTH));
-    this._timers = [setInterval(() => this._load(this._hero, 0), CAM_HERO), setInterval(thumbs, CAM_THUMB)];
-    this._load(this._hero, 0);
+    const thumbs = () => cameraThumbs(this._config.cameras.length, this._hero).forEach(i => this._load(i));
+    this._timers = [setInterval(() => this._load(this._hero), CAM_HERO), setInterval(thumbs, CAM_THUMB)];
+    this._load(this._hero);
     thumbs();
   }
   _stop() { (this._timers || []).forEach(clearInterval); this._timers = null; }
   // a load while one for the camera is still on its way waits for the next turn, unless `now`
   // (a new hero) drops the old one
-  _load(i, width, now = false) {
+  _load(i, now = false) {
     const busy = this._loads[i];
     if (busy && !now) return;
     if (busy) busy.removeAttribute('src');
-    const url = cameraUrl(this._hass && this._hass.states[this._config.cameras[i].entity], Date.now(), width);
+    const url = cameraUrl(this._hass && this._hass.states[this._config.cameras[i].entity], Date.now());
     if (!url) { this._loads[i] = null; return; }
     const im = (this._loads[i] = new Image()), c = this._cams[i];
     im.className = 'pic';
@@ -3400,7 +3400,7 @@ class CamerasCard extends KheCard {
     if (b.dataset.k === 'hero') { const c = cams[this._hero]; this._fire(actionDetail(c.entity, c.tap_action || { action: 'more-info' })); return; }
     this._hero = cameraThumbs(cams.length, this._hero)[Number(b.dataset.k.slice(1))];
     this._update();
-    this._load(this._hero, 0, true);
+    this._load(this._hero, true);
   }
 }
 

@@ -1560,9 +1560,8 @@ test('Valve: a reading card of cells alone draws no big value, its cells with th
 
 const PROXY = '/api/camera_proxy/camera.tee_alamvoog?token=abc';
 
-test('Kaamerad: the still URL carries the token, a time and a thumbnail width, and none without a picture', () => {
+test('Kaamerad: the still URL carries the token and a time, and none without a picture', () => {
   assert.equal(V.cameraUrl(st('idle', { entity_picture: PROXY }), 1700000000000), `${PROXY}&t=1700000000000`);
-  assert.equal(V.cameraUrl(st('idle', { entity_picture: PROXY }), 5, 320), `${PROXY}&t=5&width=320`);
   assert.equal(V.cameraUrl(st('idle', { entity_picture: '/x.jpg' }), 5), '/x.jpg?t=5');
   assert.equal(V.cameraUrl(st('idle'), 5), null);
   assert.equal(V.cameraUrl(undefined, 5), null);

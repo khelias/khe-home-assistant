@@ -408,7 +408,9 @@ behind every value and device. It replaced the Bubble Card trial of
   too), then the first substream `unavailable`, else "Kõik kaamerad ja NVR
   korras". The cameras card draws the substreams' stills, the house file's
   first camera large; a tap on it opens `kaamera-<slug>`, a thumbnail's
-  makes it the large one. A camera whose state
+  makes it the large one. Every still is the NVR's 1920x1080 frame, a
+  thumbnail's too: `camera_proxy`'s `width` changes nothing for these
+  cameras. A camera whose state
   stays `idle` while its still fails shows "korras" in the status and
   "Kaamera ei vasta" on its still: the status reads only states. Salvestised
   opens the NVR app (`nvr_app_url`, absent without it). Süsteem: the NVR
