@@ -9,7 +9,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 22;
+export const KHE_CARDS_VERSION = 23;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -2272,6 +2272,11 @@ const fmtN = (v, d, lang) => formatNumber(v.toFixed(d), d, lang);
 // A card with _historyIds() also reads their state history (ADR-015): under the name `hist`, not
 // shared, reloaded when it is connected again with data older than five minutes, its live
 // off-to-on changes merged in between, and redrawn on a minute key of its own.
+// each config's last load, so a card HA rebuilds or configures again (on every dashboard save)
+// draws its data at once instead of collapsing to "loading", which pulls the page up under the
+// reader's finger; a stale one still reloads (_ensure, connectedCallback) over it
+const LOADED = new Map();
+
 class LoadingCard extends KheCard {
   static a3only = true;
   _loadKey() { return this._hass ? hourKeyOf(Date.now(), tzOf(this._hass)) : 0; }
@@ -2281,7 +2286,12 @@ class LoadingCard extends KheCard {
   // the history entities, once per config
   _hist() { return (this._hids ??= this._config ? this._historyIds() : []); }
   // another config asks for other data
-  setConfig(config) { this._loadedFor = null; this._data = null; this._live = {}; this._prev = null; this._hids = null; super.setConfig(config); }
+  setConfig(config) {
+    const key = JSON.stringify(config), kept = LOADED.get(key);
+    this._key = key; this._loadedFor = kept ? kept.loadedFor : null; this._data = kept ? kept.data : null;
+    this._live = {}; this._prev = null; this._hids = null;
+    super.setConfig(config);
+  }
   set hass(hass) {
     const ids = this._hist();
     if (ids.length) {
@@ -2311,6 +2321,7 @@ class LoadingCard extends KheCard {
         if (this._token !== token) return;
         this._data = d;
         if (d.error) { this._loadedFor = null; this._retryAt = Date.now() + 60e3; }
+        else LOADED.set(this._key, { data: d, loadedFor: hour });
         super._draw();
       });
   }
