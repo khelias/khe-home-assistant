@@ -10,7 +10,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 26;
+export const KHE_CARDS_VERSION = 27;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -141,7 +141,8 @@ const ET = {
   motionNow: 'Liikumine praegu', lastMotion: v => `Viimane liikumine ${v}`, minAgo: n => `${n} min tagasi`, quiet: 'Vaikne',
   noMotion: 'Ööpäeva jooksul liikumist pole', motionOn: 'liikumine', motionOff: 'vaikne', timesUnit: 'korda', over24h: 'üle 24 h', nowRow: 'praegu', alarmIn: n => `Häire, ${n}`,
   pendingIn: n => `Sisenemise viivitus, ${n}`, firedAt: t => `andur käivitus kell ${t}`, firedUnknown: 'andur pole teada',
-  planAria: l => (l ? `Maja plaan, liikumise tee viimase veerandtunniga: ${l}` : 'Maja plaan, viimase veerandtunniga liikumist pole'),
+  planAria: l => (l ? `Maja plaan, liikumine viimase veerandtunniga: ${l}` : 'Maja plaan, viimase veerandtunniga liikumist pole'),
+  andMore: (a, n) => `${a} ja veel ${n}`,
   motionRow: (n, l) => `${n}, viimati ${l}, ajalugu`,
   camLive: 'Otsepilt', camTap: 'puuduta otsepildiks', camOpen: n => `${n}, ava otsepilt`, camShow: n => `${n}, näita suurelt`,
   camDown: 'Kaamera ei vasta', camLast: t => `Kaamera ei vasta, viimane pilt ${t}`,
@@ -207,7 +208,8 @@ const EN = {
   motionNow: 'Motion now', lastMotion: v => `Last motion ${v}`, minAgo: n => `${n} min ago`, quiet: 'Quiet',
   noMotion: 'No motion in the last day', motionOn: 'motion', motionOff: 'quiet', timesUnit: 'times', over24h: 'over 24 h', nowRow: 'now', alarmIn: n => `Alarm, ${n}`,
   pendingIn: n => `Entry delay, ${n}`, firedAt: t => `sensor fired at ${t}`, firedUnknown: 'sensor not known',
-  planAria: l => (l ? `House plan, the path of motion in the last quarter hour: ${l}` : 'House plan, no motion in the last quarter hour'),
+  planAria: l => (l ? `House plan, motion in the last quarter hour: ${l}` : 'House plan, no motion in the last quarter hour'),
+  andMore: (a, n) => `${a} and ${n} more`,
   motionRow: (n, l) => `${n}, last ${l}, history`,
   camLive: 'Live', camTap: 'tap for the live view', camOpen: n => `${n}, open the live view`, camShow: n => `${n}, show large`,
   camDown: 'Camera not responding', camLast: t => `Camera not responding, last image ${t}`,
@@ -2986,9 +2988,14 @@ export function motionRows(conf, states, on, now) {
   }));
 }
 
+// motion this recent counts as now: a PIR's on state lasts seconds, and several people keep
+// several rooms firing in turn
+const NOW_WINDOW = 120e3;
+
 // The headline: { tone, label, big, note }. While a partition is pending or triggered (bad), the
-// room that fired last before it changed; while a PIR is on, the rooms in motion now; else the last
-// motion and how long ago; quiet without any in 24 hours.
+// room that fired last before it changed; while there is motion now, its rooms in the card's own
+// order (stable while people move), two by name and the rest counted; else the last motion and
+// how long ago; quiet without any in 24 hours.
 export function motionHeadline(rows, states, alarms, now, lang = 'et', tz = localZone()) {
   const w = words(lang);
   const alarm = (alarms || []).find(a => ['triggered', 'pending'].includes(stateOf(states, a.entity)));
@@ -2999,8 +3006,8 @@ export function motionHeadline(rows, states, alarms, now, lang = 'et', tz = loca
     const label = st.state === 'triggered' ? w.alarmIn(alarm.name) : w.pendingIn(alarm.name);
     return { tone: 'bad', label, big: best ? best.name : cap(w.notKnown), note: best ? w.firedAt(clockAt(best.t, tz)) : w.firedUnknown, entity: best ? best.entity : null };
   }
-  const live = rows.filter(r => r.on).sort((a, b) => (states[b.entity].last_changed || '').localeCompare(states[a.entity].last_changed || ''));
-  if (live.length) return { tone: 'live', label: w.motionNow, big: joinEt(live.map(r => r.name), lang), note: '' };
+  const live = [...new Set(rows.filter(r => r.on || (r.last !== null && now - r.last <= NOW_WINDOW)).map(r => r.name))];
+  if (live.length) return { tone: 'live', label: w.motionNow, big: live.length > 2 ? w.andMore(live.slice(0, 2).join(', '), live.length - 2) : joinEt(live, lang), note: '' };
   const last = rows.filter(r => r.last !== null).sort((a, b) => b.last - a.last)[0];
   if (last) return { tone: 'last', label: w.lastMotion(agoText(last.last, now, lang, tz)), big: last.name, note: '' };
   return { tone: 'quiet', label: w.noMotion, big: w.quiet, note: '' };
@@ -3202,11 +3209,10 @@ export function houseRects(plan, box) {
 }
 
 const TEAL = '#30b0c7', PW = 330, PH = 360;
-// The plan's SVG, drawn as a soft floor plan: the house's floor, the rooms on the trail tinted to
-// their walls' middle (the room in motion now stronger), the walls as round-ended lines with the
-// door openings cut out, the trail as one curve per walk (trailRuns) fading in from its start, a dot at
-// each room it passed and at each walk's end, a ring at the latest while there is motion, and the
-// sensed rooms' names, lifted over the trail's dots.
+// The plan's SVG, drawn as a soft floor plan: the house's floor, every room with motion in the last
+// `minutes` tinted to its walls' middle by how recent it was, a pulsing dot in each room with motion
+// now, the walls as round-ended lines with the door openings cut out, the last five minutes' walk
+// when there was only one, and the sensed rooms' names, lifted over their dots.
 // { svg, aria }; '' without a plan or a sensed room.
 export function planSvg(plan, rows, now, pal, lang = 'et', minutes = 15) {
   const w = words(lang);
@@ -3218,46 +3224,52 @@ export function planSvg(plan, rows, now, pal, lang = 'et', minutes = 15) {
   const bx0 = Math.min(...all.map(r => r[0])) - HALF_WALL, bz0 = Math.min(...all.map(r => r[1])) - HALF_WALL, bx1 = Math.max(...all.map(r => r[2])) + HALF_WALL, bz1 = Math.max(...all.map(r => r[3])) + HALF_WALL;
   const K = Math.min(PW / (bx1 - bx0), PH / (bz1 - bz0)), pad = 4;
   const X = x => pad + (x - bx0) * K, Z = z => pad + (z - bz0) * K, vw = (bx1 - bx0) * K + 2 * pad, vh = (bz1 - bz0) * K + 2 * pad;
-  const g = graphOf(plan), trail = trailRooms(plan, rows, now, minutes), runs = trailRuns(g, trail, sensed);
-  const roomOf = new Map(plan.pirs.map(p => [p.entity, p.room])), nowRooms = new Set(rows.filter(r => r.on).map(r => roomOf.get(r.entity)).filter(Boolean));
-  const inTrail = new Set(trail.map(x => x.room));
+  const g = graphOf(plan), roomOf = new Map(plan.pirs.map(p => [p.entity, p.room]));
+  // each sensed room's last motion (now while a PIR is on) within the window
+  const lastOf = new Map();
+  for (const r of rows) {
+    const room = roomOf.get(r.entity), t = r.on ? now : r.last;
+    if (room && t !== null && t >= now - minutes * 60e3 && (!lastOf.has(room) || t > lastOf.get(room))) lastOf.set(room, t);
+  }
+  const fresh = id => lastOf.has(id) && now - lastOf.get(id) <= NOW_WINDOW;
+  // a walk is drawn only while the house is quiet enough to read one: everything in the last five
+  // minutes is one walk of two rooms or more (one person); with more people the rooms say it
+  const recent = trailRooms(plan, rows, now, 5), walks = trailRuns(g, recent, sensed);
+  const walk = walks.length === 1 && recent.length > 1 ? walks[0] : null;
   // the A3 palette's own greys: the floor in the segmented controls' fill, the walls as soft lines
   const ink = pal.dark ? '235,235,245' : '60,60,67';
-  const c = { floor: pal.seg, trail: 'rgba(48,176,199,0.16)', now: 'rgba(48,176,199,0.42)', outer: `rgba(${ink},0.42)`, inner: `rgba(${ink},${pal.dark ? 0.2 : 0.24})` };
+  const c = { floor: pal.seg, outer: `rgba(${ink},0.42)`, inner: `rgba(${ink},${pal.dark ? 0.2 : 0.24})` };
+  // a room's tint: strong for motion now, fading to faint at the window's end
+  const tintOf = id => (fresh(id) ? 0.42 : 0.3 - 0.22 * Math.min(1, (now - lastOf.get(id)) / (minutes * 60e3)));
   const f = v => v.toFixed(1), box = [bx0, bz0, bx1, bz1];
   const P = p => [X(p[0]), Z(p[1])];
   const rectD = r => `M${f(X(r[0]))} ${f(Z(r[1]))}H${f(X(r[2]))}V${f(Z(r[3]))}H${f(X(r[0]))}Z`;
   const floor = houseRects(plan, box).map(rectD).join('');
   const allRects = (plan.rooms || []).flatMap(r => r.rects);
-  const tints = rooms.filter(room => inTrail.has(room.id) || nowRooms.has(room.id)).map(room =>
-    `<path d="${room.rects.map(r => rectD(growRect(r, allRects.filter(o => o !== r)))).join('')}" fill="${nowRooms.has(room.id) ? c.now : c.trail}"/>`).join('');
+  const tints = rooms.filter(room => lastOf.has(room.id)).map(room =>
+    `<path d="${room.rects.map(r => rectD(growRect(r, allRects.filter(o => o !== r)))).join('')}" fill="rgba(48,176,199,${tintOf(room.id).toFixed(2)})"/>`).join('');
   const walls = { outer: '', inner: '' };
   for (const wl of plan.walls || []) {
     for (const [a, b] of wallSpans(wl, box) || []) walls[(wl.t || 0) > 0.3 ? 'outer' : 'inner'] += `M${P(a).map(f).join(' ')}L${P(b).map(f).join(' ')}`;
   }
   const line = (d, color, width) => `<path d="${d}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"/>`;
   const plates = `${tints}${line(walls.inner, c.inner, 2)}${line(walls.outer, c.outer, 5)}`;
-  // each run fades in from its start and ends in a dot; the latest one, while there is motion, rings
-  const pts = runs.map(run => run.map(P));
   let curve = '';
-  if (pts.length) {
-    const live = nowRooms.size > 0, ends = new Set();
-    curve = pts.map((run, i) => {
-      const [s, e] = [run[0], run[run.length - 1]], id = `trail${i}`, latest = i === pts.length - 1;
-      ends.add(`${f(e[0])} ${f(e[1])}`);
-      const line = run.length > 1 ? `<defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${f(s[0])}" y1="${f(s[1])}" x2="${f(e[0])}" y2="${f(e[1])}"><stop offset="0" stop-color="${TEAL}" stop-opacity="0.15"/><stop offset="1" stop-color="${TEAL}"/></linearGradient></defs><path d="${catmullRom(run)}" fill="none" stroke="url(#${id})" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>` : '';
-      return `${line}${latest && live ? `<circle class="ring" cx="${f(e[0])}" cy="${f(e[1])}" r="7" fill="none" stroke="${TEAL}" stroke-width="2"/>` : ''}<circle cx="${f(e[0])}" cy="${f(e[1])}" r="${latest ? 7 : 6}" fill="${pal.dark ? '#1c1c1e' : '#fff'}" stroke="${TEAL}" stroke-width="3"/>`;
-    }).join('');
-    const stops = trail.map((x, i) => ({ a: P(g.nodes[g.anchor[x.room]]), i })).filter(({ a }) => !ends.has(`${f(a[0])} ${f(a[1])}`))
-      .map(({ a, i }) => `<circle cx="${f(a[0])}" cy="${f(a[1])}" r="4" fill="${TEAL}" fill-opacity="${(0.35 + (0.5 * i) / Math.max(1, trail.length - 1)).toFixed(2)}"/>`).join('');
-    curve = `${stops}${curve}`;
+  if (walk) {
+    const pts = walk.map(P), [s, e] = [pts[0], pts[pts.length - 1]];
+    curve = `<defs><linearGradient id="walk" gradientUnits="userSpaceOnUse" x1="${f(s[0])}" y1="${f(s[1])}" x2="${f(e[0])}" y2="${f(e[1])}"><stop offset="0" stop-color="${TEAL}" stop-opacity="0.15"/><stop offset="1" stop-color="${TEAL}"/></linearGradient></defs><path d="${catmullRom(pts)}" fill="none" stroke="url(#walk)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>`;
   }
+  // a dot where there is motion now, pulsing; a walk's rooms before its end get small dots
+  const anchorOf = id => P(g.nodes[g.anchor[id]]);
+  const dots = rooms.filter(room => fresh(room.id)).map(room => { const [x, y] = anchorOf(room.id); return `<circle class="ring" cx="${f(x)}" cy="${f(y)}" r="6" fill="none" stroke="${TEAL}" stroke-width="2"/><circle cx="${f(x)}" cy="${f(y)}" r="6" fill="${pal.dark ? '#1c1c1e' : '#fff'}" stroke="${TEAL}" stroke-width="3"/>`; }).join('');
+  const steps = walk ? recent.filter(x => !fresh(x.room)).map(x => { const [px, py] = anchorOf(x.room); return `<circle cx="${f(px)}" cy="${f(py)}" r="4" fill="${TEAL}" fill-opacity="0.6"/>`; }).join('') : '';
+  curve += `${steps}${dots}`;
+  const marked = id => fresh(id) || (walk && recent.some(x => x.room === id));
   const labels = rooms.map(room => {
-    const a = g.nodes[g.anchor[room.id]], on = nowRooms.has(room.id);
-    const lit = on || inTrail.has(room.id);
-    return `<text x="${f(X(a[0]))}" y="${f(Z(a[1]) - (lit ? 13 : 0))}" text-anchor="middle" dominant-baseline="middle" font-size="11.5" font-weight="${on ? 700 : 600}" fill="${lit ? pal.text : pal.sub}">${esc(room.name)}</text>`;
+    const [x, y] = anchorOf(room.id), lit = lastOf.has(room.id);
+    return `<text x="${f(x)}" y="${f(y - (marked(room.id) ? 14 : 0))}" text-anchor="middle" dominant-baseline="middle" font-size="11.5" font-weight="${fresh(room.id) ? 700 : 600}" fill="${lit ? pal.text : pal.sub}">${esc(room.name)}</text>`;
   }).join('');
-  const names = trail.map(x => (plan.rooms.find(r => r.id === x.room) || {}).name).filter(Boolean);
+  const names = rooms.filter(room => lastOf.has(room.id)).sort((a, b) => lastOf.get(b.id) - lastOf.get(a.id)).map(room => room.name);
   const aria = w.planAria(joinEt(names, lang));
   return { svg: `<svg class="plan" viewBox="0 0 ${f(vw)} ${f(vh)}" role="img" aria-label="${esc(aria)}"><path d="${floor}" fill="${c.floor}"/>${plates}${curve}${labels}</svg>`, aria };
 }
@@ -3266,7 +3278,8 @@ const MOTION_CSS = `${PRICE_A3_CSS}
 .main{padding:16px;box-sizing:border-box}
 .msg{display:flex;align-items:center;justify-content:center;min-height:88px;font-size:14px;color:var(--sub)}
 .hd .big{align-items:center;gap:9px}
-.hd .big .n{font-size:26px;line-height:1.12;letter-spacing:-0.022em}
+.hd .l,.hd .big{min-width:0}
+.hd .big .n{font-size:26px;line-height:1.12;letter-spacing:-0.022em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .hd.bad .lab,.hd.bad .n{color:var(--high)}
 .dotlive{flex:none;width:10px;height:10px;border-radius:5px;background:${TEAL};animation:pulse 1.8s ease-out infinite}
 svg.plan{display:block;width:100%;height:auto;max-height:420px}

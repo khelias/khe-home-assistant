@@ -1345,19 +1345,27 @@ test('Valve: the trail is each room once by its last motion, the last five, insi
   assert.deepEqual(V.trailRooms(every, busy, T0).map(x => x.room), PLAN.rooms.slice(-5).map(r => r.id), 'six rooms or more keep the last five');
 });
 
-test('Valve: the plan fills the room in motion now, tints the trail, and is left out without a slice', () => {
+test('Valve: the plan tints every room with motion by how recent, rings the ones now, and draws a walk only for one person', () => {
+  const pal = V.a3Palette(false);
   const rows = [row('binary_sensor.test_hall_motion', min(1)), row('binary_sensor.test_kitchen_motion', null, true), row('binary_sensor.test_living_motion', null)];
-  const p = V.planSvg(PLAN, rows, T0, V.a3Palette(false));
+  const p = V.planSvg(PLAN, rows, T0, pal);
   assert.match(p.svg, /<svg class="plan"/);
-  assert.match(p.svg, /fill="rgba\(48,176,199,0\.42\)"\/>/, 'r1 tinted strongly while its kitchen PIR is on');
-  assert.match(p.svg, /fill="rgba\(48,176,199,0\.16\)"\/>/, 'the hall tinted for the trail');
+  assert.equal((p.svg.match(/fill="rgba\(48,176,199,0\.42\)"\/>/g) || []).length, 2, 'the kitchen on and the hall a minute ago both count as now');
+  assert.equal((p.svg.match(/<circle class="ring"/g) || []).length, 2, 'a pulsing dot in each');
   assert.match(p.svg, /stroke="rgba\(60,60,67,0\.42\)" stroke-width="5" stroke-linecap="round"/, 'the outer walls as soft round-ended lines');
-  assert.match(p.svg, /stroke="url\(#trail0\)"/, 'the hall a minute before the kitchen: one walk');
-  assert.match(p.svg, /class="ring"/);
-  assert.equal(p.aria, 'Maja plaan, liikumise tee viimase veerandtunniga: Eeskoda ja Pere köök-elutuba');
-  assert.deepEqual(V.planSvg(null, rows, T0, V.a3Palette(false)), { svg: '', aria: '' });
-  const quiet = V.planSvg(PLAN, [row('binary_sensor.test_hall_motion', min(60))], T0, V.a3Palette(false));
-  assert.doesNotMatch(quiet.svg, /url\(#trail/);
+  assert.match(p.svg, /stroke="url\(#walk\)"/, 'the hall a minute before the kitchen and nothing else: one walk');
+  assert.equal(p.aria, 'Maja plaan, liikumine viimase veerandtunniga: Pere köök-elutuba ja Eeskoda');
+  // two people: the kitchen and the children's room, past the hall that did not fire
+  const two = V.planSvg(PLAN, [row('binary_sensor.test_kitchen_motion', min(1)), row('binary_sensor.demo_room_a_motion', null, true)], T0, pal);
+  assert.doesNotMatch(two.svg, /url\(#walk\)/, 'two rooms that are no walk: no line');
+  // an older room fades, no cap of five
+  const many = V.planSvg(PLAN, [row('binary_sensor.test_bath_motion', min(12)), row('binary_sensor.test_hall_motion', min(4))], T0, pal);
+  assert.match(many.svg, /fill="rgba\(48,176,199,0\.12\)"\/>/, 'twelve minutes ago is faint');
+  assert.match(many.svg, /fill="rgba\(48,176,199,0\.24\)"\/>/, 'four minutes ago is stronger');
+  assert.doesNotMatch(many.svg, /class="ring"/, 'nothing now');
+  assert.deepEqual(V.planSvg(null, rows, T0, pal), { svg: '', aria: '' });
+  const quiet = V.planSvg(PLAN, [row('binary_sensor.test_hall_motion', min(60))], T0, pal);
+  assert.doesNotMatch(quiet.svg, /url\(#walk|rgba\(48,176,199/);
   assert.match(quiet.aria, /pole$/);
 });
 
@@ -1378,6 +1386,11 @@ test('Valve: the headline: motion now, the last motion and how long ago, quiet',
   assert.equal(V.motionHeadline(old, alarmStates(), ALARM_CONF, T0, 'et', tz).label, 'Viimane liikumine täna 14:14');
   assert.equal(V.motionHeadline(old, alarmStates(), ALARM_CONF, T0, 'en', tz).label, 'Last motion today 14:14');
   assert.deepEqual(V.motionHeadline([{ ...row('binary_sensor.k', null), name: 'Köök' }], alarmStates(), ALARM_CONF, T0, 'et', tz), { tone: 'quiet', label: 'Ööpäeva jooksul liikumist pole', big: 'Vaikne', note: '' });
+  // several people: the rooms of the last two minutes in the card's order, two by name
+  const busy = ['Köök', 'Elutuba', 'Koridor', 'Kontor'].map((name, i) => ({ ...row(`binary_sensor.${i}`, min([1.5, 0.2, 3, 0.5][i])), name }));
+  assert.equal(V.motionHeadline(busy, alarmStates(), ALARM_CONF, T0, 'et', tz).big, 'Köök, Elutuba ja veel 1', 'the corridor three minutes ago is not now');
+  assert.equal(V.motionHeadline(busy.slice(0, 2), alarmStates(), ALARM_CONF, T0, 'et', tz).big, 'Köök ja Elutuba', 'the order is the card\'s, not the last to fire');
+  assert.equal(V.motionHeadline(busy, alarmStates(), ALARM_CONF, T0, 'en', tz).big, 'Köök, Elutuba and 1 more');
 });
 
 test('Valve: while a partition is pending or triggered, the room that fired last before it changed', () => {
@@ -1391,7 +1404,7 @@ test('Valve: while a partition is pending or triggered, the room that fired last
   assert.equal(V.motionHeadline(rows, alarmStates('pending', min(7.5)), ALARM_CONF, T0, 'et', tz).big, 'Koridor');
   assert.equal(V.motionHeadline(rows, alarmStates('pending', min(7.5)), ALARM_CONF, T0, 'en', tz).label, 'Entry delay, Maja');
   assert.deepEqual(V.motionHeadline(rows, alarmStates('triggered', min(30)), ALARM_CONF, T0, 'et', tz), { tone: 'bad', label: 'Häire, Maja', big: 'Pole teada', note: 'andur pole teada', entity: null });
-  assert.equal(V.motionHeadline(rows, alarmStates('armed_away', min(30)), ALARM_CONF, T0, 'et', tz).tone, 'last', 'armed alone is no alarm');
+  assert.notEqual(V.motionHeadline(rows, alarmStates('armed_away', min(30)), ALARM_CONF, T0, 'et', tz).tone, 'bad', 'armed alone is no alarm');
 });
 
 test("Valve: a row's last time is 'praegu', the time today, the day before or 'üle 24 h'", () => {
