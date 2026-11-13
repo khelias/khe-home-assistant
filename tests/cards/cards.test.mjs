@@ -1402,7 +1402,10 @@ test('Valve: the motion card draws loading, then the headline, the plan and a ro
   assert.match(m.html, /<svg class="plan"/);
   assert.match(m.html, /aria-label="Eeskoda, viimati 16:20, ajalugu"/);
   assert.match(m.html, /aria-label="Tuba 1, viimati üle 24 h, ajalugu"/);
-  assert.deepEqual(m.sheets.get('r0').history, { entity: 'binary_sensor.test_hall_motion', source: 'history' });
+  assert.deepEqual(m.sheets.get('r0').history, { entity: 'binary_sensor.test_hall_motion', source: 'history', counts: true });
+  assert.equal(m.sheets.get('r0').unit, 'korda');
+  assert.equal(m.sheets.get('r0').text(states), 'vaikne', 'a motion sensor is quiet, not off');
+  assert.equal(m.sheets.get('r0').text({ 'binary_sensor.test_hall_motion': { state: 'on' } }), 'liikumine');
   assert.doesNotMatch(V.motionA3Markup({ ...conf, plan: undefined }, states, {}, T0, 'et', hass).html, /<svg class="plan"/, 'no slice, no plan, the rows stay');
 });
 
@@ -1417,6 +1420,18 @@ test('Valve: the motion card split in two, the plan with its headline and the ro
   assert.doesNotMatch(plan, /class="mr /);
   assert.doesNotMatch(rows, /<svg|Viimane liikumine/);
   assert.match(rows, /aria-label="Eeskoda, viimati 16:20, ajalugu"/);
+});
+
+test('Valve: a motion sheet counts the times a sensor fired, per hour over a day and per day over a week', () => {
+  const tz = 'Europe/Tallinn', step = (pairs) => ({ kind: 'step', points: pairs.map(([m, v]) => ({ t: min(m), v })) });
+  const day = V.countSeries(step([[30 * 60, false], [125, true], [124, false], [64, true], [63, false], [61, true], [60, null], [59, true], [58, false]]), '24h', T0, tz);
+  assert.equal(day.kind, 'bars');
+  assert.equal(day.points.length, 24);
+  assert.equal(day.points.reduce((a, p) => a + p.v, 0), 3, 'off to on only, an unavailable gap between two on states is none');
+  assert.ok(day.points.every((p, i) => !i || p.t - day.points[i - 1].t === 3600e3));
+  const week = V.countSeries(step([[9 * 24 * 60, false], [8 * 24 * 60, true], [2 * 24 * 60, false], [2 * 24 * 60 - 1, true]]), '7d', T0, tz);
+  assert.equal(week.points.length, 7);
+  assert.equal(week.points.reduce((a, p) => a + p.v, 0), 1, 'a firing before the week is out');
 });
 
 test('Valve: a wall is drawn in pieces between its door openings, at least a hairline thick', () => {

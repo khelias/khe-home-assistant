@@ -9,7 +9,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 19;
+export const KHE_CARDS_VERSION = 20;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -135,7 +135,7 @@ const ET = {
   precipKey: 'sademed mm', tempKey: 'temperatuur', rainKey: 'vihm või lumi',
   forecastAria: n => `Tunniprognoos ${n} tundi: sademed tulpadena, temperatuur joonena`,
   motionNow: 'Liikumine praegu', lastMotion: v => `Viimane liikumine ${v}`, minAgo: n => `${n} min tagasi`, quiet: 'Vaikne',
-  noMotion: 'Ööpäeva jooksul liikumist pole', over24h: 'üle 24 h', nowRow: 'praegu', alarmIn: n => `Häire, ${n}`,
+  noMotion: 'Ööpäeva jooksul liikumist pole', motionOn: 'liikumine', motionOff: 'vaikne', timesUnit: 'korda', over24h: 'üle 24 h', nowRow: 'praegu', alarmIn: n => `Häire, ${n}`,
   pendingIn: n => `Sisenemise viivitus, ${n}`, firedAt: t => `andur käivitus kell ${t}`, firedUnknown: 'andur pole teada',
   planAria: l => (l ? `Maja plaan, liikumise tee viimase veerandtunniga: ${l}` : 'Maja plaan, viimase veerandtunniga liikumist pole'),
   motionRow: (n, l) => `${n}, viimati ${l}, ajalugu`,
@@ -193,7 +193,7 @@ const EN = {
   precipKey: 'precipitation mm', tempKey: 'temperature', rainKey: 'rain or snow',
   forecastAria: n => `Hourly forecast, ${n} hours: precipitation as bars, temperature as a line`,
   motionNow: 'Motion now', lastMotion: v => `Last motion ${v}`, minAgo: n => `${n} min ago`, quiet: 'Quiet',
-  noMotion: 'No motion in the last day', over24h: 'over 24 h', nowRow: 'now', alarmIn: n => `Alarm, ${n}`,
+  noMotion: 'No motion in the last day', motionOn: 'motion', motionOff: 'quiet', timesUnit: 'times', over24h: 'over 24 h', nowRow: 'now', alarmIn: n => `Alarm, ${n}`,
   pendingIn: n => `Entry delay, ${n}`, firedAt: t => `sensor fired at ${t}`, firedUnknown: 'sensor not known',
   planAria: l => (l ? `House plan, the path of motion in the last quarter hour: ${l}` : 'House plan, no motion in the last quarter hour'),
   motionRow: (n, l) => `${n}, last ${l}, history`,
@@ -848,6 +848,23 @@ export function seriesFrom(resp, h) {
   return { kind: 'step', points: rows.map(r => ({ t: t(r), v: NO_VALUE.has(r.s) ? null : active.includes(r.s), s: r.s })) };
 }
 
+// A motion sensor's on/off history as how many times it fired: bars per hour over 24 h, per day in
+// HA's zone over a week or a month. Only off-to-on changes count, as on the motion card (ADR-015).
+export function countSeries(series, range, now, tz) {
+  const starts = range === '24h' ? Array.from({ length: 24 }, (_, i) => hourStartIn(now, tz) - (23 - i) * HOUR) : dayStarts(range === '7d' ? 7 : 30, now, tz);
+  const bins = starts.map(t => ({ t, v: 0 }));
+  let known = null;
+  for (const p of series.points) {
+    if (p.v && known === false && p.t >= starts[0] && p.t <= now) {
+      let i = starts.length - 1;
+      while (i > 0 && starts[i] > p.t) i -= 1;
+      bins[i].v += 1;
+    }
+    if (p.v !== null) known = p.v;
+  }
+  return { kind: 'bars', points: bins, cost: null };
+}
+
 // { lo, mean, hi } of a line, time-weighted for a stepped history line, null when it has no value
 export function lineStats(series, start, end = Date.now()) {
   const pts = series.points.filter(p => p.v !== null);
@@ -1092,6 +1109,7 @@ class Sheet {
       } else {
         const h = sp.history;
         series = seriesFrom(await hass.callWS(historyRequest(h, range, now)), h);
+        if (h.counts && series.kind === 'step') series = countSeries(series, range, now, tzOf(hass));
         // an entity whose statistics come back empty (none kept, or a new one) falls back to history
         if (series.kind === 'empty' && h.source === 'statistics' && h.type !== 'change') {
           const hh = { ...h, source: 'history' };
@@ -3161,7 +3179,7 @@ function motionA3(card, states, pal, on, now) {
   const groups = (c.groups || []).map(g => {
     const list = rows.filter(r => r.group === g.name).map(r => {
       const k = `r${i++}`, last = on ? rowLast(r, now, L, tz) : '–';
-      card._sheets.set(k, { title: r.name, entity: r.entity, more: r.entity, decimals: 0, unit: '', color: 'teal', history: { entity: r.entity, source: 'history' } });
+      card._sheets.set(k, { title: r.name, entity: r.entity, more: r.entity, decimals: 0, unit: w.timesUnit, color: 'teal', text: st => (st[r.entity] && st[r.entity].state === 'on' ? w.motionOn : w.motionOff), history: { entity: r.entity, source: 'history', counts: true } });
       return `<button type="button" class="mr press${hot && hot === r.entity ? ' bad' : ''}" data-k="${k}" aria-label="${esc(w.motionRow(r.name, last))}"><span class="nm">${esc(r.name)}</span><span class="st" aria-hidden="true">${cellsOf(on ? hourlyCounts(r.times, now, tz) : new Array(24).fill(0))}</span><span class="lt num${r.on ? ' now' : ''}">${esc(last)}</span></button>`;
     }).join('');
     return `<span class="grp">${esc(g.name)}</span>${list}`;
