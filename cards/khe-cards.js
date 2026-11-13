@@ -9,7 +9,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 20;
+export const KHE_CARDS_VERSION = 21;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -71,6 +71,7 @@ const ICONS = {
   home: '<path d="M3 11l9-7 9 7M5 10v10h14V10M10 20v-6h4v6"/>',
   chevron: '<path d="M9 6l6 6-6 6"/>',
   tune: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8M16 5v4M10 15v4"/>',
+  play: '<path d="M8 5v14l11-7z"/>',
   rain: '<path d="M7 16a4 4 0 0 1-.9-7.9A5 5 0 0 1 16 7h.5a3.5 3.5 0 0 1 .5 7M9 19v2M13 18v2M17 17v2"/>',
   sunset: '<path d="M12 3v2M5.6 5.6 7 7M3 12h2M17 7l1.4-1.4M19 12h2M8 12a4 4 0 0 1 8 0M3 16h18M7 20h10"/>'
 };
@@ -139,6 +140,8 @@ const ET = {
   pendingIn: n => `Sisenemise viivitus, ${n}`, firedAt: t => `andur käivitus kell ${t}`, firedUnknown: 'andur pole teada',
   planAria: l => (l ? `Maja plaan, liikumise tee viimase veerandtunniga: ${l}` : 'Maja plaan, viimase veerandtunniga liikumist pole'),
   motionRow: (n, l) => `${n}, viimati ${l}, ajalugu`,
+  camLive: 'Otsepilt', camTap: 'puuduta otsepildiks', camOpen: n => `${n}, ava otsepilt`, camShow: n => `${n}, näita suurelt`,
+  camDown: 'Kaamera ei vasta', camLast: t => `Kaamera ei vasta, viimane pilt ${t}`,
   conditions: {
     'clear-night': 'selge', cloudy: 'pilves', exceptional: 'erakordne ilm', fog: 'udu', hail: 'rahe', lightning: 'äike',
     'lightning-rainy': 'äike ja vihm', partlycloudy: 'vahelduv pilvisus', pouring: 'paduvihm', rainy: 'vihm', snowy: 'lumi',
@@ -197,6 +200,8 @@ const EN = {
   pendingIn: n => `Entry delay, ${n}`, firedAt: t => `sensor fired at ${t}`, firedUnknown: 'sensor not known',
   planAria: l => (l ? `House plan, the path of motion in the last quarter hour: ${l}` : 'House plan, no motion in the last quarter hour'),
   motionRow: (n, l) => `${n}, last ${l}, history`,
+  camLive: 'Live', camTap: 'tap for the live view', camOpen: n => `${n}, open the live view`, camShow: n => `${n}, show large`,
+  camDown: 'Camera not responding', camLast: t => `Camera not responding, last image ${t}`,
   conditions: {
     'clear-night': 'clear', cloudy: 'cloudy', exceptional: 'exceptional weather', fog: 'fog', hail: 'hail', lightning: 'thunder',
     'lightning-rainy': 'thunder and rain', partlycloudy: 'partly cloudy', pouring: 'downpour', rainy: 'rain', snowy: 'snow',
@@ -486,8 +491,8 @@ class KheCard extends Base {
     this._hass = hass;
     if (!this._config) return;
     const dark = !!(hass.themes && hass.themes.darkMode), clock = this._clock(), seen = this._seen;
-    if (seen && seen[0] === dark && seen[1] === clock && this._ids.every((e, i) => seen[i + 2] === hass.states[e])) return;
-    this._seen = [dark, clock, ...this._ids.map(e => hass.states[e])];
+    if (seen && seen[0] === dark && seen[1] === clock && this._ids.every((e, i) => seen[i + 2] === this._stamp(hass.states[e]))) return;
+    this._seen = [dark, clock, ...this._ids.map(e => this._stamp(hass.states[e]))];
     this._draw();
     if (this._sheet) this._sheet.live();
   }
@@ -496,24 +501,30 @@ class KheCard extends Base {
   getGridOptions() { return { columns: 'full' }; }
   _check() {}
   _watched() { return []; }
+  // what of a watched state redraws the card: any new state object by default
+  _stamp(st) { return st; }
   _clock() { return 0; }
   _draw() {
     if (!this._config || !this._hass) return;
     if (this._holding) { this._stale = true; return; }
-    const dark = !!(this._hass.themes && this._hass.themes.darkMode);
-    const pal = this._a3 ? a3Palette(dark) : palette(dark);
-    // the style changes only with the theme
-    if (this._cssDark !== dark) {
-      const C = this.constructor, own = this._a3 && C.a3css !== undefined ? C.a3css : C.css;
-      this._styleEl.textContent = `${cssVars(pal)}${BASE_CSS}${this._a3 ? A3_CSS : ''}${own}`;
-      this._cssDark = dark;
-    }
+    const pal = this._style();
     // keep the focus on the same control across a redraw, without scrolling to it: a redraw
     // comes with any watched state change, long after the operator scrolled away
     const focused = this.shadowRoot.activeElement && this.shadowRoot.activeElement.dataset.k;
     this._root.innerHTML = this._html(this._hass.states, pal);
     if (focused) { const el = this._root.querySelector(`[data-k="${CSS.escape(focused)}"]`); if (el) el.focus({ preventScroll: true }); }
     if (this._wire) this._wire();
+  }
+  // the palette of HA's theme; the style changes only with it
+  _style() {
+    const dark = !!(this._hass.themes && this._hass.themes.darkMode);
+    const pal = this._a3 ? a3Palette(dark) : palette(dark);
+    if (this._cssDark !== dark) {
+      const C = this.constructor, own = this._a3 && C.a3css !== undefined ? C.a3css : C.css;
+      this._styleEl.textContent = `${cssVars(pal)}${BASE_CSS}${this._a3 ? A3_CSS : ''}${own}`;
+      this._cssDark = dark;
+    }
+    return pal;
   }
   // a drag holds redraws; its end draws what changed meanwhile
   _hold(on) {
@@ -1969,10 +1980,23 @@ export function cellSheet(x, states, lang = 'et') {
   return spec;
 }
 
-// a cell's value: its own word for the state (`words: { off: 'kinni' }`), else the value with its unit
+// a count cell, `count: { entities: [{ entity, name }], state }`: { value, tone, note }, how many of
+// the entities are in `state` (a stateIs pattern; one without a value never is) as `n / total`,
+// red while one is not, and the names of those that are not, or `note.missing` when none
+export function countCell(x, states, lang = 'et') {
+  const list = x.count.entities || [];
+  const missing = list.filter(e => { const st = states[e.entity]; return !hasValue(st) || !stateIs(st.state, x.count.state); }).map(e => e.name);
+  return { value: `${list.length - missing.length} / ${list.length}`, tone: missing.length ? 'bad' : '', note: missing.length ? joinEt(missing, lang) : (x.note || {}).missing || '' };
+}
+
+// a cell's value: its own word for the state (`words: { off: 'kinni' }`; an exact key first, then
+// the first key that matches as a stateIs pattern, `'*'` any state), else the value with its unit
 export function cellValue(x, states, lang = 'et') {
   const st = states[x.entity];
-  if (x.words && st && Object.hasOwn(x.words, st.state)) return x.words[st.state];
+  if (x.words && st) {
+    const key = Object.hasOwn(x.words, st.state) ? st.state : Object.keys(x.words).find(k => stateIs(st.state, k));
+    if (key !== undefined) return x.words[key];
+  }
   return valueText(st, x.decimals ?? 0, lang, x);
 }
 
@@ -2009,12 +2033,15 @@ export function cellNote(x, states, lang = 'et', ctx = {}) {
   return v === null ? '' : v > n.value ? n.above : n.below;
 }
 
-// the reading and forecast cards' cells: each a button that opens its history sheet
+// the reading and forecast cards' cells: each a button that opens its history sheet, a count cell
+// plain text, as it has no one history
 function cellRow(card, states, cells, ctx = {}) {
   const list = cells.map((x, i) => {
-    const value = cellValue(x, states, card._lang), tone = cellTone(x, states), note = cellNote(x, states, card._lang, ctx);
+    const { value, tone, note } = x.count ? countCell(x, states, card._lang) : { value: cellValue(x, states, card._lang), tone: cellTone(x, states), note: cellNote(x, states, card._lang, ctx) };
+    const inner = `<span class="lab">${esc(x.name)}</span><span class="v num${tone ? ` ${tone}` : ''}">${esc(value)}</span><span class="sub">${esc(note)}</span>`;
+    if (x.count) return `<span class="cell">${inner}</span>`;
     card._sheets.set(`c${i}`, cellSheet(x, states, card._lang));
-    return `<button type="button" class="press" data-k="c${i}" aria-label="${esc(card._w.history(`${x.name} ${value}`))}"><span class="lab">${esc(x.name)}</span><span class="v num${tone ? ` ${tone}` : ''}">${esc(value)}</span><span class="sub">${esc(note)}</span></button>`;
+    return `<button type="button" class="press" data-k="c${i}" aria-label="${esc(card._w.history(`${x.name} ${value}`))}">${inner}</button>`;
   });
   return `<span class="${cellsClass(cells.length)}">${list.join('')}</span>`;
 }
@@ -2541,7 +2568,7 @@ svg.ln{display:block;width:100%;height:88px;touch-action:pan-y}
 .meter{display:flex;flex-direction:column;gap:6px}
 .meter .mh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:15px;font-weight:600}
 .meter .mv{font-weight:700}
-.cells button{display:flex;flex-direction:column;gap:1px;min-width:0;min-height:44px}
+.cells button,.cells .cell{display:flex;flex-direction:column;gap:1px;min-width:0;min-height:44px}
 .cells .v{font-size:20px;font-weight:700;letter-spacing:-0.02em}
 .cells .v.bad{color:var(--high)}
 .cells .v.good{color:var(--good)}
@@ -2555,6 +2582,15 @@ svg.ln{display:block;width:100%;height:88px;touch-action:pan-y}
 .stp .sv{min-width:46px;height:40px;border-radius:10px;background:var(--segOn);box-shadow:var(--segShadow);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700}
 `;
 
+// the entities a reading card redraws on: its own, its line's, chip's, note's, meter's and
+// stepper's, and its cells' with their notes', rules' and counts'
+export function readingWatched(c) {
+  const chip = c.chip || {}, cells = c.cells || [];
+  const ruled = cells.flatMap(x => (x.bad_if || []).flat().map(r => r.entity));
+  const counted = cells.flatMap(x => ((x.count || {}).entities || []).map(e => e.entity));
+  return [...new Set([c.entity, (c.line || {}).statistic, chip.entity, chip.fault, ((c.note || {}).target || {}).entity, (c.meter || {}).entity, ...cells.map(x => x.entity), ...cells.map(x => (x.note || {}).entity), ...ruled, ...counted, (c.stepper || {}).entity].filter(Boolean))];
+}
+
 const LW = 341, LH = 88, LTOP = 8, LBOT = 4;
 
 // One reading big, with a note, a chip, a meter, its hourly line, the reading and cells that open
@@ -2565,11 +2601,7 @@ const STEP_SETTLE = 1500, STEP_WAIT = 60e3;
 class ReadingCard extends LoadingCard {
   static css = READING_CSS;
   _check(c) { if (!c.entity && !(c.cells || []).length) throw new Error('khe-reading-card: entity or cells is required'); }
-  _watched() {
-    const c = this._config, chip = c.chip || {}, cells = c.cells || [];
-    const ruled = cells.flatMap(x => (x.bad_if || []).flat().map(r => r.entity));
-    return [...new Set([c.entity, (c.line || {}).statistic, chip.entity, chip.fault, ((c.note || {}).target || {}).entity, (c.meter || {}).entity, ...cells.map(x => x.entity), ...cells.map(x => (x.note || {}).entity), ...ruled, (c.stepper || {}).entity].filter(Boolean))];
-  }
+  _watched() { return readingWatched(this._config); }
   _historyIds() { return (this._config.cells || []).filter(x => (x.note || {}).last_on).map(x => x.entity); }
   _requests(now) { const l = this._config.line; return l ? { line: lineRequest(l.statistic, l.hours || 48, now) } : {}; }
   _html(states, pal) {
@@ -3195,6 +3227,166 @@ export function motionA3Markup(conf, states, on, now, lang = 'et', hass = {}) {
   return { html: motionA3(card, states, a3Palette(false), on, now), sheets: card._sheets };
 }
 
+/* ---------- A3 Kaamerad: the cameras' stills (ADR-016) ---------- */
+
+const pictureOf = st => (st && st.attributes && st.attributes.entity_picture) || null;
+
+// a camera's still: the state's entity_picture (the camera_proxy URL with its rotating token) with
+// a time parameter so no cache answers, and a width for a thumbnail; null without a picture
+export function cameraUrl(st, t, width) {
+  const pic = pictureOf(st);
+  if (!pic) return null;
+  return `${pic}${pic.includes('?') ? '&' : '?'}t=${t}${width ? `&width=${width}` : ''}`;
+}
+
+// what a camera's slot shows, { kind, text }: 'live' its still; 'stale' the last good still dimmed,
+// with when this card loaded it in HA's zone; 'down' no still yet; 'none' a placeholder, as the
+// state has no picture (the demo)
+export function cameraSlot(st, last, failed, lang = 'et', tz = localZone()) {
+  const w = words(lang);
+  if (!hasValue(st) || failed) return last ? { kind: 'stale', text: w.camLast(clockAt(last, tz)) } : { kind: 'down', text: w.camDown };
+  return { kind: pictureOf(st) ? 'live' : 'none', text: '' };
+}
+
+// the thumbnails under a hero: the other cameras in the config's order
+export const cameraThumbs = (n, hero) => [...Array(n).keys()].filter(i => i !== hero);
+
+const CAM_HERO = 10e3, CAM_THUMB = 30e3, THUMB_WIDTH = 320;
+const CAMERAS_CSS = `
+.cams{display:flex;flex-direction:column;gap:8px;padding:8px;border-radius:26px}
+.hero,.th{position:relative;display:block;width:100%;overflow:hidden;background:#2c2c32}
+.hero{aspect-ratio:16/9;border-radius:18px}
+.th{aspect-ratio:16/10;border-radius:12px}
+.thumbs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.thumbs:empty{display:none}
+.slot,.frame,.pic,.ph,.ov,.shade{position:absolute;inset:0}
+.pic{width:100%;height:100%;object-fit:cover}
+.ph,.ov{display:none;align-items:center;justify-content:center}
+.ph{color:rgba(255,255,255,0.5)}
+.none .ph{display:flex}
+.ov{padding:0 16px;text-align:center;background:rgba(20,20,24,0.74);color:#fff;font-size:15px;font-weight:600}
+.stale .ov,.down .ov{display:flex}
+.th .ov b{display:none}
+.shade{background:linear-gradient(180deg,rgba(0,0,0,0) 55%,rgba(0,0,0,0.55) 100%)}
+.th .shade{background:linear-gradient(180deg,rgba(0,0,0,0) 40%,rgba(0,0,0,0.6) 100%)}
+.cap{position:absolute;left:14px;bottom:12px;display:flex;flex-direction:column;gap:1px;color:#fff}
+.cap .nm{font-size:20px;font-weight:700;letter-spacing:-0.015em}
+.cap .tip{font-size:13px;font-weight:600;opacity:.85}
+.pill{position:absolute;right:12px;bottom:12px;display:flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:15px;background:rgba(255,255,255,0.22);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);color:#fff;font-size:13px;font-weight:600}
+.th .nm{position:absolute;left:8px;bottom:6px;color:#fff;font-size:12px;font-weight:700}
+.dot{position:absolute;right:7px;top:7px;width:9px;height:9px;border-radius:5px;background:#ff3b30;display:none}
+.th.off .dot{display:block}
+@media (prefers-reduced-transparency: reduce){.pill{background:rgba(20,20,24,0.6);-webkit-backdrop-filter:none;backdrop-filter:none}}
+`;
+// the two drawn at their own stroke, unlike ICONS' 1.9
+const FULLSCREEN = '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+const CAMERA = '<svg aria-hidden="true" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5h11v9H3zM14 10.5l7-3v9l-7-3"/></svg>';
+
+// Kaamerad's cameras (ADR-016): the hero still, which opens the camera's live view, and the
+// others as thumbnails that make one the hero. Config: { cameras: [{ entity, name, tap_action }] },
+// `entity` the substream. The DOM is built once and its <img>s kept: a redraw comes only with a
+// camera's state (the token rotation's new state object does not count), and updates the texts and
+// the order. Each still loads into its own Image and replaces the shown one only when it has
+// loaded, so a failure keeps the last good one; one load per camera at a time, the hero every
+// CAM_HERO, the thumbnails every CAM_THUMB, while the card is on the page and the tab visible.
+class CamerasCard extends KheCard {
+  static a3only = true;
+  static css = CAMERAS_CSS;
+  _check(c) { if (!(c.cameras || []).length) throw new Error('khe-cameras-card: cameras is required'); }
+  _watched() { return this._config.cameras.map(c => c.entity); }
+  _stamp(st) { return st && st.state; }
+  setConfig(config) {
+    this._stop();
+    Object.assign(this, { _cams: null, _hero: 0, _last: {}, _failed: {}, _loads: {} });
+    super.setConfig(config);
+  }
+  _draw() {
+    if (!this._config || !this._hass) return;
+    this._style();
+    if (!this._cams) this._build();
+    this._update();
+    this._sync();
+  }
+  // per camera its frame (the still, the placeholder, the overlay) and per slot its button
+  _build() {
+    const n = this._config.cameras.length, w = this._w;
+    const thumbs = Array.from({ length: n - 1 }, (_, j) => `<button type="button" class="th press" data-k="t${j}"><span class="slot"></span><span class="shade"></span><span class="nm"></span><span class="dot"></span></button>`).join('');
+    this._root.innerHTML = `<div class="glass cams"><button type="button" class="hero press" data-k="hero"><span class="slot"></span><span class="shade"></span><span class="cap"><span class="nm"></span><span class="tip">${esc(w.camTap)}</span></span><span class="pill">${FULLSCREEN}${esc(w.camLive)}</span></button><span class="thumbs">${thumbs}</span></div>`;
+    this._slotEls = [...this._root.querySelectorAll('button')].map(b => ({ b, slot: b.querySelector('.slot'), nm: b.querySelector('.nm') }));
+    this._cams = this._config.cameras.map(() => {
+      const f = document.createElement('span');
+      f.innerHTML = `<span class="ph">${CAMERA}</span><span class="ov"><b></b></span>`;
+      return { f, b: f.querySelector('b'), img: null };
+    });
+  }
+  _update() {
+    const cams = this._config.cameras, states = this._hass.states, tz = tzOf(this._hass), w = this._w;
+    [this._hero, ...cameraThumbs(cams.length, this._hero)].forEach((i, j) => {
+      const s = cameraSlot(states[cams[i].entity], this._last[i], this._failed[i], this._lang, tz), c = this._cams[i], el = this._slotEls[j];
+      c.f.className = `frame ${s.kind}`;
+      c.b.textContent = s.text;
+      if (el.slot.firstChild !== c.f) el.slot.replaceChildren(c.f);
+      el.nm.textContent = cams[i].name;
+      el.b.setAttribute('aria-label', (j ? w.camShow : w.camOpen)(cams[i].name));
+      el.b.classList.toggle('off', s.kind === 'stale' || s.kind === 'down');
+    });
+  }
+  // the timers run while the card is on the page, the tab is visible and a camera has a picture;
+  // starting them loads every still at once
+  _sync() {
+    const states = this._hass ? this._hass.states : {};
+    const want = this.isConnected && !!this._cams && !document.hidden && this._config.cameras.some(c => pictureOf(states[c.entity]));
+    if (want === !!this._timers) return;
+    if (!want) { this._stop(); return; }
+    const thumbs = () => cameraThumbs(this._config.cameras.length, this._hero).forEach(i => this._load(i, THUMB_WIDTH));
+    this._timers = [setInterval(() => this._load(this._hero, 0), CAM_HERO), setInterval(thumbs, CAM_THUMB)];
+    this._load(this._hero, 0);
+    thumbs();
+  }
+  _stop() { (this._timers || []).forEach(clearInterval); this._timers = null; }
+  // a load while one for the camera is still on its way waits for the next turn, unless `now`
+  // (a new hero) drops the old one
+  _load(i, width, now = false) {
+    const busy = this._loads[i];
+    if (busy && !now) return;
+    if (busy) busy.removeAttribute('src');
+    const url = cameraUrl(this._hass && this._hass.states[this._config.cameras[i].entity], Date.now(), width);
+    if (!url) { this._loads[i] = null; return; }
+    const im = (this._loads[i] = new Image()), c = this._cams[i];
+    im.className = 'pic';
+    im.alt = '';
+    im.onload = () => {
+      if (this._loads[i] !== im) return;
+      this._loads[i] = null;
+      if (c.img) c.img.replaceWith(im); else c.f.prepend(im);
+      c.img = im;
+      const changed = this._failed[i] || !this._last[i];
+      this._last[i] = Date.now();
+      this._failed[i] = false;
+      if (changed) this._update();
+    };
+    im.onerror = () => { if (this._loads[i] === im) { this._loads[i] = null; this._failed[i] = true; this._update(); } };
+    im.src = url;
+  }
+  connectedCallback() {
+    if (!this._vis) { this._vis = () => this._sync(); document.addEventListener('visibilitychange', this._vis); }
+    if (this._hass) this._sync();
+  }
+  disconnectedCallback() {
+    this._stop();
+    if (this._vis) { document.removeEventListener('visibilitychange', this._vis); this._vis = null; }
+  }
+  _click(ev) {
+    const b = ev.target.closest('button[data-k]');
+    if (!b) return;
+    const cams = this._config.cameras;
+    if (b.dataset.k === 'hero') { const c = cams[this._hero]; this._fire(actionDetail(c.entity, c.tap_action || { action: 'more-info' })); return; }
+    this._hero = cameraThumbs(cams.length, this._hero)[Number(b.dataset.k.slice(1))];
+    this._update();
+    this._load(this._hero, 0, true);
+  }
+}
+
 const ELEMENTS = [
   ['khe-summary-card', SummaryCard, 'KHE summary', 'The house in one sentence, with summary chips.'],
   ['khe-price-card', PriceCard, 'KHE price', 'The electricity price now, the hourly bars and the cheapest windows.'],
@@ -3207,7 +3399,8 @@ const ELEMENTS = [
   ['khe-split-card', SplitCard, 'KHE split', "Who used the month's energy (A3)."],
   ['khe-reading-card', ReadingCard, 'KHE reading', 'One reading with its hourly line, cells and a stepper (A3).'],
   ['khe-forecast-card', ForecastCard, 'KHE forecast', "The next hours' precipitation and temperature from a weather entity, with cells (A3)."],
-  ['khe-motion-card', MotionCard, 'KHE motion', 'Where there was motion: a trail through the house plan and each room by the hour (A3).']
+  ['khe-motion-card', MotionCard, 'KHE motion', 'Where there was motion: a trail through the house plan and each room by the hour (A3).'],
+  ['khe-cameras-card', CamerasCard, 'KHE cameras', "The cameras' stills, one large with the others as thumbnails (A3)."]
 ];
 if (typeof customElements !== 'undefined') {
   window.customCards = window.customCards || [];

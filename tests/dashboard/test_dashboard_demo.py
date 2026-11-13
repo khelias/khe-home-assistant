@@ -231,8 +231,9 @@ class DemoEnglish(unittest.TestCase):
         for bad in ("T", " "):
             with self.assertRaises(KeyError):
                 dd._word(bad)
-        for raw in ("", "armed_away", "21", "13.6", "-5", "23:00:00", "2026-10-14 16:20:00"):
+        for raw in ("", "armed_away", "21", "13.6", "-5", "23:00:00", "2026-10-14 16:20:00", "!OK"):
             self.assertEqual(dd._word(raw), raw)
+        self.assertEqual(dd._word("!Eemal"), "!Away", "a pattern keeps its marks")
 
     def test_the_3d_card_is_english(self):
         house3d = [c for c in cards(CONFIG_EN) if c["type"] == "custom:house3d-card"]

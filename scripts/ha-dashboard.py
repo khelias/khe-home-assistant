@@ -30,7 +30,8 @@ URL = "lovelace"  # the Overview, a dashboard entry since the 2026.9 migration
 # This repo is public, so nothing that identifies the house or the family is hard-coded here.
 # Two untracked local files carry that, and every consumer in dashboard_config degrades to
 # "leave the card out" when they are missing:
-#   ~/.config/khe/ha-house.json   {"cams": [[slug, label], ...], "phone": "sensor.<device>",
+#   ~/.config/khe/ha-house.json   {"cams": [[slug, label], ...] (the first is Kaamerad's large
+#                                  still), "phone": "sensor.<device>",
 #                                  "nvr_app_url": "<scheme>://", "updates": [["update.<x>", "<name>"]],
 #                                  "tv_profiles": [[<picker position>, "<name>"], ...],  (Google TV)
 #                                  "car_entity": "<domain>.<id>"}  (the 3D car's entity when the

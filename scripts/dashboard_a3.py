@@ -1,8 +1,8 @@
-"""A3, the house's Overview in A3's look, as data (ADR-005 to ADR-008, ADR-010, ADR-011, ADR-014, ADR-015).
+"""A3, the house's Overview in A3's look, as data (ADR-005 to ADR-008, ADR-010, ADR-011, ADR-014 to ADR-016).
 
 overview(house, people, model) is the Overview the house saves: dashboard_config.build()'s views
 with A3's views in place of Kodu's at the same paths (`kodu`, `energia`, `soojuspump`,
-`ventilatsioon`, `pergola`, `valve`) and the 3D view moved last, which the public demo builds too (ADR-012). dashboard_config.build() itself
+`ventilatsioon`, `pergola`, `valve`, `kaamerad`) and the 3D view moved last, which the public demo builds too (ADR-012). dashboard_config.build() itself
 stays Kodu with 3D first, the house's fallback. energia() is Energia: the month, the days, who used what and the price, from daily
 statistics. soojuspump(h) is Soojuspump: the status, the indoor and boiler temperatures as 48-hour
 lines from hourly statistics, the heating shift as a stepper, the boost and the boiler's
@@ -15,7 +15,10 @@ rules with their switches and when they last ran. valve(model) is Valve: the sta
 partitions, Maja and Garaaž with their modes (a tap opens HA's dialog, which takes the code), the
 doors with when they last opened, the nine PIRs as a trail through the house plan with each room's
 hourly motion, and the panel's own sensors; the plan is plan_slice(), a slice of the model with
-its rooms, walls and doors and each PIR's room, never its devices (ADR-015).
+its rooms, walls and doors and each PIR's room, never its devices (ADR-015). cameras(h) is
+Kaamerad: the status, the cameras' stills drawn from camera_proxy with the house file's first
+camera large (ADR-016), the recordings in the NVR app, the NVR disk with how many cameras answer
+and detect motion, and the settings row.
 
 build(house, people, model) returns A3 as a one-view Lovelace config: the 3D house as
 the hero, then the page's title with the outdoor temperature, people, alarms and live faults as
@@ -56,6 +59,8 @@ Where each sheet reads its history, measured on the house on 2026-11-12
     the weather forecast          get_forecasts hourly, Pergola's forecast card (ADR-014)
     PIRs, doors                   history      24 h of off-to-on changes, Valve (ADR-015)
     the panel's sensors           history      on/off; the battery from statistics (mean)
+    camera stills                 camera_proxy the state's entity_picture, Kaamerad (ADR-016)
+    NVR disk                      history      its state words, Kaamerad's Süsteem
 """
 
 import copy
@@ -101,6 +106,21 @@ def wide(c):
     c["wide"] = True
     c["grid_options"] = {"columns": 12}
     return c
+
+
+def settings_row(entity, text, path):
+    """A view's wide "Seaded" row, to its settings subview."""
+    return wide(
+        tile(
+            entity,
+            "Seaded",
+            icon="tune",
+            active=[],
+            state_text=text,
+            chevron=True,
+            tap_action={"action": "navigate", "navigation_path": path},
+        )
+    )
 
 
 def half(c):
@@ -674,19 +694,10 @@ def soojuspump(h):
                         foot="Küte oma elektrit ei mõõda; kogu maja on Energias.",
                         grid_options={"columns": "full"},
                     ),
-                    wide(
-                        tile(
-                            dc.HEATING,
-                            "Seaded",
-                            icon="tune",
-                            active=[],
-                            state_text="Küte välja, kütte režiim, boileri siht",
-                            chevron=True,
-                            tap_action={
-                                "action": "navigate",
-                                "navigation_path": "/lovelace/soojuspump-seaded",
-                            },
-                        )
+                    settings_row(
+                        dc.HEATING,
+                        "Küte välja, kütte režiim, boileri siht",
+                        "/lovelace/soojuspump-seaded",
                     ),
                 ]
             ),
@@ -856,19 +867,10 @@ def ventilatsioon(h):
                             ],
                         )
                     ),
-                    wide(
-                        tile(
-                            dc.MODE,
-                            "Seaded",
-                            icon="tune",
-                            active=[],
-                            state_text="Ajakava, ECO, kamin, eemal, taimerid",
-                            chevron=True,
-                            tap_action={
-                                "action": "navigate",
-                                "navigation_path": "/lovelace/komfovent-seaded",
-                            },
-                        )
+                    settings_row(
+                        dc.MODE,
+                        "Ajakava, ECO, kamin, eemal, taimerid",
+                        "/lovelace/komfovent-seaded",
                     ),
                 ]
             ),
@@ -986,19 +988,10 @@ def pergola():
                             ],
                         )
                     ),
-                    wide(
-                        tile(
-                            dc.ROOF_AUTO,
-                            "Seaded",
-                            icon="tune",
-                            active=[],
-                            state_text="Pooled eraldi, vihmateade, õhtune valgus",
-                            chevron=True,
-                            tap_action={
-                                "action": "navigate",
-                                "navigation_path": "/lovelace/pergola-seaded",
-                            },
-                        )
+                    settings_row(
+                        dc.ROOF_AUTO,
+                        "Pooled eraldi, vihmateade, õhtune valgus",
+                        "/lovelace/pergola-seaded",
                     ),
                 ]
             ),
@@ -1230,9 +1223,116 @@ def valve(model):
     }
 
 
+def cameras(h):
+    """Kaamerad in A3's look (ADR-007, ADR-016): the status, the stills with the first camera large
+    and the others as thumbnails, the recordings in the NVR app, the system cells and the settings
+    row. Camera motion is left out: it fires every half minute, rain or not."""
+    sub = [(dc.cam_sub(slug), n, slug) for slug, n in h.cams]
+    status = [
+        {"entities": [dc.NVR], "state": "!OK", "text": "NVR ketas viga", "tone": "bad"},
+        *[
+            {"entities": [e], "state": "unavailable", "text": n + " ei vasta", "tone": "bad"}
+            for e, n, _ in sub
+        ],
+        {"entities": [dc.NVR], "state": "OK", "text": "Kõik kaamerad ja NVR korras", "tone": "ok"},
+    ]
+    system = [
+        {
+            "entity": dc.NVR,
+            "name": "NVR ketas",
+            "words": {"OK": "korras", "*": "viga"},
+            "good": ["OK"],
+            "bad_if": [{"state": "!OK"}],
+            "history": ONOFF,
+            "color": "blue",
+        },
+        {
+            "name": "Kaamerad",
+            "count": {"entities": [{"entity": e, "name": n} for e, n, _ in sub], "state": "*"},
+            "note": {"missing": "kõik vastavad"},
+        },
+        {
+            "name": "Tuvastus",
+            "count": {
+                "entities": [{"entity": dc.cam_detect(slug), "name": n} for slug, n in h.cams],
+                "state": "on",
+            },
+            "note": {"missing": "sees"},
+        },
+    ]
+    recordings = (
+        [
+            wide(
+                tile(
+                    dc.NVR,
+                    "Salvestised",
+                    icon="play",
+                    active=[],
+                    state_text="Avab NVR-i äpi",
+                    chevron=True,
+                    tap_action={"action": "url", "url_path": h.nvr_app},
+                )
+            )
+        ]
+        if h.nvr_app
+        else []
+    )
+    stock = dc.cameras(h)
+    return {
+        "title": stock["title"],
+        "path": stock["path"],
+        "icon": stock["icon"],
+        "type": "sections",
+        "max_columns": 2,
+        "background": BACKGROUND,
+        "sections": [
+            section(
+                [
+                    card(
+                        "chips-card",
+                        style="a3",
+                        title=stock["title"],
+                        status={"map": status},
+                        grid_options={"columns": "full"},
+                    ),
+                    *(
+                        [
+                            card(
+                                "cameras-card",
+                                cameras=[
+                                    {
+                                        "entity": e,
+                                        "name": n,
+                                        "tap_action": {
+                                            "action": "navigate",
+                                            "navigation_path": "/lovelace/" + dc.cam_path(slug),
+                                        },
+                                    }
+                                    for e, n, slug in sub
+                                ],
+                                grid_options={"columns": "full"},
+                            )
+                        ]
+                        if sub
+                        else []
+                    ),
+                    *recordings,
+                ]
+            ),
+            section(
+                [
+                    heading("Süsteem"),
+                    card("reading-card", cells=system, grid_options={"columns": "full"}),
+                    settings_row(dc.NVR, "Liikumistuvastus, põhivood", "/lovelace/kaamerad-seaded"),
+                ]
+            ),
+        ],
+    }
+
+
 def overview(house, people, model):
     """The house's Overview: dashboard_config.build() with A3's views in place of Kodu's (`kodu`,
-    `energia`, `soojuspump`, `ventilatsioon`, `pergola`, `valve`) and the 3D view (`maja-3d`) last.
+    `energia`, `soojuspump`, `ventilatsioon`, `pergola`, `valve`, `kaamerad`) and the 3D view (`maja-3d`) last.
     A fresh copy every call."""
     config = dc.build(house, people, model)
     h = dc.House(house, people)
@@ -1243,6 +1343,7 @@ def overview(house, people, model):
         "ventilatsioon": ventilatsioon(h),
         "pergola": pergola(),
         "valve": valve(model),
+        "kaamerad": cameras(h),
     }
     views = [a3.get(v["path"], v) for v in config["views"]]
     config["views"] = sorted(views, key=lambda v: v["path"] == "maja-3d")

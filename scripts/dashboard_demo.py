@@ -184,7 +184,7 @@ entry(
 for slug, name in DEMO_HOUSE["cams"]:
     word = slug.removeprefix("test_")
     entry(f"camera.{slug}", f"camera.{slug}", "idle", name)
-    entry(f"camera.{slug}_alamvoog", f"camera.{slug}", "idle", name)
+    entry(dc.cam_sub(slug), f"camera.{slug}", "idle", name)
     binary(
         f"binary_sensor.{slug}_liikumine",
         f"binary_sensor.demo_{word}_motion",
@@ -193,7 +193,7 @@ for slug, name in DEMO_HOUSE["cams"]:
         "motion",
     )
     entry(
-        f"switch.{slug}_liikumistuvastus",
+        dc.cam_detect(slug),
         f"switch.demo_{word}_detect",
         "on",
         f"{name} liikumistuvastus",
@@ -1108,6 +1108,8 @@ VISIBLE = (
         # a forecast cell's notes by its value
         "above",
         "below",
+        # a count cell's note when none is missing
+        "missing",
     ),
 )
 RAW = re.compile(r"^[a-z0-9_]*$")
@@ -1125,12 +1127,15 @@ def _en(s):
 
 
 def _word(s):
-    """English for a state value or select option; a raw HA key, a number or a time passes."""
+    """English for a state value or select option; a raw HA key, a number or a time passes. A
+    state pattern (a "!" in front negates, a "*" at the end matches a prefix) keeps its marks."""
+    bare = s.removeprefix("!").removesuffix("*")
+    if bare != s and bare:
+        return s[: s.index(bare)] + _word(bare) + s[s.index(bare) + len(bare) :]
     # a word the house writes in lower case (a price level) reads as a raw key otherwise
     if s in en.WORDS:
         return en.WORDS[s]
-    # a state pattern: a "!" in front negates, a "*" at the end matches a prefix
-    if RAW.match(s.removeprefix("!").removesuffix("*")):
+    if RAW.match(bare):
         return s
     if NUMBER.match(s) or WHEN.match(s) or s in en.SAME:
         return s
@@ -1145,7 +1150,13 @@ def _walk_en(o, key=None):
         if o.get("type") == "custom:house3d-card" or str(o.get("type")).startswith("custom:khe-"):
             o = {**o, "language": "en"}
         md = o.get("type") == "markdown"
-        return {k: _walk_en(v, "markdown" if md and k == "content" else k) for k, v in o.items()}
+        return {
+            # a cell's own words for its states, whatever state they are keyed by
+            k: {_word(s): _en(w) for s, w in v.items()}
+            if k == "words" and isinstance(v, dict)
+            else _walk_en(v, "markdown" if md and k == "content" else k)
+            for k, v in o.items()
+        }
     if isinstance(o, list):
         return [_walk_en(v, key) for v in o]
     if isinstance(o, str):

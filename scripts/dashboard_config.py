@@ -1072,6 +1072,16 @@ def cam_path(slug):
     return "kaamera-" + slug
 
 
+def cam_sub(slug):
+    """A camera's substream, the one its stills come from."""
+    return "camera." + slug + "_alamvoog"
+
+
+def cam_detect(slug):
+    """A camera's motion detection switch."""
+    return "switch." + slug + "_liikumistuvastus"
+
+
 # One subview per camera behind the grid above. The grid stays on cheap still images
 # (0.3 s, 1080p from the NVR); a live stream is only opened when a camera is tapped.
 # Advanced Camera Card because the stock cards cannot zoom: here ctrl+wheel or pinch
@@ -1194,8 +1204,8 @@ def cameras(h):
                 [
                     {
                         "type": "picture-glance",
-                        "camera_image": "camera." + slug + "_alamvoog",
-                        "entity": "camera." + slug + "_alamvoog",
+                        "camera_image": cam_sub(slug),
+                        "entity": cam_sub(slug),
                         "title": n,
                         "camera_view": "auto",
                         "entities": [{"entity": "binary_sensor." + slug + "_liikumine"}],
@@ -1222,12 +1232,7 @@ def kaamerad_seaded(h):
                 "Liikumistuvastus",
                 [
                     # The camera integration switches these back on at every reload, so treat them as a temporary mute.
-                    *row(
-                        [
-                            tile("switch." + slug + "_liikumistuvastus", n, vertical=True)
-                            for slug, n in h.cams
-                        ]
-                    ),
+                    *row([tile(cam_detect(slug), n, vertical=True) for slug, n in h.cams]),
                 ],
                 column_span=2,
             ),

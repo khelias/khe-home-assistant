@@ -198,7 +198,10 @@ with the reading card's cells, and for Valve `custom:khe-motion-card`, the
 house plan with the trail of the last 15 minutes and each room's hourly
 motion, beside the reading card's cells alone (no big value) for the doors
 and the panel, both on 24 hours of state history
-([ADR-015](decisions/015-a3-page-cards-read-state-history.md)). Kodu was drawn
+([ADR-015](decisions/015-a3-page-cards-read-state-history.md)), and for
+Kaamerad `custom:khe-cameras-card`, the cameras' stills from `camera_proxy`
+([ADR-016](decisions/016-a3-cards-draw-camera-stills-from-camera-proxy.md)),
+beside count cells (`n / total` with the missing ones named). Kodu was drawn
 with them on 2026-10-17 and went back to stock cards the next day; A3
 uses them. Deploy replaces `www/khe-cards/` in HA's config volume, so HA
 serves them as `/local/khe-cards/`, and a change arrives without a restart.
@@ -322,7 +325,10 @@ behind every value and device. It replaced the Bubble Card trial of
   `history/history_during_period` read through `ha-ws.py` (ADR-015); blank
   strips with the rooms still named mean its compressed rows changed. Tap a
   mode on Maja and close HA's dialog without a code: the tile hands HA a
-  more-info, and HA's keypad is the frontend's.
+  more-info, and HA's keypad is the frontend's. Open Kaamerad and stay past
+  a token rotation (about five minutes): the stills refresh without a
+  flash, the large one every 10 s in the network panel; blank stills with
+  the names drawn mean `entity_picture` or `camera_proxy` changed (ADR-016).
 - **Energia** ([ADR-008](decisions/008-a3-page-cards-read-statistics.md)):
   the month card reads `maja_sel_kuul`, `maja_eelmine_kuu`, `maja_tana` and
   `maja_eile` with their `kulu` and `hind` attributes; the days cards read
@@ -397,6 +403,18 @@ behind every value and device. It replaced the Bubble Card trial of
   PIR shares the room, else the public name in `dashboard_config`. Süsteem
   shows the smoke group, the battery with the mains supply, the link,
   tamper and the siren, and which events notify (`paradox.yaml`).
+- **Kaamerad** ([ADR-016](decisions/016-a3-cards-draw-camera-stills-from-camera-proxy.md)):
+  the status names one fault at a time: the NVR disk not `OK` (unavailable
+  too), then the first substream `unavailable`, else "Kõik kaamerad ja NVR
+  korras". The cameras card draws the substreams' stills, the house file's
+  first camera large; a tap on it opens `kaamera-<slug>`, a thumbnail's
+  makes it the large one. A camera whose state
+  stays `idle` while its still fails shows "korras" in the status and
+  "Kaamera ei vasta" on its still: the status reads only states. Salvestised
+  opens the NVR app (`nvr_app_url`, absent without it). Süsteem: the NVR
+  disk, how many substreams have a state and how many motion switches are
+  on. Camera motion is not shown (it fires every half minute); the live
+  views and the settings subview are still Kodu's.
 
 ## The 3D house view (`house3d`)
 

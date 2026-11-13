@@ -551,6 +551,16 @@ EN = {
     "Pergola: valgustus loojangul": "Pergola: lights at sunset",
     "Valve: häire": "Alarm: triggered",
     "Valve: tulekahju": "Alarm: fire",
+    # Kaamerad's status, cells and settings row
+    "NVR ketas viga": "NVR disk fault",
+    "Väravakaamera ei vasta": "Gate camera not responding",
+    "Aiakaamera ei vasta": "Garden camera not responding",
+    "Kõik kaamerad ja NVR korras": "All cameras and the NVR OK",
+    "kõik vastavad": "all responding",
+    "Tuvastus": "Detection",
+    "viga": "fault",
+    "Liikumistuvastus, põhivood": "Motion detection, main streams",
+    "sees": "on",
 }
 
 WORDS = {

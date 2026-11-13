@@ -256,11 +256,14 @@ class Build(unittest.TestCase):
             | ids(VENTILATSIOON)
             | ids(PERGOLA)
             | ids(VALVE)
+            | ids(CAMERAS)
         )
         self.assertEqual(quoted & spelled, set())
 
 
 VALVE = a3.valve(MODEL)
+H = dc.House(HOUSE, PEOPLE)
+CAMERAS = a3.cameras(H)
 OVERVIEW = a3.overview(HOUSE, PEOPLE, MODEL)
 BUILT = dc.build(HOUSE, PEOPLE, MODEL)
 
@@ -284,6 +287,7 @@ class Overview(unittest.TestCase):
             "ventilatsioon": VENTILATSIOON,
             "pergola": PERGOLA,
             "valve": VALVE,
+            "kaamerad": CAMERAS,
         }
         built = [swapped.get(v["path"], v) for v in BUILT["views"] if v["path"] != "maja-3d"]
         self.assertEqual(OVERVIEW["views"][:-1], built)
@@ -853,3 +857,88 @@ class Valve(unittest.TestCase):
         before = copy.deepcopy(dc.valve)
         a3.valve(FIXTURE)
         self.assertEqual(dc.valve, before)
+
+
+def cards_of(node, kind):
+    return [c for c in walk(node) if c.get("type") == "custom:khe-" + kind]
+
+
+class Kaamerad(unittest.TestCase):
+    def test_every_stock_entity_but_the_motion_sensors_is_on_the_page(self):
+        stock = {i for i in ids(dc.cameras(H)) if not i.startswith("mdi:")}
+        motion = {"binary_sensor." + slug + "_liikumine" for slug, _ in H.cams}
+        self.assertLessEqual(motion, stock)
+        page = ids(without_sheets(CAMERAS))
+        self.assertEqual(stock - motion - page, set())
+        self.assertEqual(page & motion, set(), "motion fires every half minute: noise")
+        switches = {"switch." + slug + "_liikumistuvastus" for slug, _ in H.cams}
+        self.assertLessEqual(switches, page)
+
+    def test_stock_title_path_and_icon_two_columns_and_a3s_background(self):
+        stock = dc.cameras(H)
+        for k in ("title", "path", "icon"):
+            self.assertEqual(CAMERAS[k], stock[k])
+        self.assertEqual(CAMERAS["max_columns"], 2)
+        self.assertEqual(CAMERAS["background"], VIEW["background"])
+        types = {c["type"] for s in CAMERAS["sections"] for c in s["cards"]}
+        self.assertTrue(all(t.startswith("custom:khe-") for t in types))
+
+    def test_the_status_runs_the_nvr_then_each_camera_then_all_well(self):
+        (chips,) = cards_of(CAMERAS, "chips-card")
+        rules = chips["status"]["map"]
+        subs = ["camera." + slug + "_alamvoog" for slug, _ in H.cams]
+        self.assertEqual(
+            [(r["entities"], r["state"], r["tone"]) for r in rules],
+            [([dc.NVR], "!OK", "bad")]
+            + [([e], "unavailable", "bad") for e in subs]
+            + [([dc.NVR], "OK", "ok")],
+        )
+        self.assertEqual([r["text"] for r in rules[1:-1]], [n + " ei vasta" for _, n in H.cams])
+
+    def test_the_hero_is_the_house_files_first_camera_and_each_opens_its_live_view(self):
+        (cams,) = cards_of(CAMERAS, "cameras-card")
+        self.assertEqual(
+            [(c["entity"], c["name"]) for c in cams["cameras"]],
+            [("camera." + slug + "_alamvoog", n) for slug, n in H.cams],
+        )
+        views = {"/lovelace/" + p for p in paths(OVERVIEW)}
+        for c, (slug, _) in zip(cams["cameras"], H.cams, strict=True):
+            self.assertEqual(c["tap_action"]["action"], "navigate")
+            self.assertEqual(c["tap_action"]["navigation_path"], "/lovelace/kaamera-" + slug)
+            self.assertIn(c["tap_action"]["navigation_path"], views)
+
+    def test_salvestised_only_with_the_nvr_app(self):
+        url = [d for d in walk(CAMERAS) if d.get("action") == "url"]
+        self.assertEqual(url, [{"action": "url", "url_path": HOUSE["nvr_app_url"]}])
+        bare = a3.cameras(dc.House({**HOUSE, "nvr_app_url": None}, PEOPLE))
+        self.assertEqual([d for d in walk(bare) if d.get("action") == "url"], [])
+        self.assertEqual(
+            [t["name"] for t in tiles_of(bare, dc.NVR)], ["Seaded"], "the settings row stays"
+        )
+
+    def test_the_system_cells_count_the_substreams_and_the_switches(self):
+        (reading,) = cards_of(CAMERAS, "reading-card")
+        nvr, cams, detect = reading["cells"]
+        self.assertEqual(nvr["entity"], dc.NVR)
+        self.assertEqual(nvr["bad_if"], [{"state": "!OK"}])
+        self.assertEqual(nvr["words"], {"OK": "korras", "*": "viga"})
+        self.assertEqual(
+            [e["entity"] for e in cams["count"]["entities"]],
+            ["camera." + slug + "_alamvoog" for slug, _ in H.cams],
+        )
+        self.assertEqual(cams["count"]["state"], "*")
+        self.assertEqual(
+            [e["entity"] for e in detect["count"]["entities"]],
+            ["switch." + slug + "_liikumistuvastus" for slug, _ in H.cams],
+        )
+        self.assertEqual(detect["count"]["state"], "on")
+
+    def test_without_cameras_no_cameras_card(self):
+        bare = a3.cameras(dc.House({}, []))
+        self.assertEqual(cards_of(bare, "cameras-card"), [])
+        self.assertEqual(len(cards_of(bare, "chips-card")), 1)
+
+    def test_stock_cameras_is_unchanged(self):
+        before = copy.deepcopy(dc.cameras(H))
+        a3.cameras(H)
+        self.assertEqual(dc.cameras(H), before)
