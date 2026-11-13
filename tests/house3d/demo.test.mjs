@@ -64,7 +64,7 @@ test('every card type and tile feature in the dashboard has a renderer', () => {
   assert.deepEqual([...cardTypes].filter(t => !CARD_TYPES.includes(t)), []);
   const feats = new Set(all.filter(c => c.type === 'tile').flatMap(c => (c.features || []).map(f => f.type)));
   assert.deepEqual([...feats].filter(t => !FEATURE_TYPES.includes(t)), []);
-  for (const t of ['statistics-graph', 'history-graph', 'custom:apexcharts-card', 'weather-forecast']) assert.ok(CHARTS[t], t);
+  for (const t of ['statistics-graph', 'history-graph', 'custom:apexcharts-card']) assert.ok(CHARTS[t], t);
   assert.deepEqual([...new Set(actions.map(a => a.action))].filter(a => !ACTIONS.includes(a)), []);
 });
 

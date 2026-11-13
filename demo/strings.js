@@ -40,7 +40,6 @@ export const STRINGS = {
     nextCam: 'Järgmine kaamera',
     unknownCard: type => `Tundmatu kaart: ${type}`,
     noData: 'Andmed puuduvad',
-    noForecast: 'Prognoos puudub',
     // the page and the more-info dialog
     home: 'Kodu',
     loadFailed: 'Töölaua laadimine ebaõnnestus.',
@@ -127,7 +126,6 @@ export const STRINGS = {
     nextCam: 'Next camera',
     unknownCard: type => `Unknown card: ${type}`,
     noData: 'No data',
-    noForecast: 'No forecast',
     home: 'Home',
     loadFailed: 'Loading the dashboard failed.',
     house3d: '3D model of the house',

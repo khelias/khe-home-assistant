@@ -44,7 +44,7 @@ TONES_LR = ["select.demo_tone_right", "select.demo_tone_left"]
 # the sunset automation reads the evening tone and the level from these helpers
 EVENING = dd.CATALOGUE["input_select.pergola_ohtune_toon"]["state"]
 LEVEL = int(dd.CATALOGUE["input_number.pergola_valguse_heledus"]["state"])
-DAYTIME = dd.TONES[2]
+DAYTIME = dd.TONES[1]
 
 RAIN_CLOSES = "Pergola: vihm sulgeb katuse"
 LIGHTS_AT_SUNSET = "Pergola: valgustus loojangul"
@@ -211,9 +211,7 @@ SCENARIOS = [
             PERGOLA_LIGHT: {"state": "off"},
         },
         "steps": [
-            step(
-                1, "Kell on 14.55, päike loojub kell 15.54. Pergola tuled on külma valge tooniga."
-            ),
+            step(1, "Kell on 14.55, päike loojub kell 15.54. Pergola tuled on valge tooniga."),
             step(5, "Kell on 15.10.", time=at("15:10")),
             step(9, "Kell on 15.25, loojanguni on vähem kui pool tundi.", time=at("15:25")),
             call(

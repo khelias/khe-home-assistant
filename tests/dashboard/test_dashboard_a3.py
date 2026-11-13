@@ -43,11 +43,12 @@ def kodu_entities(node):
 
 
 def ids(node):
-    """Every entity id the A3 cards read: any string value that is one, whatever its key."""
+    """Every entity id the A3 cards read: any string value that is one, whatever its key, but a
+    service name (`cover.open_cover` reads like an id)."""
     out = set()
     for d in walk(node):
-        for v in d.values():
-            if isinstance(v, str) and ENTITY_ID.match(v):
+        for k, v in d.items():
+            if k != "perform_action" and isinstance(v, str) and ENTITY_ID.match(v):
                 out.add(v)
     return out
 
@@ -81,13 +82,19 @@ def card_actions(card):
     if isinstance(card.get("corner"), dict):
         yield card["corner"]["tap_action"]
     for m in card.get("modes", []):
+        if "tap_action" in m:
+            yield m["tap_action"]
+            continue
+        entity = card.get("modes_entity", card["entity"])
         yield {
             "action": "perform-action",
-            "perform_action": "select.select_option",
-            "target": {"entity_id": card["entity"]},
+            "perform_action": entity.split(".")[0] + ".select_option",
+            "target": {"entity_id": entity},
             "data": {"option": m["option"]},
             **({"confirmation": {"text": m["confirm"]}} if m.get("confirm") else {}),
         }
+    if card.get("switch"):
+        yield {"action": "toggle", "entity": card["entity"]}
     if card.get("slider"):
         yield {
             "action": "perform-action",
@@ -246,6 +253,7 @@ class Build(unittest.TestCase):
             | kodu_entities(VIEW)
             | kodu_entities(SOOJUSPUMP)
             | ids(VENTILATSIOON)
+            | ids(PERGOLA)
         )
         self.assertEqual(quoted & spelled, set())
 
@@ -271,6 +279,7 @@ class Overview(unittest.TestCase):
             "energia": a3.energia(),
             "soojuspump": SOOJUSPUMP,
             "ventilatsioon": VENTILATSIOON,
+            "pergola": PERGOLA,
         }
         built = [swapped.get(v["path"], v) for v in BUILT["views"] if v["path"] != "maja-3d"]
         self.assertEqual(OVERVIEW["views"][:-1], built)
@@ -558,3 +567,132 @@ class DaysSheets(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+PERGOLA = a3.pergola()
+KODU_PERGOLA = dc.pergola
+
+
+def tiles_of(node, entity):
+    return [
+        c for c in walk(node) if c.get("type") == "custom:khe-tile-card" and c["entity"] == entity
+    ]
+
+
+class Pergola(unittest.TestCase):
+    def test_every_kodu_pergola_entity_is_on_the_page(self):
+        kodu = {i for i in ids(KODU_PERGOLA) if not i.startswith("mdi:")}
+        self.assertIn(dc.WEATHER, kodu)
+        self.assertEqual(kodu - ids(without_sheets(PERGOLA)), set())
+
+    def test_the_settings_subview_is_reachable(self):
+        self.assertIn("/lovelace/pergola-seaded", links(PERGOLA))
+        self.assertLessEqual(links(KODU_PERGOLA), links(PERGOLA))
+
+    def test_kodus_title_path_and_icon_two_columns_and_a3s_background(self):
+        for k in ("title", "path", "icon"):
+            self.assertEqual(PERGOLA[k], KODU_PERGOLA[k])
+        self.assertEqual(PERGOLA["path"], "pergola")
+        self.assertEqual(PERGOLA["max_columns"], 2)
+        self.assertEqual(PERGOLA["background"], VIEW["background"])
+
+    def test_cards_are_the_repos_own_with_the_forecast_in_the_weather_cards_place(self):
+        types = {c["type"] for s in PERGOLA["sections"] for c in s["cards"]}
+        self.assertTrue(all(t.startswith("custom:khe-") for t in types))
+        (fc,) = [c for c in walk(PERGOLA) if c.get("type") == "custom:khe-forecast-card"]
+        self.assertEqual(fc["entity"], dc.WEATHER)
+        self.assertEqual([x["entity"] for x in fc["cells"]], [dc.RAIN_NOW, dc.RAIN_2H, dc.OUTDOOR])
+        for x in fc["cells"]:
+            self.assertEqual(x["history"], a3.MEAN)
+
+    def test_the_status_reads_rain_above_zero(self):
+        (chips,) = [c for c in walk(PERGOLA) if c.get("type") == "custom:khe-chips-card"]
+        self.assertEqual(
+            chips["status"], {"entity": dc.RAIN_NOW, "above": 0, "on": "Sajab", "ok": "Kuiv"}
+        )
+
+    def test_the_roof_row_runs_the_three_cover_services_and_shows_none_pressed(self):
+        (roof,) = [c for c in tiles_of(PERGOLA, dc.ROOF)]
+        self.assertEqual(
+            [(m["name"], m["tap_action"]["perform_action"]) for m in roof["modes"]],
+            [
+                ("Ava", "cover.open_cover"),
+                ("Stopp", "cover.stop_cover"),
+                ("Sulge", "cover.close_cover"),
+            ],
+        )
+        for m in roof["modes"]:
+            self.assertEqual(m["tap_action"]["target"], {"entity_id": dc.ROOF})
+            self.assertNotIn("option", m)
+        self.assertNotIn("history", roof)
+
+    def test_the_segment_is_the_tone_select_with_its_package_options(self):
+        (light,) = tiles_of(PERGOLA, dc.PERGOLA_LIGHT)
+        self.assertEqual(light["modes_entity"], dc.TONE)
+        yaml = (ROOT / "config/packages/pergola.yaml").read_text()
+        block = yaml.split(dc.TONE.split(".")[1] + ":", 1)[1].split("options:", 1)[1]
+        options = re.findall(r"^\s+- (\S+)$", block.split("\n\n", 1)[0], re.M)
+        self.assertEqual([m["option"] for m in light["modes"]], options)
+        self.assertEqual(light["slider"], {"attribute": "brightness"})
+
+    def test_the_light_sheet_links_nowhere_here_and_to_pergola_from_kodu(self):
+        (here,) = tiles_of(PERGOLA, dc.PERGOLA_LIGHT)
+        (kodu,) = tiles_of(VIEW, dc.PERGOLA_LIGHT)
+        self.assertEqual(here["history"], a3.ONOFF)
+        self.assertEqual(kodu["history"]["view"], "/lovelace/pergola")
+
+    def test_kodus_light_tile_is_unchanged(self):
+        expected = {
+            "type": "custom:khe-tile-card",
+            "style": "a3",
+            "entity": dc.PERGOLA_LIGHT,
+            "name": "Pergola valgus",
+            "icon": "bulb",
+            "color": "yellow",
+            "icon_tap_action": {"action": "toggle"},
+            "icon_label": "Pergola valgus sisse või välja",
+            "slider": {"attribute": "brightness"},
+            "history": {"source": "history", "view": "/lovelace/pergola"},
+            "wide": True,
+            "grid_options": {"columns": 12},
+        }
+        self.assertEqual(json.dumps(tiles_of(VIEW, dc.PERGOLA_LIGHT)[0]), json.dumps(expected))
+
+    def test_the_light_line_is_its_off_time_while_on_and_the_rule_on(self):
+        (light,) = tiles_of(PERGOLA, dc.PERGOLA_LIGHT)
+        (part,) = light["state_text"]
+        self.assertEqual((part["entity"], part["format"]), (dc.LIGHT_OFF, "when"))
+        self.assertEqual(part["if"], [{"state": "on"}, {"entity": dc.LIGHT_AUTO, "state": "on"}])
+
+    def test_the_rules_switch_their_booleans_and_say_when_their_automations_ran(self):
+        rules = [c for c in walk(PERGOLA) if c.get("switch")]
+        self.assertEqual([c["entity"] for c in rules], [dc.ROOF_AUTO, dc.LIGHT_AUTO])
+        self.assertEqual(
+            [[(p["entity"], p.get("attribute")) for p in c["state_text"]] for c in rules],
+            [
+                [(dc.RAIN_RULE, "last_triggered")],
+                [(dc.SUNSET_RULE, "last_triggered"), (dc.LIGHT_OFF, None)],
+            ],
+        )
+        for c in rules:
+            for p in c["state_text"]:
+                self.assertEqual(p["if"], [{"state": "on"}])
+
+    def test_the_rules_are_the_packages_automations(self):
+        yaml = (ROOT / "config/packages/pergola.yaml").read_text()
+        aliases = re.findall(r'alias: "(Pergola: [^"]+)"', yaml)
+        slug = {re.sub(r"[^a-z0-9]+", "_", a.lower().replace("õ", "o")).strip("_") for a in aliases}
+        for e in (dc.RAIN_RULE, dc.SUNSET_RULE):
+            self.assertIn(e.split(".")[1], slug)
+
+    def test_every_sheet_names_its_source(self):
+        for c in walk(PERGOLA):
+            h = c.get("history")
+            if isinstance(h, dict):
+                with self.subTest(card=c.get("name")):
+                    self.assertIn(h["source"], ("statistics", "history"))
+
+    def test_kodus_pergola_is_unchanged(self):
+        before = copy.deepcopy(dc.pergola)
+        a3.pergola()
+        self.assertEqual(dc.pergola, before)

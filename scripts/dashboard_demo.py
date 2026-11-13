@@ -64,7 +64,8 @@ VENT_MODES = [
     "override",
     "holidays",
 ]
-TONES = ["Soe valge", "Neutraalne", "Külm valge"]
+# the house's two tones (dashboard_a3.TONES), which the demo's light selects offer too
+TONES = a3.TONES
 
 CATALOGUE = {}
 
@@ -195,7 +196,7 @@ entry(dc.PERGOLA_LIGHT, "light.test_pergola", "off", "Pergola valgus")
 entry("light.pergola_parem_valgustus", "light.demo_light_right", "off", "Valgus parem")
 entry("light.pergola_vasak_valgustus", "light.demo_light_left", "off", "Valgus vasak")
 entry(
-    "input_select.pergola_valguse_toon",
+    dc.TONE,
     "input_select.demo_light_tone",
     TONES[0],
     "Toon",
@@ -223,13 +224,13 @@ entry(
     options=TONES,
 )
 entry(
-    "input_boolean.pergola_katuse_automaatika",
+    dc.ROOF_AUTO,
     "input_boolean.demo_roof_auto",
     "on",
     "Katuse automaatika",
 )
 entry(
-    "input_boolean.pergola_valguse_automaatika",
+    dc.LIGHT_AUTO,
     "input_boolean.demo_light_auto",
     "on",
     "Valguse automaatika",
@@ -274,7 +275,7 @@ entry(
     unit_of_measurement="%",
 )
 entry(
-    "input_datetime.pergola_valgus_kustub",
+    dc.LIGHT_OFF,
     "input_datetime.demo_light_off",
     "23:00:00",
     "Kustub",
@@ -289,30 +290,37 @@ entry(
     has_date=True,
     has_time=True,
 )
+# the rain sensors as the house has them, mm with mean statistics; their states, the forecast's
+# and the rules' last runs follow the recorder's profiles (demo_recorder())
 entry(
-    "sensor.sademed_praegu",
+    dc.RAIN_NOW,
     "sensor.demo_rain_now",
     "0.0",
     "Sajab",
-    unit_of_measurement="mm/h",
-    device_class="precipitation_intensity",
+    unit_of_measurement="mm",
+    device_class="precipitation",
+    state_class="measurement",
 )
 entry(
-    "sensor.sademed_kahe_tunniga",
+    dc.RAIN_2H,
     "sensor.demo_rain_2h",
-    "0.4",
+    "0.0",
     "Sademed kahe tunniga",
     unit_of_measurement="mm",
     device_class="precipitation",
+    state_class="measurement",
 )
 entry(
-    "weather.forecast_kodu",
+    dc.WEATHER,
     "weather.demo_forecast",
     "cloudy",
     "Ilm",
     temperature=7,
     temperature_unit="°C",
 )
+# the two rules, named by their aliases: the scenario player finds a step's rule by it
+entry(dc.RAIN_RULE, "automation.demo_rain_closes_roof", "on", "Pergola: vihm sulgeb katuse")
+entry(dc.SUNSET_RULE, "automation.demo_lights_at_sunset", "on", "Pergola: valgustus loojangul")
 
 # heat pump and hot water: the boiler is the fixture's
 entry(
@@ -893,7 +901,7 @@ def _counter(base, amp, peak, state=None, last=None):
 
 
 def demo_recorder():
-    """recorder.json: {zone, profiles, house, forecast}, every id the demo's own."""
+    """recorder.json: {zone, profiles, house, forecast, weather, rules}, every id the demo's own."""
     ids = {real: e["id"] for real, e in CATALOGUE.items()}
     consumption, cost, price = (STATISTICS[k] for k in (dc.CONSUMPTION, dc.COST, dc.PRICE_STAT))
     boiler = (0.1, 0.06, 6)
@@ -930,6 +938,10 @@ def demo_recorder():
         ids[dc.EFFICIENCY]: _wave_profile(83, 1.5, 5, 0.5, 0),
         ids[dc.FILTER]: _wave_profile(34, 0, 12, 0, 0),
         ids[dc.HEATER_MONTH]: _counter(0, 0, 0, state="month", last="last_period"),
+        # a shower most afternoons and a drizzle before dawn, some days dry; the two-hour sensor is
+        # the next two hours of it, and the forecast reads the same profile
+        ids[dc.RAIN_NOW]: {"kind": "rain", "showers": [[13, 15, 0.6], [4, 5, 0.3]]},
+        ids[dc.RAIN_2H]: {"kind": "ahead", "of": ids[dc.RAIN_NOW], "hours": 2},
         ids[dc.PERGOLA_LIGHT]: {"kind": "duty", "on": [[17, 23]], "states": ["off", "on"]},
         ids[dc.TV]: {"kind": "duty", "on": [[7, 8], [19, 22]], "states": ["off", "playing"]},
         ids[dc.MODE]: {"kind": "duty", "on": [[18, 19]], "states": ["normal", "kitchen"]},
@@ -954,6 +966,15 @@ def demo_recorder():
             "level": ids[dc.PRICE_LEVEL],
             "fees": 0.05,
         },
+        # the weather entity's hourly forecast (ADR-014): the rain and outdoor profiles' next hours
+        "weather": {
+            "entity": ids[dc.WEATHER],
+            "rain": ids[dc.RAIN_NOW],
+            "temperature": ids[dc.OUTDOOR],
+            "hours": 24,
+        },
+        # each rule's last run, the last time the clock read its [hour, minute] in the zone
+        "rules": {ids[dc.RAIN_RULE]: [14, 19], ids[dc.SUNSET_RULE]: [15, 45]},
     }
 
 
@@ -978,8 +999,7 @@ def _hours(base, amp, ripple, phase=0.0):
 
 def demo_series():
     """Chart data keyed the way demo/charts.js asks: an apexcharts series by
-    "<entity>|<series name>", a history or statistics line by its entity or statistic id, the
-    forecast by the weather entity. Offsets are in each key's step from now (hours), from today
+    "<entity>|<series name>", a history or statistics line by its entity or statistic id. Offsets are in each key's step from now (hours), from today
     (days) or from this month (months)."""
     s = {}
 
@@ -1001,32 +1021,6 @@ def demo_series():
     put(ids["sensor.komfovent_supply_temperature"], "hour", _hours(19.5, 1.2, 0.3, 3))
     put(ids["sensor.komfovent_extract_temperature"], "hour", _hours(21.4, 0.5, 0.2, 1))
     put(ids[dc.OUTDOOR], "hour", _hours(7.5, 3.5, 0.3, 9))
-    conditions = [
-        "cloudy",
-        "cloudy",
-        "partlycloudy",
-        "partlycloudy",
-        "rainy",
-        "rainy",
-        "cloudy",
-        "night",
-        "night",
-        "cloudy",
-        "partlycloudy",
-        "partlycloudy",
-    ]
-    s[ids["weather.forecast_kodu"]] = {
-        "step": "hour",
-        "forecast": [
-            {
-                "h": h + 1,
-                "condition": c,
-                "temperature": round(7 + 2 * _wave(h, 24, 2), 0),
-                "precipitation": 0.6 if c == "rainy" else 0,
-            }
-            for h, c in enumerate(conditions)
-        ],
-    }
     return s
 
 
@@ -1045,6 +1039,9 @@ VISIBLE = (
         "unit",
         "legend",
         "caption_below",
+        # a forecast cell's notes by its value
+        "above",
+        "below",
     ),
 )
 RAW = re.compile(r"^[a-z0-9_]*$")
@@ -1090,7 +1087,8 @@ def _walk_en(o, key=None):
             return o
         if key in VISIBLE:
             return _en(o)
-        if key in ("state", "state_not"):
+        # a mode's option is the select's state word
+        if key in ("state", "state_not", "option"):
             return _word(o)
     return o
 

@@ -144,8 +144,6 @@ class DemoConfig(unittest.TestCase):
                 wanted |= {x["entity"] for x in c["entities"]}
             if c["type"] == "custom:apexcharts-card":
                 wanted |= {f"{x['entity']}|{x['name']}" for x in c["series"]}
-            if c["type"] == "weather-forecast":
-                wanted.add(c["entity"])
         self.assertTrue(wanted)
         self.assertEqual(sorted(wanted - set(SERIES)), [])
 
@@ -180,6 +178,25 @@ class DemoConfig(unittest.TestCase):
             self.assertIn(target, STATES)
             self.assertIn(m["from"], STATES)
             self.assertEqual(STATES[target]["state"], m["map"][STATES[m["from"]]["state"]])
+
+    def test_pergolas_tones_rain_and_rules_are_the_houses(self):
+        for real in (dc.TONE, "input_select.pergola_ohtune_toon"):
+            self.assertEqual(STATES[dd.CATALOGUE[real]["id"]]["attributes"]["options"], a3.TONES)
+        for real in (dc.RAIN_NOW, dc.RAIN_2H):
+            a = STATES[dd.CATALOGUE[real]["id"]]["attributes"]
+            self.assertEqual((a["unit_of_measurement"], a["device_class"]), ("mm", "precipitation"))
+        rec = dd.demo_recorder()
+        self.assertEqual(rec["weather"]["entity"], dd.CATALOGUE[dc.WEATHER]["id"])
+        self.assertEqual(
+            set(rec["rules"]), {dd.CATALOGUE[e]["id"] for e in (dc.RAIN_RULE, dc.SUNSET_RULE)}
+        )
+        # the scenario player finds a rule by its alias
+        for e, alias in (
+            (dc.RAIN_RULE, "Pergola: vihm sulgeb katuse"),
+            (dc.SUNSET_RULE, "Pergola: valgustus loojangul"),
+        ):
+            self.assertEqual(dd.CATALOGUE[e]["attributes"]["friendly_name"], alias)
+            self.assertIn(f'alias: "{alias}"', (ROOT / "config/packages/pergola.yaml").read_text())
 
 
 class DemoEnglish(unittest.TestCase):
@@ -255,6 +272,14 @@ class DemoEnglish(unittest.TestCase):
                 self.assertIn(st["state"], st["attributes"]["options"], e)
         for target, m in STATES_EN["mirrors"].items():
             self.assertEqual(states[target]["state"], m["map"][states[m["from"]]["state"]])
+
+    def test_a_modes_option_is_the_english_state_word_of_its_select(self):
+        (light,) = [c for c in cards(CONFIG_EN) if c.get("modes_entity")]
+        states = STATES_EN["states"]
+        options = states[light["modes_entity"]]["attributes"]["options"]
+        self.assertEqual([m["option"] for m in light["modes"]], ["Warm", "White"])
+        self.assertEqual([m["option"] for m in light["modes"]], options)
+        self.assertEqual([m["name"] for m in light["modes"]], ["Warm", "White"])
 
     def test_costs_take_a_decimal_point(self):
         a = STATES_EN["states"][dd.CATALOGUE["sensor.maja_sel_kuul"]["id"]]["attributes"]

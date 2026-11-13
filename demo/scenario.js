@@ -20,10 +20,18 @@ function check(scenario, sim, car) {
 // play(scenario, sim, opts) -> stop(), which cancels the steps still to come. opts: car (the
 // model's car entity), schedule/cancel/now as the sim takes them, onStep(step) for each step as it
 // lands, onTime(date) for a step that moves the 3D view's sky, onEnd() after the last step.
+// the automation entity a step's alias names (the demo names its rules by their aliases), or null
+export const ruleOf = (sim, alias) => (alias && Object.keys(sim.states).find(e => e.startsWith('automation.') && sim.states[e].attributes.friendly_name === alias)) || null;
+
 export function play(scenario, sim, { car = null, schedule = setTimeout, cancel = clearTimeout, now = () => new Date(), onStep = () => {}, onTime = () => {}, onEnd = () => {} } = {}) {
   check(scenario, sim, car);
   sim.reset(scenario.start);
+  // HA stamps a rule's last run once a run: the first of its steps in a row stamps it
+  let running = null;
   const apply = st => {
+    const rule = ruleOf(sim, st.automation);
+    if (rule && rule !== running) sim.set(rule, sim.states[rule].state, { last_triggered: now().toISOString() });
+    running = st.automation ? rule : null;
     if (st.set) sim.set(...st.set);
     if (st.service) { const [d, s, e, data] = st.service; sim.callService(d, s, data || {}, { entity_id: e }); }
     if (st.time) onTime(new Date(st.time));

@@ -39,6 +39,16 @@ ROOF = "cover.pergola_katus"
 ROOF_NAME = "Pergola katus"
 PERGOLA_LIGHT = "light.pergola_valgustus"
 OUTDOOR = "sensor.komfovent_outdoor_temperature"
+# Pergola's own helpers, sensors and rules, named once for A3's Pergola (dashboard_a3.py).
+RAIN_NOW = "sensor.sademed_praegu"
+RAIN_2H = "sensor.sademed_kahe_tunniga"
+ROOF_AUTO = "input_boolean.pergola_katuse_automaatika"
+LIGHT_AUTO = "input_boolean.pergola_valguse_automaatika"
+TONE = "input_select.pergola_valguse_toon"
+WEATHER = "weather.forecast_kodu"
+RAIN_RULE = "automation.pergola_vihm_sulgeb_katuse"
+SUNSET_RULE = "automation.pergola_valgustus_loojangul"
+LIGHT_OFF = "input_datetime.pergola_valgus_kustub"
 # The first page's own sensors, named once so that the A3 dashboard (dashboard_a3.py) takes them
 # from here.
 PRICE_LEVEL = "sensor.elektri_hinna_tase"
@@ -1621,28 +1631,28 @@ pergola = {
     "badges": [
         {
             "type": "entity",
-            "entity": "sensor.sademed_praegu",
+            "entity": RAIN_NOW,
             "name": "Sajab",
             "show_name": True,
             "show_state": True,
         },
         {
             "type": "entity",
-            "entity": "input_boolean.pergola_katuse_automaatika",
+            "entity": ROOF_AUTO,
             "name": "Autom.",
             "show_name": True,
             "show_state": True,
         },
         {
             "type": "entity",
-            "entity": "input_boolean.pergola_valguse_automaatika",
+            "entity": LIGHT_AUTO,
             "name": "Autom.",
             "show_name": True,
             "show_state": True,
         },
         {
             "type": "entity",
-            "entity": "input_boolean.pergola_katuse_automaatika",
+            "entity": ROOF_AUTO,
             "name": "Seaded",
             "icon": "mdi:tune",
             "color": "grey",
@@ -1673,7 +1683,7 @@ pergola = {
                             features=[{"type": "light-brightness"}],
                         ),
                         tile(
-                            "input_select.pergola_valguse_toon",
+                            TONE,
                             "Toon",
                             hide_state=True,
                             features=[{"type": "select-options"}],
@@ -1692,15 +1702,13 @@ pergola = {
                 {
                     "type": "horizontal-stack",
                     "cards": [
-                        nowrite(
-                            "sensor.sademed_kahe_tunniga", "Sademed kahe tunniga", vertical=True
-                        ),
+                        nowrite(RAIN_2H, "Sademed kahe tunniga", vertical=True),
                         nowrite(OUTDOOR, "Välisõhk", vertical=True),
                     ],
                 },
                 {
                     "type": "weather-forecast",
-                    "entity": "weather.forecast_kodu",
+                    "entity": WEATHER,
                     "forecast_type": "hourly",
                     "show_current": False,
                     "show_forecast": True,

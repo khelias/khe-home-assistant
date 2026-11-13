@@ -190,7 +190,11 @@ Ventilatsioon uses too with any unit, a meter and three cells, beside a days
 card with an overlay series and a ratio headline; a reading card's big value
 opens its history sheet as its cells do, and a days card's headline opens
 its series' sheet over 30 days, 90 days and 12 months
-([ADR-013](decisions/013-days-cards-open-a-long-range-sheet.md)). Kodu was drawn
+([ADR-013](decisions/013-days-cards-open-a-long-range-sheet.md)), and for
+Pergola `custom:khe-forecast-card`, the weather entity's hourly forecast
+read through `weather.get_forecasts`
+([ADR-014](decisions/014-a3-reads-the-weather-forecast-through-get-forecasts.md)),
+with the reading card's cells. Kodu was drawn
 with them on 2026-10-17 and went back to stock cards the next day; A3
 uses them. Deploy replaces `www/khe-cards/` in HA's config volume, so HA
 serves them as `/local/khe-cards/`, and a change arrives without a restart.
@@ -234,7 +238,7 @@ behind every value and device. It replaced the Bubble Card trial of
 - **Saving:** `ha-dashboard.py` saves `dashboard_a3.overview()`:
   `dashboard_config.build()`'s views with A3's in place of Kodu's at the same
   paths (`kodu` and, since 2026-11-12, `energia` and `soojuspump`, since
-  2026-11-13 `ventilatsioon`) and the 3D view
+  2026-11-13 `ventilatsioon` and `pergola`) and the 3D view
   (`maja-3d`) last. Kodu stays in `dashboard_config.py` as the fallback and as
   A3's source of entities and confirmations; the demo builds `overview()` too.
 - **Undo:** revert the commit and run `ha-dashboard.py` for the Overview
@@ -292,7 +296,8 @@ behind every value and device. It replaced the Bubble Card trial of
   July, the boiler and the recovered heat in August), so 12 months shows 4
   to 6 bars in 2026.
 - **Limits:** the pergola roof is a group without position and its state
-  is `unknown`, so its tile shows no state and opens more-info, not a sheet.
+  is `unknown`, so its tiles show no state, no command shows pressed and a
+  tap opens more-info, not a sheet.
   Section headings link into Kodu's views (Energia, Soojuspump, Süsteem),
   and the light's, ventilation's and TV's sheets into Pergola, Ventilatsioon
   and Teler.
@@ -305,7 +310,10 @@ behind every value and device. It replaced the Bubble Card trial of
   each (one `number.set_value` per settled change).
   On a wide screen check that the hero still stretches beside Elekter: it
   reads `hui-sections-view`'s `.section` and `.content` and relies on
-  `row_span`.
+  `row_span`. On Pergola compare the forecast's hours with a direct
+  `weather.get_forecasts` call through `ha-ws.py` (`call_service` with
+  `return_response`, ADR-014) and point an hour; a blank chart with the
+  cells still drawn means the call or its response changed.
 - **Energia** ([ADR-008](decisions/008-a3-page-cards-read-statistics.md)):
   the month card reads `maja_sel_kuul`, `maja_eelmine_kuu`, `maja_tana` and
   `maja_eile` with their `kulu` and `hind` attributes; the days cards read
@@ -343,6 +351,23 @@ behind every value and device. It replaced the Bubble Card trial of
   sums (the unit's electricity includes the afterheater, which ECO keeps at
   zero). The schedule is not on the page: it runs only in auto mode, which
   is off; it stays on the settings subview, still Kodu's.
+- **Pergola** ([ADR-014](decisions/014-a3-reads-the-weather-forecast-through-get-forecasts.md)):
+  the status reads `sademed_praegu` as a number (`status.above`): above 0
+  "Sajab" with a blue dot, at 0 "Kuiv". The roof's Ava, Stopp and Sulge are
+  mode buttons with their own `tap_action` on the group, never pressed. The
+  light's tile is Kodu's (`pergola_light_tile()`) with the Soe/Valge segment
+  on `input_select.pergola_valguse_toon` (`modes_entity`) and "kustub 23:00"
+  only while it is on and the light rule is on. The forecast card reads
+  `weather.forecast_kodu`'s hourly forecast once an hour: 14 hours of
+  precipitation bars against 1 mm (more scales them down), the temperature
+  line, a mark under each hour whose condition the rain rule also closes the
+  roof on, the total and the first dry stretch of two hours or more; its
+  cells are the two rain sensors (mm, mean statistics) and the outdoor
+  temperature. The two rules are wide tiles with a switch on their
+  booleans and their automations' `last_triggered`, which HA sets only once
+  the conditions pass, so it is the last close command or the last time the
+  light came on; `input_datetime.pergola_vihmateade` is only the last
+  notification and is not shown. The settings subview is still Kodu's.
 
 ## The 3D house view (`house3d`)
 

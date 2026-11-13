@@ -995,3 +995,190 @@ test('days sheet: tile sheets keep 24 h, 7 and 30 days; the days sheet has its o
   assert.deepEqual(Object.keys(A3.DAYS_RANGES), ['30d', '90d', '12m']);
   for (const L of A3.LANGUAGES) for (const k of [...Object.keys(A3.RANGES), ...Object.keys(A3.DAYS_RANGES)]) assert.ok(A3.words(L).ranges[k], `${L} ${k}`);
 });
+
+/* ---------- A3 Pergola (ADR-014): the forecast, the tile's new parts, the status by a number ---------- */
+
+const FC = JSON.parse(readFileSync(new URL('./fixtures/forecast.json', import.meta.url), 'utf8'));
+const FC_ID = 'weather.test_forecast';
+const fcRows = (now = FC.now, hours = 14) => A3.forecastHours(FC, FC_ID, now, hours);
+const hourRow = (iso, p, cond = p > 0 ? 'rainy' : 'cloudy', temp = 3) => ({ datetime: iso, precipitation: p, temperature: temp, condition: cond });
+const answer = rows => ({ response: { [FC_ID]: { forecast: rows } } });
+const hoursFrom = (h0, ps) => ps.map((p, i) => hourRow(new Date(Date.UTC(2026, 10, 13, h0 + i)).toISOString(), p));
+
+test('Pergola: the forecast request is a get_forecasts call with its response', () => {
+  assert.deepEqual(A3.forecastRequest('weather.x'), {
+    type: 'call_service', domain: 'weather', service: 'get_forecasts', service_data: { type: 'hourly' },
+    target: { entity_id: 'weather.x' }, return_response: true
+  });
+});
+
+test('Pergola: the house forecast from the hour now, 14 hours, its total and the dry stretch', () => {
+  const rows = fcRows();
+  assert.equal(rows.length, 14);
+  // 15:20 UTC: the 15:00 row is the hour now
+  assert.equal(new Date(rows[0].t).toISOString(), '2026-11-13T15:00:00.000Z');
+  assert.equal(A3.forecastHours(FC, FC_ID, FC.now + 3600e3).length, 14);
+  assert.equal(new Date(A3.forecastHours(FC, FC_ID, FC.now + 3600e3)[0].t).toISOString(), '2026-11-13T16:00:00.000Z');
+  const s = A3.forecastSummary(rows);
+  assert.equal(Number(s.total.toFixed(1)), 2.7);
+  // dry 15-17 UTC is 17-19 in Tallinn, the first two dry hours
+  assert.deepEqual(s.dry, [0, 2]);
+  assert.equal(A3.forecastNote(rows, 'et', TZ), 'kuiv kell 17–19');
+  assert.equal(A3.forecastNote(rows, 'en', TZ), 'dry 17–19');
+});
+
+test('Pergola: the dry stretch is the first of two hours or more, none, or dry throughout', () => {
+  const rows = ps => A3.forecastHours(answer(hoursFrom(10, ps)), FC_ID, Date.UTC(2026, 10, 13, 10, 5), 14);
+  // one dry hour is no stretch; the run from 13 to 16 UTC is 15-18 in Tallinn
+  assert.deepEqual(A3.forecastSummary(rows([0.2, 0, 0.3, 0, 0, 0, 0.1])).dry, [3, 6]);
+  assert.equal(A3.forecastNote(rows([0.2, 0, 0.3, 0, 0, 0, 0.1]), 'et', TZ), 'kuiv kell 15–18');
+  // a stretch that runs to the window's end
+  assert.equal(A3.forecastNote(rows([0.5, 0, 0]), 'et', TZ), 'kuiv kell 13–15');
+  assert.equal(A3.forecastNote(rows([0.2, 0, 0.3, 0.1]), 'et', TZ), '');
+  assert.deepEqual(A3.forecastSummary(rows([0, 0, 0])), { total: 0, dry: null });
+  assert.equal(A3.forecastNote(rows([0, 0, 0]), 'et', TZ), 'kogu aeg kuiv');
+  assert.equal(A3.forecastNote([], 'et', TZ), '');
+});
+
+test('Pergola: bars, the temperature line and a mark under each wet condition', () => {
+  const rows = A3.forecastHours(answer([
+    hourRow('2026-11-13T10:00:00Z', 0, 'cloudy', 2), hourRow('2026-11-13T11:00:00Z', 0.5, 'rainy', 3),
+    hourRow('2026-11-13T12:00:00Z', 0, 'snowy', 1), hourRow('2026-11-13T13:00:00Z', 2, 'pouring', 4)
+  ]), FC_ID, Date.UTC(2026, 10, 13, 10), 14);
+  const P = A3.forecastPaths(rows);
+  assert.equal(P.slot, 341 / 4);
+  // two bars; 2 mm is the top, so 0.5 mm is a quarter of the room
+  assert.equal((P.bars.match(/M/g) || []).length, 2);
+  assert.match(P.bars, /^M\d+\.\d 76\.5h/);
+  // a mark under the rain, the snow and the downpour, none under the cloud
+  assert.equal((P.marks.match(/M/g) || []).length, 3);
+  assert.ok(!P.marks.includes(`M${(341 / 8).toFixed(1)} `));
+  assert.equal((P.line.match(/[ML]/g) || []).length, 4);
+  // under 1 mm a bar is drawn against 1 mm, not against itself
+  const small = A3.forecastPaths(A3.forecastHours(answer([hourRow('2026-11-13T10:00:00Z', 0.4)]), FC_ID, Date.UTC(2026, 10, 13, 10), 14));
+  assert.match(small.bars, / 67\.2h/);
+  assert.equal(A3.wetCondition('lightning-rainy'), true);
+  assert.equal(A3.wetCondition('partlycloudy'), false);
+});
+
+test("Pergola: pointing an hour reads it in HA's zone, in both languages", () => {
+  const rows = fcRows();
+  assert.deepEqual(A3.forecastPoint(rows, 2, 'et', TZ), ['Kell 19–20', '0,4 mm', '3,3° · vihm']);
+  assert.deepEqual(A3.forecastPoint(rows, 0, 'et', TZ), ['Kell 17–18', 'Kuiv', '2,6° · pilves']);
+  assert.deepEqual(A3.forecastPoint(rows, 2, 'en', TZ), ['At 19–20', '0.4 mm', '3.3° · rain']);
+  // the hour is HA's, not the browser's
+  assert.deepEqual(A3.forecastPoint(rows, 2, 'et', 'UTC')[0], 'Kell 17–18');
+  assert.equal(A3.hourAt(Date.UTC(2026, 10, 13, 22), 'et', TZ), 'kell 00–01');
+});
+
+test('Pergola: an empty, a failed and a missing answer give no hours', () => {
+  assert.deepEqual(A3.forecastHours(answer([]), FC_ID, FC.now), []);
+  assert.deepEqual(A3.forecastHours(undefined, FC_ID, FC.now), []);
+  assert.deepEqual(A3.forecastHours({ response: {} }, FC_ID, FC.now), []);
+  // hours all in the past
+  assert.deepEqual(A3.forecastHours(FC, FC_ID, FC.now + 30 * 3600e3), []);
+});
+
+test('Pergola: a cell note by its value, else its caption', () => {
+  const x = { entity: 'sensor.r', name: 'Praegu', note_above: { value: 0, above: 'sajab', below: 'ei saja' } };
+  assert.equal(A3.cellNote(x, { 'sensor.r': st('0.4') }), 'sajab');
+  assert.equal(A3.cellNote(x, { 'sensor.r': st('0.0') }), 'ei saja');
+  assert.equal(A3.cellNote(x, { 'sensor.r': st('unknown') }), '');
+  assert.equal(A3.cellNote({ entity: 'sensor.r', caption: 'maja juures' }, {}), 'maja juures');
+});
+
+test('Pergola: when, today, yesterday, older and a time alone, in a zone other than the machine', () => {
+  // the machine runs Tallinn (TZ above); HA here is in New York
+  const ny = 'America/New_York', now = Date.parse('2026-11-13T20:00:00Z');
+  assert.equal(A3.whenText('2026-11-13T12:19:30+00:00', 'et', ny, now), 'täna 07:19');
+  assert.equal(A3.whenText('2026-11-13T02:00:00+00:00', 'et', ny, now), 'eile 21:00');
+  assert.equal(A3.whenText('2026-09-21T00:17:00+00:00', 'et', ny, now), '20.09 kell 20:17');
+  assert.equal(A3.whenText('2026-09-21T00:17:00+00:00', 'en', ny, now), '20/09 at 20:17');
+  assert.equal(A3.whenText('2026-11-13T02:00:00+00:00', 'en', ny, now), 'yesterday 21:00');
+  assert.equal(A3.whenText('23:00:00'), '23:00');
+  assert.equal(A3.whenText(null), '');
+  assert.equal(A3.whenText('unknown'), '');
+});
+
+const RULE = 'input_boolean.roof_auto', AUTO = 'automation.rain_closes_roof', LIGHT = 'light.p', OFF = 'input_datetime.off', LAUTO = 'input_boolean.light_auto';
+const ruleConf = { entity: RULE, wide: true, switch: true, state_text: [{ entity: AUTO, attribute: 'last_triggered', format: 'when', label: 'viimati', if: [{ state: 'on' }] }] };
+
+test('Pergola: a part shows another entity attribute, a fixed text and only while its conditions hold', () => {
+  const ctx = { tz: TZ, now: Date.parse('2026-11-13T15:00:00Z') };
+  const states = { [RULE]: st('on'), [AUTO]: st('on', { last_triggered: '2026-11-13T12:19:04+00:00' }) };
+  assert.equal(A3.tileState(ruleConf, states, 'et', ctx).text, 'viimati täna 14:19');
+  // the rule off: every part hidden, the state word
+  assert.equal(A3.tileState(ruleConf, { ...states, [RULE]: st('off') }, 'et', ctx).text, 'väljas');
+  const light = { entity: LIGHT, state_text: [{ entity: OFF, format: 'when', label: 'kustub', if: [{ state: 'on' }, { entity: LAUTO, state: 'on' }] }] };
+  const ls = { [LIGHT]: st('on'), [OFF]: st('23:00:00'), [LAUTO]: st('on') };
+  assert.equal(A3.tileState(light, ls, 'et', ctx).text, 'kustub 23:00');
+  assert.equal(A3.tileState(light, { ...ls, [LAUTO]: st('off') }, 'et', ctx).text, 'sees');
+  assert.equal(A3.tileState(light, { ...ls, [LIGHT]: st('off') }, 'et', ctx).text, 'väljas');
+  assert.equal(A3.tileState({ entity: LIGHT, state_text: [{ text: 'Poole peal' }, 'state'] }, ls).text, 'Poole peal · sees');
+  assert.equal(A3.tileState({ entity: LIGHT, state_text: [{ entity: AUTO, attribute: 'mode' }] }, { ...ls, [AUTO]: st('on', { mode: 'single' }) }).text, 'single');
+  // the parts' and their conditions' entities are watched, once each
+  assert.deepEqual(A3.tileWatched(light), [LIGHT, OFF, LAUTO]);
+  assert.deepEqual(A3.tileWatched({ entity: LIGHT, modes_entity: 'input_select.tone', modes: [] }), [LIGHT, 'input_select.tone']);
+});
+
+test('Pergola: the rule switch toggles its entity, with role switch and aria-checked', () => {
+  const hass = { config: { time_zone: TZ } };
+  const on = A3.tileA3Markup(ruleConf, { [RULE]: st('on'), [AUTO]: st('on') }, 'et', hass);
+  assert.match(on.html, /<button type="button" class="sw press" data-k="sw" role="switch" aria-checked="true" aria-label="input_boolean.roof_auto">/);
+  assert.deepEqual(on.actions.get('sw'), { config: { entity: RULE, tap_action: { action: 'toggle' } }, action: 'tap' });
+  assert.match(A3.tileA3Markup(ruleConf, { [RULE]: st('off') }, 'et', hass).html, /role="switch" aria-checked="false"/);
+  assert.doesNotMatch(A3.tileA3Markup({ ...ruleConf, switch: false }, { [RULE]: st('on') }, 'et', hass).html, /role="switch"/);
+});
+
+test("Pergola: the tone segment reads and writes its own select, under the light's slider", () => {
+  const conf = { entity: LIGHT, wide: true, slider: { attribute: 'brightness' }, modes_entity: 'input_select.tone', modes: [{ name: 'Soe', option: 'Soe' }, { name: 'Valge', option: 'Valge' }] };
+  const m = A3.tileA3Markup(conf, { [LIGHT]: st('on', { brightness: 76 }), 'input_select.tone': st('Soe') });
+  assert.ok(m.html.indexOf('class="sl"') < m.html.indexOf('class="seg"') && m.html.includes('class="sl"'));
+  assert.match(m.html, /data-k="m0" aria-pressed="true">Soe/);
+  assert.match(m.html, /data-k="m1" aria-pressed="false">Valge/);
+  assert.equal(m.actions.get('m0'), null);
+  assert.deepEqual(m.actions.get('m1').config.tap_action, { action: 'perform-action', perform_action: 'input_select.select_option', target: { entity_id: 'input_select.tone' }, data: { option: 'Valge' } });
+});
+
+test('Pergola: a mode with its own tap_action runs it and is never pressed', () => {
+  const close = { action: 'perform-action', perform_action: 'cover.close_cover', target: { entity_id: 'cover.roof' } };
+  const conf = { entity: 'cover.roof', wide: true, state_text: 'Poole peal peata Stopiga', modes: [{ name: 'Ava', tap_action: { ...close, perform_action: 'cover.open_cover' } }, { name: 'Sulge', tap_action: close }] };
+  const m = A3.tileA3Markup(conf, { 'cover.roof': st('unknown') });
+  assert.doesNotMatch(m.html, /aria-pressed/);
+  assert.deepEqual(m.actions.get('m1'), { config: { entity: 'cover.roof', tap_action: close }, action: 'tap' });
+  assert.deepEqual(A3.modeAction('cover.roof', { name: 'Sulge', tap_action: close }, 'closed').config.tap_action, close);
+  // the fixed second line stays while the roof's state is unknown
+  assert.match(m.html, /Poole peal peata Stopiga/);
+});
+
+test("Pergola: Kodu's and Ventilatsioon's mode rows and Kodu's light are as before", () => {
+  const vent = { entity: 'select.mode', wide: true, modes: [{ name: 'Tavaline', option: 'normal' }, { name: 'Köök', option: 'kitchen', confirm: 'Köök?' }] };
+  const v = A3.tileA3Markup(vent, { 'select.mode': st('normal') });
+  assert.match(v.html, /data-k="m0" aria-pressed="true">Tavaline/);
+  assert.equal(v.actions.get('m1').config.tap_action.perform_action, 'select.select_option');
+  assert.equal(v.actions.get('m1').config.tap_action.target.entity_id, 'select.mode');
+  assert.deepEqual(A3.tileWatched(vent), ['select.mode']);
+  const kodu = A3.tileA3Markup({ entity: LIGHT, wide: true, slider: { attribute: 'brightness' }, icon_tap_action: { action: 'toggle' } }, { [LIGHT]: st('on', { brightness: 76 }) });
+  assert.match(kodu.html, /class="sl"/);
+  assert.doesNotMatch(kodu.html, /class="seg"|role="switch"/);
+});
+
+test('Pergola: the status by a number, Sajab with a blue dot above 0, Kuiv at 0, unknown as before', () => {
+  const conf = { status: { entity: 'sensor.r', above: 0, on: 'Sajab', ok: 'Kuiv' } };
+  assert.deepEqual(A3.statusLine({ 'sensor.r': st('0.4') }, conf), { tone: 'on', text: 'Sajab' });
+  assert.deepEqual(A3.statusLine({ 'sensor.r': st('0.0') }, conf), { tone: 'ok', text: 'Kuiv' });
+  assert.deepEqual(A3.statusLine({ 'sensor.r': st('unavailable') }, conf), { tone: 'off', text: 'Seisund pole teada' });
+  assert.deepEqual(A3.statusLine({}, conf, 'en'), { tone: 'off', text: 'State not known' });
+  // the dots: blue for on, green for ok, grey for off
+  const css = readFileSync(new URL('../../cards/khe-cards.js', import.meta.url), 'utf8');
+  assert.match(css, /\.status\.on i\{background:var\(--accent\);opacity:1\}/);
+  assert.match(css, /\.status\.ok i\{background:var\(--cheap\);opacity:1\}/);
+});
+
+test('Pergola: a date and time without an offset is HA wall clock, and one hour reads in the singular', () => {
+  const ny = 'America/New_York', now = Date.parse('2026-11-13T20:00:00Z');
+  assert.equal(A3.whenText('2026-11-13 14:20:00', 'et', ny, now), 'täna 14:20');
+  assert.equal(A3.whenText('2026-10-14 16:20:00', 'et', TZ, now), '14.10 kell 16:20');
+  assert.equal(A3.words('et').nextHours(1), 'Järgmine tund');
+  assert.equal(A3.words('en').nextHours(14), 'Next 14 hours');
+});

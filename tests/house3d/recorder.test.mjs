@@ -159,3 +159,61 @@ test("months for the days sheet's 12 months (ADR-013): a month is the sum or the
   assert.equal(s.pts.filter(x => x.v !== null).length, 12);
   assert.equal(s.pts[11].out, 'open');
 });
+
+const py2 = `import json, sys; sys.path.insert(0, 'scripts'); import dashboard_demo as d, dashboard_config as dc
+ids = {k: v['id'] for k, v in d.CATALOGUE.items()}
+print(json.dumps({k: ids[getattr(dc, k)] for k in ('RAIN_NOW', 'RAIN_2H', 'WEATHER', 'RAIN_RULE', 'SUNSET_RULE')}))`;
+const P = JSON.parse(execFileSync('python3', ['-I', '-c', py2], { cwd: ROOT, encoding: 'utf8' }));
+const fcCall = (entity, now) => rec.callWS({ type: 'call_service', domain: 'weather', service: 'get_forecasts', service_data: { type: 'hourly' }, target: { entity_id: entity }, return_response: true }, now);
+
+test("the forecast (ADR-014): 24 hours from the hour now in the house's shape, agreeing with the rain and outdoor profiles", async () => {
+  const now = Date.parse('2026-11-12T14:07:00Z'), house = fixture('forecast.json');
+  const r = await fcCall(P.WEATHER, now);
+  const rows = r.response[P.WEATHER].forecast;
+  assert.equal(rows.length, 24);
+  assert.equal(rows[0].datetime, '2026-11-12T14:00:00.000Z');
+  assert.equal(keys(rows[0]), keys(house.response['weather.test_forecast'].forecast[0]));
+  const dated = rec.dated(now, { comma: false });
+  // the rain sensor now is the forecast's first hour, the two-hour sensor its next two
+  assert.equal(Number(dated[P.RAIN_NOW].state), rows[0].precipitation);
+  assert.ok(Math.abs(Number(dated[P.RAIN_2H].state) - (rows[1].precipitation + rows[2].precipitation)) < 0.11);
+  assert.ok(Math.abs(rows[0].temperature - Number(dated[ids.OUTDOOR].state)) < 1);
+  assert.equal(dated[P.WEATHER].state, rows[0].condition);
+  for (const x of rows) assert.equal(x.condition === 'rainy' || x.condition === 'snowy', x.precipitation > 0, x.datetime);
+  // the house's own card reads it
+  const hours = cards.forecastHours(r, P.WEATHER, now, 14);
+  assert.equal(hours.length, 14);
+  await assert.rejects(fcCall('weather.other', now));
+});
+
+test('the rain is never negative, mostly dry, and has dry days and wet ones', async () => {
+  const now = Date.parse('2026-11-30T23:00:00Z');
+  const rows = (await stat(now, P.RAIN_NOW, 'hour', ['mean'], now - 30 * 86400e3))[P.RAIN_NOW];
+  assert.ok(rows.length >= 700);
+  assert.ok(rows.every(r => r.mean >= 0 && r.min >= 0));
+  const wet = rows.filter(r => r.mean > 0).length;
+  assert.ok(wet > 0 && wet < rows.length * 0.15, String(wet));
+  const byDay = new Map();
+  for (const r of rows) { const p = zoneParts(r.start, TZ), k = `${p.m}-${p.d}`; byDay.set(k, (byDay.get(k) || 0) + r.mean); }
+  const sums = [...byDay.values()];
+  assert.ok(sums.some(v => v === 0) && sums.some(v => v > 0));
+  // the two-hour sensor is never negative either
+  assert.ok((await stat(now, P.RAIN_2H, 'hour', ['mean'], now - 2 * 86400e3))[P.RAIN_2H].every(r => r.mean >= 0));
+});
+
+test("each rule's last run is today at its time once it has passed, else yesterday", () => {
+  const at = iso => rec.dated(Date.parse(iso), { comma: false });
+  assert.equal(at('2026-11-13T13:00:00Z')[P.RAIN_RULE].attributes.last_triggered, '2026-11-13T12:19:00.000Z');
+  assert.equal(at('2026-11-13T12:00:00Z')[P.RAIN_RULE].attributes.last_triggered, '2026-11-12T12:19:00.000Z');
+  assert.equal(at('2026-11-13T14:00:00Z')[P.SUNSET_RULE].attributes.last_triggered, '2026-11-13T13:45:00.000Z');
+  assert.equal(at('2026-11-13T14:00:00Z')[P.SUNSET_RULE].state, 'on');
+  assert.equal(cards.whenText(at('2026-11-13T14:00:00Z')[P.RAIN_RULE].attributes.last_triggered, 'et', TZ, Date.parse('2026-11-13T14:00:00Z')), 'täna 14:19');
+});
+
+test("a rule's last run keeps its clock time across the October change", () => {
+  // 2026-10-25: Tallinn goes from +03:00 to +02:00 at 04:00
+  const r = rec.dated(Date.parse('2026-10-25T20:00:00Z'), { comma: false })[P.RAIN_RULE].attributes.last_triggered;
+  assert.equal(cards.whenText(r, 'et', TZ, Date.parse('2026-10-25T20:00:00Z')), 'täna 14:19');
+  const before = rec.dated(Date.parse('2026-10-25T09:00:00Z'), { comma: false })[P.RAIN_RULE].attributes.last_triggered;
+  assert.equal(before, '2026-10-24T11:19:00.000Z');
+});

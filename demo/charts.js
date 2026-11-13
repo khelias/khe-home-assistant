@@ -1,9 +1,8 @@
 // The dashboard's charts as SVG, drawn from the made-up series in series.json: HA's
 // statistics-graph and history-graph, the apexcharts-card subset the generator uses (columns
-// and step lines, a colour threshold, the now marker) and weather-forecast's hourly row. Each
+// and step lines, a colour threshold, the now marker). Each
 // takes the card's config, the series, the time and the width to draw at, and returns markup.
 // No DOM and no eval, so the CSP holds and the tests load it in Node.
-import { svg, WEATHER } from './icons.js?v=__DEMO_VERSION__';
 import { t, locale } from './strings.js?v=__DEMO_VERSION__';
 
 const esc = s => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
@@ -164,15 +163,4 @@ export function apexChart(conf, series, now, width = 400) {
   return `${svgOpen(width, height, list.map(s => s.name).join(', '))}${fr.markup}${m}</svg>${showLegend ? legend(list.map(s => [s.name, legendColor(s)])) : ''}`;
 }
 
-export function weatherForecast(conf, series, now, width = 400) {
-  const f = ((series[conf.entity] || {}).forecast || []);
-  if (!f.length) return `<p class="nodata">${t.noForecast}</p>`;
-  const n = Math.max(3, Math.min(f.length, Math.floor(width / 56)));
-  const base = new Date(now);
-  base.setMinutes(0, 0, 0);
-  return `<div class="forecast">${f.slice(0, n).map(i => `<div class="fc">
-    <span class="fc-time">${hhmm.format(base.getTime() + i.h * HOUR)}</span>${svg(WEATHER[i.condition] || 'weather-cloudy', 'fc-icon')}
-    <span class="fc-temp">${fmt(0).format(i.temperature)}°</span><span class="fc-rain">${i.precipitation ? `${fmt(1).format(i.precipitation)} mm` : ''}</span></div>`).join('')}</div>`;
-}
-
-export const CHARTS = { 'statistics-graph': statisticsGraph, 'history-graph': historyGraph, 'custom:apexcharts-card': apexChart, 'weather-forecast': weatherForecast };
+export const CHARTS = { 'statistics-graph': statisticsGraph, 'history-graph': historyGraph, 'custom:apexcharts-card': apexChart };

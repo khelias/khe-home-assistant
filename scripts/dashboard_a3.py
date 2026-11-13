@@ -1,14 +1,17 @@
-"""A3, the house's Overview in A3's look, as data (ADR-005 to ADR-008, ADR-010, ADR-011).
+"""A3, the house's Overview in A3's look, as data (ADR-005 to ADR-008, ADR-010, ADR-011, ADR-014).
 
 overview(house, people, model) is the Overview the house saves: dashboard_config.build()'s views
 with A3's views in place of Kodu's at the same paths (`kodu`, `energia`, `soojuspump`,
-`ventilatsioon`) and the 3D view moved last, which the public demo builds too (ADR-012). dashboard_config.build() itself
+`ventilatsioon`, `pergola`) and the 3D view moved last, which the public demo builds too (ADR-012). dashboard_config.build() itself
 stays Kodu with 3D first, the house's fallback. energia() is Energia: the month, the days, who used what and the price, from daily
 statistics. soojuspump(h) is Soojuspump: the status, the indoor and boiler temperatures as 48-hour
 lines from hourly statistics, the heating shift as a stepper, the boost and the boiler's
 electricity by the day. ventilatsioon(h) is Ventilatsioon: the status, Kodu's mode tile, the room
 air as a 48-hour line, the unit with its filter as a meter, and whether it pays for itself as the
-heat it recovers against its electricity by the day.
+heat it recovers against its electricity by the day. pergola(h) is Pergola: whether it rains, the
+roof's three commands, the light with its tone, the next 14 hours' forecast read through
+weather.get_forecasts with the rain sensors and the outdoor temperature as cells, and the two
+rules with their switches and when they last ran.
 
 build(house, people, model) returns A3 as a one-view Lovelace config: the 3D house as
 the hero, then the page's title with the outdoor temperature, people, alarms and live faults as
@@ -45,6 +48,8 @@ Where each sheet reads its history, measured on the house on 2026-11-12
       and its own electricity
     recovery, power, exchanger,   statistics   mean (5minute, hour, day), Ventilatsioon's cells
       efficiency, filter
+    rain now, rain in two hours   statistics   mean (5minute, hour, day), Pergola's cells (mm)
+    the weather forecast          get_forecasts hourly, Pergola's forecast card (ADR-014)
 """
 
 import copy
@@ -284,10 +289,31 @@ def value(entity, name, icon, color, caption, history, **kw):
     )
 
 
+def roof_action(service):
+    return {"action": "perform-action", "perform_action": service, "target": {"entity_id": dc.ROOF}}
+
+
 def cover_button(name, state, service):
     """A roof button: pressed while the roof is in its state, a tap runs the service."""
-    act = {"action": "perform-action", "perform_action": service, "target": {"entity_id": dc.ROOF}}
-    return {"name": name, "state": state, "tap_action": act}
+    return {"name": name, "state": state, "tap_action": roof_action(service)}
+
+
+def pergola_light_tile(name, view=None, **kw):
+    """The pergola light as a wide A3 tile: the icon toggles it, the slider sets its brightness and
+    the sheet shows when it was on, linking to `view` when it has one."""
+    return wide(
+        tile(
+            dc.PERGOLA_LIGHT,
+            name,
+            icon="bulb",
+            color="yellow",
+            icon_tap_action={"action": "toggle"},
+            icon_label="Pergola valgus sisse või välja",
+            slider={"attribute": "brightness"},
+            history={**ONOFF, "view": view} if view else dict(ONOFF),
+            **kw,
+        )
+    )
 
 
 def section(cards, span=1, rows=1):
@@ -347,18 +373,7 @@ def build(house, people, model):
                 ],
             )
         ),
-        wide(
-            tile(
-                dc.PERGOLA_LIGHT,
-                "Pergola valgus",
-                icon="bulb",
-                color="yellow",
-                icon_tap_action={"action": "toggle"},
-                icon_label="Pergola valgus sisse või välja",
-                slider={"attribute": "brightness"},
-                history={**ONOFF, "view": "/lovelace/pergola"},
-            )
-        ),
+        pergola_light_tile("Pergola valgus", "/lovelace/pergola"),
         vent_tile(home, [{"entity": dc.MODE_LABEL}], "/lovelace/ventilatsioon"),
         *boost(home),
         tv(home),
@@ -855,9 +870,139 @@ def ventilatsioon(h):
     }
 
 
+# the light's tones, the options of the tone select in config/packages/pergola.yaml
+TONES = ["Soe", "Valge"]
+ON = {"state": "on"}
+
+
+def when(entity, label, *conditions, attribute=None):
+    """A tile's second-line part: a moment of `entity` (its state, or `attribute`) in HA's zone
+    after `label`, shown while each condition holds."""
+    p = {"entity": entity, "format": "when", "label": label, "if": list(conditions)}
+    return {**p, "attribute": attribute} if attribute else p
+
+
+def rain_cell(entity, name, decimals=1, **kw):
+    """A forecast card's cell that opens its hourly means."""
+    return {"entity": entity, "name": name, "decimals": decimals, "history": MEAN, **kw}
+
+
+def pergola():
+    """Pergola in A3's look (ADR-007, ADR-014): whether it rains, the roof's three commands, the
+    light with its tone, the next hours' forecast with the rain and the outdoor temperature, the two
+    rules with their switches and when they last acted, and the settings row."""
+    v = dc.pergola
+    return {
+        "title": v["title"],
+        "path": v["path"],
+        "icon": v["icon"],
+        "type": "sections",
+        "max_columns": 2,
+        "background": BACKGROUND,
+        "sections": [
+            section(
+                [
+                    card(
+                        "chips-card",
+                        style="a3",
+                        title=v["title"],
+                        status={"entity": dc.RAIN_NOW, "above": 0, "on": "Sajab", "ok": "Kuiv"},
+                        grid_options={"columns": "full"},
+                    ),
+                    # the roof reports no position, so no command shows pressed
+                    wide(
+                        tile(
+                            dc.ROOF,
+                            "Katus",
+                            icon="roof",
+                            color="teal",
+                            active=[],
+                            state_text="Poole peal peata Stopiga · asendit seade ei teata",
+                            modes=[
+                                {"name": "Ava", "tap_action": roof_action("cover.open_cover")},
+                                {"name": "Stopp", "tap_action": roof_action("cover.stop_cover")},
+                                {"name": "Sulge", "tap_action": roof_action("cover.close_cover")},
+                            ],
+                        )
+                    ),
+                    pergola_light_tile(
+                        "Valgus",
+                        modes_entity=dc.TONE,
+                        modes=[{"name": t, "option": t} for t in TONES],
+                        state_text=[
+                            when(dc.LIGHT_OFF, "kustub", ON, {**ON, "entity": dc.LIGHT_AUTO})
+                        ],
+                    ),
+                    heading("Ilm"),
+                    card(
+                        "forecast-card",
+                        entity=dc.WEATHER,
+                        hours=14,
+                        cells=[
+                            rain_cell(
+                                dc.RAIN_NOW,
+                                "Praegu",
+                                color="blue",
+                                note_above={"value": 0, "above": "sajab", "below": "ei saja"},
+                            ),
+                            rain_cell(dc.RAIN_2H, "Kahe tunniga", color="blue", caption="sademeid"),
+                            rain_cell(dc.OUTDOOR, "Väljas", color="teal", caption="maja juures"),
+                        ],
+                        grid_options={"columns": "full"},
+                    ),
+                ]
+            ),
+            section(
+                [
+                    heading("Mida see ise teeb"),
+                    wide(
+                        tile(
+                            dc.ROOF_AUTO,
+                            "Vihm sulgeb katuse",
+                            icon="rain",
+                            color="blue",
+                            switch=True,
+                            state_text=[
+                                when(dc.RAIN_RULE, "viimati", ON, attribute="last_triggered")
+                            ],
+                        )
+                    ),
+                    wide(
+                        tile(
+                            dc.LIGHT_AUTO,
+                            "Õhtune valgus",
+                            icon="sunset",
+                            color="orange",
+                            switch=True,
+                            state_text=[
+                                when(dc.SUNSET_RULE, "süttis", ON, attribute="last_triggered"),
+                                when(dc.LIGHT_OFF, "kustub", ON),
+                            ],
+                        )
+                    ),
+                    wide(
+                        tile(
+                            dc.ROOF_AUTO,
+                            "Seaded",
+                            icon="tune",
+                            active=[],
+                            state_text="Pooled eraldi, vihmateade, õhtune valgus",
+                            chevron=True,
+                            tap_action={
+                                "action": "navigate",
+                                "navigation_path": "/lovelace/pergola-seaded",
+                            },
+                        )
+                    ),
+                ]
+            ),
+        ],
+    }
+
+
 def overview(house, people, model):
     """The house's Overview: dashboard_config.build() with A3's views in place of Kodu's (`kodu`,
-    `energia`, `soojuspump`, `ventilatsioon`) and the 3D view (`maja-3d`) last. A fresh copy every
+    `energia`, `soojuspump`, `ventilatsioon`, `pergola`) and the 3D view (`maja-3d`) last. A fresh copy every
     call."""
     config = dc.build(house, people, model)
     h = dc.House(house, people)
@@ -866,6 +1011,7 @@ def overview(house, people, model):
         "energia": energia(),
         "soojuspump": soojuspump(h),
         "ventilatsioon": ventilatsioon(h),
+        "pergola": pergola(),
     }
     views = [a3.get(v["path"], v) for v in config["views"]]
     config["views"] = sorted(views, key=lambda v: v["path"] == "maja-3d")

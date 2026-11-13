@@ -1,14 +1,14 @@
 // Home Assistant cards of the redesigned views (ADR-002, ADR-005): khe-summary-card,
 // khe-price-card, khe-tile-card and, for Kodu A3, khe-chips-card, khe-heading-card and
 // khe-status-card, with `style: a3` drawing glass boxes and a tap opening a history sheet;
-// Energia's month, days and split cards (ADR-008), a days card's long-range sheet (ADR-013) and
-// Soojuspump's reading card (ADR-011).
+// Energia's month, days and split cards (ADR-008), a days card's long-range sheet (ADR-013),
+// Soojuspump's reading card (ADR-011) and Pergola's forecast card (ADR-014).
 // The A2 and A3 designs are linked from the ADRs. Actions go through HA as a hass-action event, so HA runs the confirmation,
 // more-info, navigation and service call. No build step and no CDN; the pure helpers are
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 15;
+export const KHE_CARDS_VERSION = 16;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -69,7 +69,9 @@ const ICONS = {
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   home: '<path d="M3 11l9-7 9 7M5 10v10h14V10M10 20v-6h4v6"/>',
   chevron: '<path d="M9 6l6 6-6 6"/>',
-  tune: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8M16 5v4M10 15v4"/>'
+  tune: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8M16 5v4M10 15v4"/>',
+  rain: '<path d="M7 16a4 4 0 0 1-.9-7.9A5 5 0 0 1 16 7h.5a3.5 3.5 0 0 1 .5 7M9 19v2M13 18v2M17 17v2"/>',
+  sunset: '<path d="M12 3v2M5.6 5.6 7 7M3 12h2M17 7l1.4-1.4M19 12h2M8 12a4 4 0 0 1 8 0M3 16h18M7 20h10"/>'
 };
 const icon = (key, size, color) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[key] || ICONS.bolt}</svg>`;
 
@@ -127,7 +129,15 @@ const ET = {
   ratio: v => `${v} korda`, inLastShort: (m, v) => `${m} ${v}`,
   failed: 'Ei õnnestunud', shiftDown: 'Nihe ühe kraadi võrra alla', shiftUp: 'Nihe ühe kraadi võrra üles',
   perDayAvg: 'päevas keskmiselt', perMonthAvg: 'kuus keskmiselt', smallestDay: 'Väikseim päev', smallestMonth: 'Väikseim kuu',
-  largestMonth: 'Suurim kuu', last: 'Viimane', monthNotOver: 'kuu pole läbi', partialMonth: 'osaline kuu', partialDay: 'osaline päev'
+  largestMonth: 'Suurim kuu', last: 'Viimane', monthNotOver: 'kuu pole läbi', partialMonth: 'osaline kuu', partialDay: 'osaline päev',
+  nextHours: n => (n === 1 ? 'Järgmine tund' : `Järgmised ${n} tundi`), dry: 'Kuiv', dryAt: s => `kuiv kell ${s}`, allDry: 'kogu aeg kuiv', noWeather: 'Prognoos pole teada',
+  precipKey: 'sademed mm', tempKey: 'temperatuur', rainKey: 'vihm või lumi',
+  forecastAria: n => `Tunniprognoos ${n} tundi: sademed tulpadena, temperatuur joonena`,
+  conditions: {
+    'clear-night': 'selge', cloudy: 'pilves', exceptional: 'erakordne ilm', fog: 'udu', hail: 'rahe', lightning: 'äike',
+    'lightning-rainy': 'äike ja vihm', partlycloudy: 'vahelduv pilvisus', pouring: 'paduvihm', rainy: 'vihm', snowy: 'lumi',
+    'snowy-rainy': 'lörts', sunny: 'päikseline', windy: 'tuuline', 'windy-variant': 'tuuline ja pilves'
+  }
 };
 const EN = {
   locale: 'en-GB', and: 'and',
@@ -172,7 +182,15 @@ const EN = {
   ratio: v => `${v} times`, inLastShort: (m, v) => `${v} ${m}`,
   failed: 'Did not work', shiftDown: 'Shift one degree down', shiftUp: 'Shift one degree up',
   perDayAvg: 'a day on average', perMonthAvg: 'a month on average', smallestDay: 'Smallest day', smallestMonth: 'Smallest month',
-  largestMonth: 'Largest month', last: 'Last', monthNotOver: 'month not over', partialMonth: 'partial month', partialDay: 'partial day'
+  largestMonth: 'Largest month', last: 'Last', monthNotOver: 'month not over', partialMonth: 'partial month', partialDay: 'partial day',
+  nextHours: n => (n === 1 ? 'Next hour' : `Next ${n} hours`), dry: 'Dry', dryAt: s => `dry ${s}`, allDry: 'dry throughout', noWeather: 'Forecast not known',
+  precipKey: 'precipitation mm', tempKey: 'temperature', rainKey: 'rain or snow',
+  forecastAria: n => `Hourly forecast, ${n} hours: precipitation as bars, temperature as a line`,
+  conditions: {
+    'clear-night': 'clear', cloudy: 'cloudy', exceptional: 'exceptional weather', fog: 'fog', hail: 'hail', lightning: 'thunder',
+    'lightning-rainy': 'thunder and rain', partlycloudy: 'partly cloudy', pouring: 'downpour', rainy: 'rain', snowy: 'snow',
+    'snowy-rainy': 'sleet', sunny: 'sunny', windy: 'windy', 'windy-variant': 'windy and cloudy'
+  }
 };
 // The words the house's sensors write (the price level, the tomorrow line's lead word), as they
 // arrive in each language: the house's templates write Estonian, the English demo English.
@@ -247,12 +265,14 @@ export function tileAction(conf, which = 'tap') {
   return actionDetail(conf.entity, which === 'icon' && conf.icon_tap_action ? conf.icon_tap_action : body);
 }
 
-// a mode button: nothing for the running mode, else select_option after its confirmation
+// a mode button: its own tap_action (a command, never pressed), else nothing for the running mode
+// and select_option of the entity's domain (select or input_select) after its confirmation
 export function modeAction(entity, mode, current) {
+  if (mode && mode.tap_action) return actionDetail(entity, mode.tap_action);
   if (!mode || mode.option === current) return null;
   return actionDetail(entity, {
     action: 'perform-action',
-    perform_action: 'select.select_option',
+    perform_action: `${entity.split('.')[0]}.select_option`,
     target: { entity_id: entity },
     data: { option: mode.option },
     ...(mode.confirm ? { confirmation: { text: mode.confirm } } : {})
@@ -356,16 +376,43 @@ export function tileActive(st, active = DEFAULT_ACTIVE) {
   return active.some(a => (a.endsWith('*') ? st.state.startsWith(a.slice(0, -1)) : st.state === a));
 }
 
-// one part of a tile's second line: 'state', an attribute, another entity or { entity|attribute, label }
-const partEntity = p => (p && typeof p === 'object' ? p.entity : typeof p === 'string' && p.includes('.') ? p : null);
-function part(p, st, states, lang) {
-  const e = partEntity(p);
-  const v = e ? (hasValue(states[e]) ? stateWord(states[e], lang) : '') : p === 'state' ? stateWord(st, lang) : attrText(st, typeof p === 'object' ? p.attribute : p, lang);
-  return v && p.label ? `${p.label} ${v}` : v;
+// A moment as the house says it, in HA's zone: 'täna 14:19', 'eile 21:00', '20.09 kell 20:17'; a
+// time of day alone ('23:00:00', a time-only input_datetime) as '23:00'; '' without one
+export function whenText(v, lang = 'et', tz = localZone(), now = Date.now()) {
+  const s = String(v ?? '');
+  const time = /^(\d{2}):(\d{2})(:\d{2})?$/.exec(s);
+  if (time) return `${time[1]}:${time[2]}`;
+  // an input_datetime's date and time carry no offset: they are HA's wall clock
+  const local = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(:\d{2})?$/.exec(s);
+  const t = local ? dayStart(+local[1], +local[2], +local[3], tz) + (+local[4] * 60 + +local[5]) * 60e3 : Date.parse(s);
+  if (!s || Number.isNaN(t)) return '';
+  const p = zoneParts(t, tz), w = words(lang), at = `${hh(p.h)}:${hh(p.min)}`;
+  const day = dayWord(t, now, lang, tz);
+  return day ? `${day} ${at}` : `${w.dayMonth(p.d, hh(p.m))} ${w.at(at)}`;
 }
 
-// { lit, unavailable, text } for the tile's look and its second line
-export function tileState(conf, states, lang = 'et') {
+// One part of a tile's second line: 'state', an attribute, another entity or an object of
+// { entity, attribute, label, format, if, text }: another entity's state or attribute, a label
+// before it, `format: 'when'` for a moment (whenText), `if: [{ entity, state }]` to show it only
+// while each holds (`entity` is the tile's own by default) and `text` for a fixed one.
+const partEntity = p => (p && typeof p === 'object' ? p.entity : typeof p === 'string' && p.includes('.') ? p : null);
+const partIfs = p => (p && typeof p === 'object' && p.if) || [];
+function part(p, st, states, lang, ctx = {}) {
+  const o = p && typeof p === 'object' ? p : null;
+  if (o && !partIfs(o).every(c => stateOf(states, c.entity || ctx.own) === c.state)) return '';
+  if (o && o.text !== undefined) return o.text;
+  const e = partEntity(p), src = e ? states[e] : st, key = o ? o.attribute : e || p === 'state' ? null : p;
+  let v;
+  if (o && o.format === 'when') v = whenText(key ? ((src || {}).attributes || {})[key] : hasValue(src) ? src.state : '', lang, ctx.tz, ctx.now);
+  else if (key) v = attrText(src, key, lang);
+  else if (e) v = hasValue(src) ? stateWord(src, lang) : '';
+  else v = stateWord(st, lang);
+  return v && o && o.label ? `${o.label} ${v}` : v;
+}
+
+// { lit, unavailable, text } for the tile's look and its second line; ctx { tz, now } for a 'when'
+// part. A line whose parts are all conditional and all hidden reads the state word.
+export function tileState(conf, states, lang = 'et', ctx = {}) {
   const st = states[conf.entity];
   const sc = conf.state_text;
   // a fixed text (a link's description) stays whatever the entity's state
@@ -373,8 +420,10 @@ export function tileState(conf, states, lang = 'et') {
   if (!hasValue(st)) return { lit: false, unavailable: true, text: words(lang).words.unavailable };
   const lit = tileActive(st, conf.active);
   let text;
-  if (Array.isArray(sc)) text = sc.map(p => part(p, st, states, lang)).filter(Boolean).join(' · ');
-  else text = stateWord(st, lang);
+  if (Array.isArray(sc)) {
+    text = sc.map(p => part(p, st, states, lang, { ...ctx, own: conf.entity })).filter(Boolean).join(' · ');
+    if (!text && sc.length && sc.every(p => partIfs(p).length)) text = stateWord(st, lang);
+  } else text = stateWord(st, lang);
   return { lit, unavailable: false, text };
 }
 
@@ -595,6 +644,12 @@ ha-card{display:flex;flex-direction:column;padding:0 4px}
   }
 }
 
+// the entities a tile redraws on: its own, its segment's and its parts' and their conditions'
+export function tileWatched(c) {
+  const parts = [c.state_text, c.label].filter(Array.isArray).flat();
+  return [...new Set([c.entity, c.modes_entity, ...parts.map(partEntity), ...parts.flatMap(partIfs).map(x => x.entity)].filter(Boolean))];
+}
+
 class TileCard extends KheCard {
   static css = `
 :host{height:100%}
@@ -619,10 +674,17 @@ ha-card.modes{display:flex;flex-direction:column;gap:10px;padding:12px}
 `;
   static get a3css() { return TILE_A3_CSS; }
   _check(c) { if (!c.entity) throw new Error('khe-tile-card: entity is required'); }
-  _watched() {
-    const c = this._config;
-    const parts = [c.state_text, c.label].filter(Array.isArray).flat();
-    return [c.entity, ...parts.map(partEntity).filter(Boolean)];
+  _watched() { return tileWatched(this._config); }
+  // a 'when' part reads 'täna' or 'eile', so the tile redraws when HA's day changes
+  _clock() {
+    const sc = this._config.state_text, now = Date.now();
+    if (!this._hass || !Array.isArray(sc) || !sc.some(p => p && p.format === 'when')) return 0;
+    // the day's key until its end, so a push in the house does no date formatting
+    if (!this._day || now >= this._day[1]) {
+      const tz = tzOf(this._hass), p = zoneParts(now, tz);
+      this._day = [`${p.y}-${p.m}-${p.d}`, dayStart(p.y, p.m, p.d + 1, tz)];
+    }
+    return this._day[0];
   }
   // the size for a hand-written config; the generator's grid_options win in HA and the demo
   getCardSize() { return this._config && this._config.modes ? 3 : 2; }
@@ -735,6 +797,8 @@ export function historyRequest(h, range, now = Date.now()) {
 }
 
 const num = v => (v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
+// a state's number, null without a value
+const numOf = st => (hasValue(st) ? num(st.state) : null);
 
 // A response as a series: { kind: 'line' | 'bars' | 'step' | 'empty', points, cost }. Points are
 // { t, v } with t in ms; an unavailable or unknown sample is a gap (v null); a step point's v is
@@ -1173,7 +1237,7 @@ class Sheet {
 const tileName = (conf, st) => conf.name || ((st || {}).attributes || {}).friendly_name || conf.entity;
 
 // what a tap on a tile with `history` opens: the tile's value now, the history entity's series
-export function tileSheet(conf, states, lang = 'et') {
+export function tileSheet(conf, states, lang = 'et', ctx = {}) {
   const h = conf.history;
   if (!h) return null;
   // a measurement read from another entity (the boost tile's boiler water) is also the sheet's value
@@ -1191,7 +1255,7 @@ export function tileSheet(conf, states, lang = 'et') {
     view: h.view,
     history: { ...h, entity: h.entity || conf.entity }
   };
-  if (h.source === 'history' && !h.numeric) spec.text = now => tileState(conf, now, lang).text;
+  if (h.source === 'history' && !h.numeric) spec.text = now => tileState(conf, now, lang, ctx).text;
   return spec;
 }
 
@@ -1247,6 +1311,7 @@ h1{margin:0;font-size:34px;line-height:1.05;font-weight:700;letter-spacing:-0.02
 .status{display:flex;align-items:center;gap:7px;margin-top:-6px;padding:0 4px;font-size:15px;font-weight:600;color:var(--sub)}
 .status i{flex:none;width:8px;height:8px;border-radius:4px;background:var(--sub);opacity:.6}
 .status.ok i{background:var(--cheap);opacity:1}
+.status.on i{background:var(--accent);opacity:1}
 .status.bad{color:var(--high)}
 .status.bad i{background:var(--highBar);opacity:1}
 /* a heading card's 14 + 44 px, so the title's baseline meets the section headings' beside it */
@@ -1337,6 +1402,9 @@ class StatusCard extends KheCard {
     return `<div class="glass box">${link ? `<button type="button" class="t" data-k="t">${title}</button>` : `<span class="t">${title}</span>`}<div class="dots">${dots}</div></div>`;
   }
 }
+
+// a chart's key: [swatch markup, text] pairs
+const chartKey = (...items) => `<span class="key">${items.map(([i, t]) => `<span>${i}${esc(t)}</span>`).join('')}</span>`;
 
 // a progress track, the month card's and the reading card's meter
 const TRACK_CSS = `
@@ -1450,19 +1518,26 @@ const TILE_A3_CSS = `
 .seg{display:grid;grid-auto-columns:minmax(0,1fr);grid-auto-flow:column;gap:2px;padding:2px;border-radius:12px;background:var(--seg)}
 .seg button{height:40px;border-radius:10px;font-size:14px;font-weight:600;text-align:center}
 .seg button[aria-pressed="true"]{background:var(--segOn);box-shadow:var(--segShadow);cursor:default}
+.sw{flex:none;display:flex;align-items:center;width:51px;height:44px}
+.sw i{position:relative;display:block;width:51px;height:31px;border-radius:16px;background:var(--track);transition:background 200ms ease-out}
+.sw i::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:14px;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,0.2);transition:left 200ms ease-out}
+.sw[aria-checked="true"] i{background:#34c759}
+.sw[aria-checked="true"] i::after{left:22px}
+.sw:disabled{opacity:.4;cursor:default}
 .val{display:flex;flex-direction:column;gap:6px;width:100%;height:100%;box-sizing:border-box;padding:12px 14px;border-radius:22px}
 .val .lb{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--sub)}
 .val .v{font-size:26px;line-height:1;font-weight:700;letter-spacing:-0.025em}
-@media (prefers-reduced-motion: reduce){.sl i{transition:none}}
+@media (prefers-reduced-motion: reduce){.sl i,.sw i,.sw i::after{transition:none}}
 `;
 
 // the tile's A3 look: small, wide with buttons, a slider or modes, or a value
 function tileA3(card, states, pal) {
   const c = card._config, L = card._lang, w = card._w;
   const st = states[c.entity];
-  const ts = tileState(c, states, L);
   const name = tileName(c, st);
-  const sheet = tileSheet(c, states, L);
+  const ctx = { tz: tzOf(card._hass), now: Date.now() };
+  const ts = tileState(c, states, L, ctx);
+  const sheet = tileSheet(c, states, L, ctx);
   card._actions = new Map();
   card._sheets = new Map(sheet ? [['body', sheet]] : []);
   if (!sheet) card._actions.set('body', tileAction(c, 'tap'));
@@ -1498,18 +1573,29 @@ function tileA3(card, states, pal) {
   let below = '';
   if (c.slider) {
     const pct = brightnessPct(st);
-    below = `<span class="sl" data-sl role="slider" tabindex="0" aria-label="${esc(w.brightness(name))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-valuetext="${pct ? `${pct} %` : w.words.off}"><i style="width:${pct}%"></i></span>`;
+    below += `<span class="sl" data-sl role="slider" tabindex="0" aria-label="${esc(w.brightness(name))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-valuetext="${pct ? `${pct} %` : w.words.off}"><i style="width:${pct}%"></i></span>`;
   }
   if (c.modes) {
-    const current = stateOf(states, c.entity);
-    below = `<span class="seg" role="group" aria-label="${esc(w.mode(name))}">${c.modes.map((m, i) => {
-      card._actions.set(`m${i}`, modeAction(c.entity, m, current));
-      return `<button type="button" class="press" data-k="m${i}" aria-pressed="${m.option === current}">${esc(m.name)}</button>`;
+    // the segment may read and write another entity than the tile's (the light's tone select)
+    const of = c.modes_entity || c.entity, current = stateOf(states, of);
+    below += `<span class="seg" role="group" aria-label="${esc(w.mode(name))}">${c.modes.map((m, i) => {
+      card._actions.set(`m${i}`, modeAction(of, m, current));
+      const pressed = m.tap_action ? '' : ` aria-pressed="${m.option === current}"`;
+      return `<button type="button" class="press" data-k="m${i}"${pressed}>${esc(m.name)}</button>`;
     }).join('')}</span>`;
   }
+  if (c.switch) card._actions.set('sw', actionDetail(c.entity, { action: 'toggle' }));
+  const sw = !c.switch ? '' : `<button type="button" class="sw press" data-k="sw" role="switch" aria-checked="${lit}" aria-label="${esc(name)}"${ts.unavailable ? ' disabled' : ''}><i></i></button>`;
   const chev = c.chevron ? `<span class="chev" aria-hidden="true">${icon('chevron', 14, 'currentColor')}</span>` : '';
-  if (c.wide) return `<div class="${cls}"><span class="row">${discEl}${body}${extra}${corner}${chev}</span>${below}</div>`;
+  if (c.wide) return `<div class="${cls}"><span class="row">${discEl}${body}${extra}${corner}${sw}${chev}</span>${below}</div>`;
   return `<div class="${cls}"><span class="top">${discEl}${corner}</span>${body}${below}</div>`;
+}
+
+// the A3 tile's markup and its taps for a config and states, without an element (the tests')
+export function tileA3Markup(conf, states, lang = 'et', hass = {}) {
+  const card = { _config: conf, _lang: lang, _w: words(lang), _hass: { states, ...hass } };
+  const html = tileA3(card, states, a3Palette(false));
+  return { html, actions: card._actions, sheets: card._sheets };
 }
 
 // the slider: a drag holds redraws and moves the fill; the release, or an arrow key, sets the light
@@ -1827,10 +1913,28 @@ export function cellSheet(x, states) {
 // the reading card's cell row: two to a row, three side by side
 export const cellsClass = n => (n > 2 ? 'cells c3' : 'cells');
 
+// a cell's note: its `caption`, or by its value with `note_above: { value, above, below }`
+export function cellNote(x, states) {
+  const n = x.note_above;
+  if (!n) return x.caption || '';
+  const v = numOf(states[x.entity]);
+  return v === null ? '' : v > n.value ? n.above : n.below;
+}
+
+// the reading and forecast cards' cells: each a button that opens its history sheet
+function cellRow(card, states, cells) {
+  const list = cells.map((x, i) => {
+    const value = valueText(states[x.entity], x.decimals ?? 0, card._lang, x);
+    card._sheets.set(`c${i}`, cellSheet(x, states));
+    return `<button type="button" class="press" data-k="c${i}" aria-label="${esc(card._w.history(`${x.name} ${value}`))}"><span class="lab">${esc(x.name)}</span><span class="v num">${esc(value)}</span><span class="sub">${esc(cellNote(x, states))}</span></button>`;
+  });
+  return `<span class="${cellsClass(cells.length)}">${list.join('')}</span>`;
+}
+
 // the reading card's meter: { name, value, pct, note }, the value's share of `max` (100 by
 // default) held to 0-100, and no fill without a value
 export function meterRow(states, m, lang = 'et') {
-  const st = states[m.entity], v = hasValue(st) ? num(st.state) : null;
+  const st = states[m.entity], v = numOf(st);
   return { name: m.name || '', value: valueText(st, m.decimals ?? 0, lang, { unit: m.unit }), pct: v === null ? 0 : Math.max(0, Math.min(100, (v / (m.max || 100)) * 100)), note: m.note || '' };
 }
 
@@ -1927,12 +2031,95 @@ export function dayCells(states, cells, now, tz, lang = 'et', ctx = {}) {
   return out;
 }
 
-// the chips card's status line: { tone, text }; ok only while `entity` is on and every fault reads off
+/* ---------- A3 Pergola (ADR-014): the hourly weather forecast ---------- */
+
+// the WebSocket message for a weather entity's hourly forecast, a service call with its response
+export const forecastRequest = entity => ({
+  type: 'call_service', domain: 'weather', service: 'get_forecasts', service_data: { type: 'hourly' },
+  target: { entity_id: entity }, return_response: true
+});
+
+// the conditions the house's rain rule also closes the roof on
+const WET = new Set(['rainy', 'pouring', 'lightning', 'lightning-rainy', 'snowy', 'snowy-rainy', 'hail']);
+export const wetCondition = c => WET.has(c);
+
+// The next `hours` hours from the one now: [{ t, p, temp, cond }], p in mm, 0 when missing; []
+// for an empty or failed answer
+export function forecastHours(resp, entity, now, hours = 14) {
+  const rows = ((((resp || {}).response || {})[entity] || {}).forecast) || [];
+  return rows
+    .map(r => ({ t: Date.parse(r.datetime), p: Math.max(0, num(r.precipitation) ?? 0), temp: num(r.temperature), cond: r.condition || '' }))
+    .filter(r => Number.isFinite(r.t) && r.t + HOUR > now)
+    .sort((a, b) => a.t - b.t)
+    .slice(0, hours);
+}
+
+// { total, dry }: the hours' precipitation, and while any hour is wet the first dry stretch of two
+// hours or more as [first, end) indices (null without one)
+export function forecastSummary(rows) {
+  const total = rows.reduce((a, r) => a + r.p, 0);
+  let dry = null;
+  for (let i = 0; total > 0 && !dry && i < rows.length; i++) {
+    if (rows[i].p > 0) continue;
+    let j = i;
+    while (j < rows.length && rows[j].p === 0) j++;
+    if (j - i >= 2) dry = [i, j];
+    i = j;
+  }
+  return { total, dry };
+}
+
+const hourOfDay = (t, tz) => hh(zoneParts(t, tz).h);
+// the hour that starts at t: 'kell 16–17'
+export const hourAt = (t, lang = 'et', tz = localZone()) => words(lang).at(`${hourOfDay(t, tz)}–${hourOfDay(t + HOUR, tz)}`);
+
+// the line under the total: 'kogu aeg kuiv', the first dry stretch 'kuiv kell 17–19', or ''
+export function forecastNote(rows, lang = 'et', tz = localZone(), summary = forecastSummary(rows)) {
+  const w = words(lang), { total, dry } = summary;
+  if (!rows.length) return '';
+  if (!total) return w.allDry;
+  return dry ? w.dryAt(`${hourOfDay(rows[dry[0]].t, tz)}–${hourOfDay(rows[dry[1] - 1].t + HOUR, tz)}`) : '';
+}
+
+// The chart's SVG path data in a FW x FH box, one slot an hour: precipitation bars (1 mm reaches
+// near the top, more scales them down), the temperature line over the bars' room, and a mark under
+// each hour whose condition is wet
+const FW = 341, FH = 104, FBASE = 92;
+export function forecastPaths(rows) {
+  const n = rows.length, slot = FW / (n || 1), bw = Math.max(1, slot - 4), mid = i => i * slot + slot / 2;
+  const top = Math.max(1, ...rows.map(r => r.p));
+  let bars = '', marks = '', line = '', pen = 'M';
+  const temps = rows.map(r => r.temp).filter(v => v !== null);
+  const lo = Math.min(...temps) - 1, hi = Math.max(...temps) + 1;
+  rows.forEach((r, i) => {
+    if (r.p > 0) { const h = Math.max(2, (r.p / top) * (FBASE - 30)); bars += barRect(i * slot + (slot - bw) / 2, FBASE - h, bw, h); }
+    if (wetCondition(r.cond)) marks += `M${mid(i).toFixed(1)} ${FBASE + 5}v6`;
+    if (r.temp === null) { pen = 'M'; return; }
+    line += `${pen}${mid(i).toFixed(1)} ${(8 + (1 - (r.temp - lo) / (hi - lo)) * 44).toFixed(1)}`;
+    pen = 'L';
+  });
+  return { bars, line, marks, slot };
+}
+
+// what pointing at hour i reads: [the hour, its mm or 'Kuiv', its temperature and condition]
+export function forecastPoint(rows, i, lang = 'et', tz = localZone()) {
+  const r = rows[i], w = words(lang);
+  const cond = w.conditions[r.cond] || '';
+  return [cap(hourAt(r.t, lang, tz)), r.p > 0 ? `${fmtN(r.p, 1, lang)} mm` : w.dry, [r.temp === null ? '' : `${fmtN(r.temp, 1, lang)}°`, cond].filter(Boolean).join(' · ')];
+}
+
+// the chips card's status line: { tone, text }; ok only while `entity` is on and every fault reads
+// off. With `above`, a number: above it the `on` text (tone 'on', a blue dot), at or below it `ok`.
 export function statusLine(states, conf, lang = 'et') {
   const s = conf.status, w = words(lang);
   if (!s) return null;
   const faults = conf.faults || [];
   if (faultsOn(states, faults).length) return { tone: 'bad', text: s.bad || w.fault };
+  if (s.above !== undefined) {
+    const v = numOf(states[s.entity]);
+    if (v === null) return { tone: 'off', text: w.stateUnknown };
+    return v > s.above ? { tone: 'on', text: s.on } : { tone: 'ok', text: s.ok };
+  }
   const on = stateOf(states, s.entity);
   if (on === 'on' && faults.every(f => stateOf(states, f.entity) === (f.bad === 'off' ? 'on' : 'off'))) return { tone: 'ok', text: s.ok };
   if (on === 'off') return { tone: 'off', text: s.off || w.offState };
@@ -2139,10 +2326,9 @@ class DaysCard extends LoadingCard {
     const marks = [0, Math.round(N / 4), Math.round(N / 2), Math.round((3 * N) / 4)].map(j => pts[j].label).concat(w.today);
     const axis = `<div class="ax" aria-hidden="true">${marks.map(l => `<span>${esc(l)}</span>`).join('')}</div>`;
     const swatch = (bg, op = 1) => `<i style="width:10px;height:10px;border-radius:3px;background:${bg}${op !== 1 ? `;opacity:${op}` : ''}"></i>`;
-    const keyOf = (...items) => `<span class="key">${items.map(([i, t]) => `<span>${i}${esc(t)}</span>`).join('')}</span>`;
     let key = '';
-    if (o) key = keyOf([swatch(a3Color(s.color)[0]), s.legend || s.name], [o.color ? swatch(a3Color(o.color)[0]) : swatch(pal.text, 0.55), o.name || '']);
-    else if (s.peak) key = keyOf([swatch(pal.sub), w.dayAvg], [`<i style="width:12px;height:2px;background:${pal.text};opacity:.55"></i>`, w.dearestHour]);
+    if (o) key = chartKey([swatch(a3Color(s.color)[0]), s.legend || s.name], [o.color ? swatch(a3Color(o.color)[0]) : swatch(pal.text, 0.55), o.name || '']);
+    else if (s.peak) key = chartKey([swatch(pal.sub), w.dayAvg], [`<i style="width:12px;height:2px;background:${pal.text};opacity:.55"></i>`, w.dearestHour]);
     let three;
     if (own) three = own;
     else if (s.peak) {
@@ -2320,15 +2506,7 @@ class ReadingCard extends LoadingCard {
     const m = meterRow(states, this._config.meter, this._lang);
     return `<span class="meter"><span class="mh"><span>${esc(m.name)}</span><span class="mv num">${esc(m.value)}</span></span><span class="track" aria-hidden="true"><i style="width:${m.pct.toFixed(1)}%;background:${a3Color('gray')[0]}"></i></span>${m.note ? `<span class="sub">${esc(m.note)}</span>` : ''}</span>`;
   }
-  _cells(states) {
-    const cells = this._config.cells;
-    const list = cells.map((x, i) => {
-      const value = valueText(states[x.entity], x.decimals ?? 0, this._lang, x);
-      this._sheets.set(`c${i}`, cellSheet(x, states));
-      return `<button type="button" class="press" data-k="c${i}" aria-label="${esc(this._w.history(`${x.name} ${value}`))}"><span class="lab">${esc(x.name)}</span><span class="v num">${esc(value)}</span><span class="sub">${esc(x.caption || '')}</span></button>`;
-    });
-    return `<span class="${cellsClass(cells.length)}">${list.join('')}</span>`;
-  }
+  _cells(states) { return cellRow(this, states, this._config.cells); }
   _stepper(states) {
     const sp = this._config.stepper, { cur, lim } = stepState(states[sp.entity]), w = this._w;
     const p = this._pend;
@@ -2388,6 +2566,60 @@ class ReadingCard extends LoadingCard {
   }
 }
 
+// the price card's head and the reading card's cells, with the forecast chart
+const FORECAST_CSS = `${READING_CSS}
+svg.fc{display:block;width:100%;height:${FH}px;touch-action:pan-y}
+.hd.pointing .sub{visibility:visible}
+`;
+
+// Pergola's weather (ADR-014): the precipitation of the next hours as the big value with the first
+// dry stretch, the hours as bars with the temperature line and marks under wet conditions, pointing
+// an hour reads it; then cells that open their history sheets. The big value opens nothing.
+class ForecastCard extends LoadingCard {
+  static css = FORECAST_CSS;
+  _check(c) { if (!c.entity) throw new Error('khe-forecast-card: entity is required'); }
+  _watched() { const c = this._config; return [c.entity, ...(c.cells || []).map(x => x.entity)]; }
+  _requests() { return { fc: forecastRequest(this._config.entity) }; }
+  _html(states, pal) {
+    const c = this._config, d = this._data, w = this._w;
+    this._actions = new Map();
+    this._sheets = new Map();
+    this._point = null;
+    const rows = d && !d.error ? forecastHours(d.res.fc, c.entity, Date.now(), c.hours || 14) : [];
+    const top = !d ? `<span class="msg">${w.loading}</span>` : rows.length ? this._chart(rows, pal) : `<span class="msg">${w.noWeather}</span>`;
+    const parts = [top];
+    if ((c.cells || []).length) parts.push(cellRow(this, states, c.cells));
+    return `<div class="glass main">${parts.join('<span class="hr"></span>')}</div>`;
+  }
+  _chart(rows, pal) {
+    const w = this._w, L = this._lang, tz = tzOf(this._hass), sum = forecastSummary(rows), P = forecastPaths(rows);
+    this._point = { rows, slot: P.slot, tz };
+    const big = sum.total > 0 ? `${fmtN(sum.total, 1, L)} mm` : w.dry;
+    const head = `<span class="hd"><span class="l"><span class="lab">${esc(w.nextHours(rows.length))}</span><span class="big"><span class="n num">${esc(big)}</span></span><span class="sub">${esc(forecastNote(rows, L, tz, sum))}</span></span></span>`;
+    const blue = a3Color('blue')[0], orange = a3Color('orange')[0];
+    const n = rows.length, at = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(f * (n - 1))).filter((i, k, a) => a.indexOf(i) === k);
+    const ax = at.map(i => `<span style="left:${(((i + 0.5) * P.slot) / FW * 100).toFixed(1)}%;transform:translateX(-50%)">${hourOfDay(rows[i].t, tz)}</span>`).join('');
+    const svg = `<svg class="fc" viewBox="0 0 ${FW} ${FH}" preserveAspectRatio="none" role="img" aria-label="${esc(w.forecastAria(n))}"><rect class="sel" y="0" width="${P.slot.toFixed(1)}" height="${FH}" fill="${pal.text}" fill-opacity="0.08" visibility="hidden"/><path d="M0 ${FBASE}H${FW}" stroke="${pal.hair}" fill="none" vector-effect="non-scaling-stroke"/><path d="${P.bars}" fill="${blue}" fill-opacity="0.75"/><path d="${P.line}" fill="none" stroke="${orange}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/><path d="${P.marks}" stroke="${pal.text}" stroke-opacity="0.55" stroke-width="1.5" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>`;
+    const key = chartKey([`<i style="height:10px;border-radius:3px;background:${blue}"></i>`, w.precipKey], [`<i style="height:3px;border-radius:2px;background:${orange}"></i>`, w.tempKey],
+      ...(P.marks ? [[`<i style="width:2px;height:8px;background:${pal.sub}"></i>`, w.rainKey]] : []));
+    return `${head}<span class="ch">${svg}<span class="ax" aria-hidden="true">${ax}</span></span>${key}`;
+  }
+  // pointing at an hour shows its time, mm, temperature and condition in place of the total
+  _wire() {
+    const P = this._point, svg = P && this._root.querySelector('svg.fc');
+    if (!svg) return;
+    const hd = this._root.querySelector('.hd'), els = ['.lab', '.n', '.sub'].map(q => hd.querySelector(q)), sel = svg.querySelector('.sel');
+    const was = els.map(e => e.textContent);
+    wirePoint(svg, f => Math.min(P.rows.length - 1, Math.floor(f * P.rows.length)), i => {
+      hd.classList.toggle('pointing', i !== null);
+      sel.setAttribute('visibility', i === null ? 'hidden' : 'visible');
+      const texts = i === null ? was : forecastPoint(P.rows, i, this._lang, P.tz);
+      if (i !== null) sel.setAttribute('x', (i * P.slot).toFixed(1));
+      els.forEach((e, k) => { e.textContent = texts[k]; });
+    });
+  }
+}
+
 const ELEMENTS = [
   ['khe-summary-card', SummaryCard, 'KHE summary', 'The house in one sentence, with summary chips.'],
   ['khe-price-card', PriceCard, 'KHE price', 'The electricity price now, the hourly bars and the cheapest windows.'],
@@ -2398,7 +2630,8 @@ const ELEMENTS = [
   ['khe-month-card', MonthCard, 'KHE month', "The month's energy cost, its pace, today, yesterday and last month (A3)."],
   ['khe-days-card', DaysCard, 'KHE days', 'Daily bars of a statistic, several behind a switch (A3).'],
   ['khe-split-card', SplitCard, 'KHE split', "Who used the month's energy (A3)."],
-  ['khe-reading-card', ReadingCard, 'KHE reading', 'One reading with its hourly line, cells and a stepper (A3).']
+  ['khe-reading-card', ReadingCard, 'KHE reading', 'One reading with its hourly line, cells and a stepper (A3).'],
+  ['khe-forecast-card', ForecastCard, 'KHE forecast', "The next hours' precipitation and temperature from a weather entity, with cells (A3)."]
 ];
 if (typeof customElements !== 'undefined') {
   window.customCards = window.customCards || [];

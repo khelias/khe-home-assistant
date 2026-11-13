@@ -119,6 +119,25 @@ EN = {
     "vesi": "water",
     "Õues": "Outdoors",
     "€ päevas keskmiselt, ilma kuutasudeta": "€ a day on average, without monthly fees",
+    # Pergola in A3's look
+    "Kahe tunniga": "In two hours",
+    "Kuiv": "Dry",
+    "Mida see ise teeb": "What it does by itself",
+    "Poole peal peata Stopiga · asendit seade ei teata": (
+        "Stop it halfway with Stop · the roof reports no position"
+    ),
+    "Pooled eraldi, vihmateade, õhtune valgus": "Each side, rain notice, evening light",
+    "Soe": "Warm",
+    "Valge": "White",
+    "Vihm sulgeb katuse": "Rain closes the roof",
+    "ei saja": "not raining",
+    "kustub": "off at",
+    "maja juures": "at the house",
+    "sademeid": "precipitation",
+    "sajab": "raining",
+    "süttis": "came on",
+    "viimati": "last run",
+    "Õhtune valgus": "Evening light",
     # the dashboard: views, sections, tiles, badges, charts
     "Aiakaamera": "Garden camera",
     "Ainult kui kodus": "Only when home",
@@ -482,8 +501,8 @@ EN = {
     "Pool tundi enne loojangut süttivad pergola tuled õhtuse tooniga.": (
         "Half an hour before sunset the pergola lights come on in the evening tone."
     ),
-    "Kell on 14.55, päike loojub kell 15.54. Pergola tuled on külma valge tooniga.": (
-        "It is 14:55 and the sun sets at 15:54. The pergola lights are cool white."
+    "Kell on 14.55, päike loojub kell 15.54. Pergola tuled on valge tooniga.": (
+        "It is 14:55 and the sun sets at 15:54. The pergola lights are white."
     ),
     "Kell on 15.10.": "It is 15:10.",
     "Kell on 15.25, loojanguni on vähem kui pool tundi.": (
@@ -517,16 +536,15 @@ WORDS = {
     "Kamin": "Fireplace",
     "Kodus": "At home",
     "Köök": "Kitchen",
-    "Külm valge": "Cool white",
     "Küte": "Heating",
-    "Neutraalne": "Neutral",
     "Oma": "Custom",
     "Puhkus": "Holiday",
     "Sees": "On",
-    "Soe valge": "Warm white",
+    "Soe": "Warm",
     "Tavaline": "Normal",
     "Töökoht": "Office",
     "Tööpäevad": "Workdays",
+    "Valge": "White",
     "Väljas": "Off",
 }
 

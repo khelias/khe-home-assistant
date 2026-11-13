@@ -57,7 +57,7 @@ test('every English chart draws from series.en.json', () => {
   walk(dashboard.views);
   assert.ok(charts.length > 0);
 
-  for (const c of charts) assert.doesNotMatch(CHARTS[c.type](c, series, new Date(), 400, e => e), /No data|No forecast/, c.type);
+  for (const c of charts) assert.doesNotMatch(CHARTS[c.type](c, series, new Date(), 400, e => e), /No data/, c.type);
 });
 
 test('both languages have the same strings', () => {

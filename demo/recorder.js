@@ -1,4 +1,5 @@
-// The demo's recorder (ADR-012): HA's statistics and history answered from the profiles in
+// The demo's recorder (ADR-012): HA's statistics and history, and the weather forecast (ADR-014),
+// answered from the profiles in
 // recorder.json (scripts/dashboard_demo.py demo_recorder()), relative to the moment asked, in the
 // zone the demo sets, and the states that depend on the date computed from the same profiles, so a
 // month total equals its days on any day. No DOM; the time-zone helpers are khe-cards.js's,
@@ -31,10 +32,18 @@ export function createRecorder(spec, { zoneParts, dayStart, lastMonthName }) {
     const bump = (at, w) => Math.exp(-(((h - at) / w) ** 2));
     return Math.max(0.02, p.base + p.morning * bump(8, 1.5) + p.evening * bump(18.5, 2) - p.night * bump(3, 2.5) + p.drift * drift(t) + 0.01 * ripple(t));
   }
+  // mm in the hour of t: each shower's amount within its hours, less on some days and none on others
+  const rain = (p, t) => {
+    const h = hourOf(t), s = (p.showers || []).find(([a, b]) => h >= a && h < b);
+    return s ? Math.max(0, s[2] * (0.4 + drift(hourStart(t)))) : 0;
+  };
   // a value at t, or a counter's kWh in the hour starting at t
   function at(id, t) {
     const p = profiles[id];
     if (!p) return null;
+    if (p.kind === 'rain') return rain(p, t);
+    // the next hours' sum of another profile
+    if (p.kind === 'ahead') { let s = 0; for (let k = 1; k <= p.hours; k++) s += at(p.of, hourStart(t) + k * HOUR); return s; }
     if (p.kind === 'wave') return p.level + p.amp * daily(t, p.peak) + p.drift * drift(t) + 0.15 * p.amp * ripple(t);
     if (p.kind === 'counter') return Math.max(0, (p.base + p.amp * daily(t, p.peak)) * vary(t) + 0.2 * p.base * ripple(t));
     if (p.kind === 'cost') return at(p.of, t) * price(profiles[p.price], t);
@@ -116,10 +125,25 @@ export function createRecorder(spec, { zoneParts, dayStart, lastMonthName }) {
     return out;
   }
 
+  // the weather entity's hourly forecast from the hour now, as weather.get_forecasts answers it
+  // (ADR-014): the rain and outdoor profiles' hours, rain or snow while it rains
+  const condition = (mm, temp, t) => (mm > 0 ? (temp <= 0 ? 'snowy' : 'rainy') : ripple(t) > 0 ? 'cloudy' : 'partlycloudy');
+  function forecast(now, hours = spec.weather.hours) {
+    const w = spec.weather, rows = [];
+    for (let i = 0, t = hourStart(now); i < hours; i++, t += HOUR) {
+      const mm = round(at(w.rain, t), 1), temp = round(at(w.temperature, t), 1);
+      rows.push({ datetime: new Date(t).toISOString(), temperature: temp, precipitation: mm, condition: condition(mm, temp, t) });
+    }
+    return rows;
+  }
+  const forecastCall = msg => msg.type === 'call_service' && msg.domain === 'weather' && msg.service === 'get_forecasts' && msg.return_response
+    && spec.weather && [(msg.target || {}).entity_id].flat().includes(spec.weather.entity);
+
   // HA's WebSocket answer to one message, as a Promise
   function callWS(msg, now = Date.now()) {
     if (msg.type === 'recorder/statistics_during_period') return Promise.resolve(statistics(msg, now));
     if (msg.type === 'history/history_during_period') return Promise.resolve(history(msg, now));
+    if (forecastCall(msg)) return Promise.resolve({ context: null, response: { [spec.weather.entity]: { forecast: forecast(now) } } });
     return Promise.reject(new Error(`unknown command ${msg.type}`));
   }
 
@@ -136,6 +160,7 @@ export function createRecorder(spec, { zoneParts, dayStart, lastMonthName }) {
       if (!id.includes('.')) continue;
       // a measurement's state is its last five-minute reading, where its history ends
       if (p.kind === 'wave') out[id] = { state: at(id, Math.floor(now / FIVE) * FIVE).toFixed(p.decimals) };
+      if (p.kind === 'rain' || p.kind === 'ahead') out[id] = { state: at(id, now).toFixed(1) };
 
       if (p.kind === 'counter' && p.state) {
         const attributes = {};
@@ -179,6 +204,20 @@ export function createRecorder(spec, { zoneParts, dayStart, lastMonthName }) {
       if (said) attributes.hinnang = said;
       out[f.level] = { state: word, attributes };
 
+    }
+    // the weather entity's condition and temperature now, the forecast's first hour
+    if (spec.weather) {
+      const [h] = forecast(now, 1);
+      out[spec.weather.entity] = { state: h.condition, attributes: { temperature: h.temperature } };
+    }
+    // each rule's last run: the last time the clock read its hour and minute
+    for (const [id, [hr, min]] of Object.entries(spec.rules || {})) {
+      const p = zoneParts(now, zone);
+      // the hour read on the zone's clock, also on a day an hour longer or shorter
+      const clock = d => { const t = dayStart(p.y, p.m, d, zone) + hr * HOUR + min * 60e3; return t - (((zoneParts(t, zone).h - hr + 36) % 24) - 12) * HOUR; };
+      let t = clock(p.d);
+      if (t > now) t = clock(p.d - 1);
+      out[id] = { state: 'on', attributes: { last_triggered: new Date(t).toISOString() } };
     }
     return out;
   }

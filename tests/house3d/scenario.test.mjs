@@ -156,3 +156,32 @@ test('the sky: dark for the evening and night stories, the sunset light inside i
   }
   assert.ok(alt(sunset.steps.filter(st => st.time).at(-1).time) < 0, 'the story ends after sunset');
 });
+
+test("the rain story stamps its rule's last run once, in both languages", () => {
+  for (const lang of ['et', 'en']) {
+    const { c, sim } = setup(built[lang].data);
+    const vihm = built[lang].scenarios.find(s => s.id === 'vihm');
+    const alias = vihm.steps.find(st => st.automation).automation;
+    const rule = Object.keys(sim.states).find(e => e.startsWith('automation.') && sim.states[e].attributes.friendly_name === alias);
+    assert.ok(rule, `${lang}: no rule named ${alias}`);
+    const first = vihm.steps.find(st => st.automation).at;
+    play(vihm, sim, c);
+    c.run(first * 1000 - 1);
+    assert.notEqual(sim.states[rule].attributes.last_triggered, c.now().toISOString());
+    c.run(1);
+    const stamped = sim.states[rule].attributes.last_triggered;
+    assert.equal(stamped, c.now().toISOString(), lang);
+    assert.equal(sim.states[rule].state, 'on');
+    // the rule's later steps are the same run
+    c.run(60000);
+    assert.equal(sim.states[rule].attributes.last_triggered, stamped, lang);
+  }
+});
+
+test('a step without a rule, or with an alias no entity carries, stamps nothing', () => {
+  const { c, sim } = setup();
+  const before = JSON.stringify(sim.states);
+  play(scenario([{ at: 1, caption: 'x', automation: 'Valve: häire' }, { at: 2, caption: 'y' }]), sim, c);
+  c.run(5000);
+  assert.equal(JSON.stringify(sim.states), before);
+});
