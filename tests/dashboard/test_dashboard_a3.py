@@ -785,8 +785,13 @@ class Valve(unittest.TestCase):
         self.assertEqual(system["cells"][1]["note"]["entity"], dc.VALVE_SUPPLY)
         self.assertIn("Teavitus tuleb", system["note"]["text"])
 
-    def test_without_a_model_the_motion_card_has_no_plan_and_the_public_names(self):
-        (motion,) = [c for c in walk(a3.valve(None)) if c.get("type") == "custom:khe-motion-card"]
+    def test_without_a_model_the_motion_cards_have_no_plan_and_the_public_names(self):
+        plan_card, motion = [
+            c for c in walk(a3.valve(None)) if c.get("type") == "custom:khe-motion-card"
+        ]
+        self.assertEqual((plan_card["part"], motion["part"]), ("plan", "rows"))
+        self.assertEqual(plan_card["groups"], motion["groups"])
+        self.assertNotIn("plan", plan_card)
         self.assertNotIn("plan", motion)
         rows = [r for g in motion["groups"] for r in g["rooms"]]
         self.assertEqual([r["entity"] for r in rows], dc.SHARED + dc.PRIVATE)
@@ -831,12 +836,13 @@ class Valve(unittest.TestCase):
             expected = rooms[p["room"]] if count[p["room"]] == 1 else dc.MOTION_ROOMS[p["entity"]]
             self.assertEqual(names[p["entity"]], expected)
         self.assertIn(2, count.values(), "the fixture has a room with two PIRs")
-        (motion,) = [
+        plan_card, rows_card = [
             c
             for c in walk(a3.valve(placed(FIXTURE, pirs)))
             if c.get("type") == "custom:khe-motion-card"
         ]
-        self.assertEqual(motion["plan"], sl)
+        self.assertEqual(plan_card["plan"], sl)
+        self.assertNotIn("plan", rows_card, "only the card that draws it carries the slice")
 
     def test_the_cards_plan_fixture_is_the_test_houses_slice(self):
         pirs = FIXTURE_PIRS + ["binary_sensor.demo_room_a_motion"]

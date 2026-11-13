@@ -9,7 +9,7 @@
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 18;
+export const KHE_CARDS_VERSION = 19;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -3008,22 +3008,56 @@ export function catmullRom(pts) {
   return d;
 }
 
-// a rect as a plate in px, a rounded rectangle inset from its edges; an edge where another rect of
-// the same room meets it reaches over the seam instead, with square corners there
-function platePath(r, siblings, X, Z) {
-  const meets = side => siblings.some(o => { const e = sharedEdge(r, o); if (!e) return false; const axis = side % 2 === 0 ? 0 : 1, far = side >= 2; return e.axis === axis && Math.abs(e.at - (far ? r[axis + 2] : r[axis])) <= GAP; });
-  const m = [0, 1, 2, 3].map(meets); // left, top, right, bottom
-  const x0 = X(r[0]) + (m[0] ? -1 : 2), z0 = Z(r[1]) + (m[1] ? -1 : 2), x1 = X(r[2]) - (m[2] ? -1 : 2), z1 = Z(r[3]) - (m[3] ? -1 : 2);
-  const q = Math.max(0, Math.min(7, (x1 - x0) / 2, (z1 - z0) / 2));
-  const k = (a, b) => (m[a] || m[b] ? 0 : q), f = v => v.toFixed(1);
-  const [tl, tr, br, bl] = [k(0, 1), k(2, 1), k(2, 3), k(0, 3)];
-  return `M${f(x0 + tl)} ${f(z0)}H${f(x1 - tr)}Q${f(x1)} ${f(z0)} ${f(x1)} ${f(z0 + tr)}V${f(z1 - br)}Q${f(x1)} ${f(z1)} ${f(x1 - br)} ${f(z1)}H${f(x0 + bl)}Q${f(x0)} ${f(z1)} ${f(x0)} ${f(z1 - bl)}V${f(z0 + tl)}Q${f(x0)} ${f(z0)} ${f(x0 + tl)} ${f(z0)}Z`;
+const HALF_WALL = 0.35;
+
+// A room rect grown on each side halfway to the nearest rect across the wall (at most half an outer
+// wall): the room to its walls' middle, so a tinted room meets its walls whatever their thickness.
+export function growRect(r, others) {
+  const over = (a0, a1, b0, b1) => Math.min(a1, b1) - Math.max(a0, b0) > EPS;
+  const side = (dist) => others.reduce((g, o) => { const d = dist(o); return d === null || d < -EPS ? g : Math.min(g, Math.max(0, d) / 2); }, HALF_WALL);
+  return [
+    r[0] - side(o => (over(r[1], r[3], o[1], o[3]) && o[2] <= r[0] + EPS ? r[0] - o[2] : null)),
+    r[1] - side(o => (over(r[0], r[2], o[0], o[2]) && o[3] <= r[1] + EPS ? r[1] - o[3] : null)),
+    r[2] + side(o => (over(r[1], r[3], o[1], o[3]) && o[0] >= r[2] - EPS ? o[0] - r[2] : null)),
+    r[3] + side(o => (over(r[0], r[2], o[0], o[2]) && o[1] >= r[3] - EPS ? o[1] - r[3] : null))
+  ];
+}
+
+// A wall's pieces between its door openings, each a quad [[x, z] x4] around the wall's line at its
+// thickness (at least `least` m, so a thin one still shows), its ends carried on by half of it so
+// corners close; null for a wall well outside the box.
+export function wallPieces(wl, box, least = 0) {
+  const len = Math.hypot(wl.b[0] - wl.a[0], wl.b[1] - wl.a[1]), [x0, z0, x1, z1] = box;
+  if (!len || Math.max(wl.a[0], wl.b[0]) < x0 - 1 || Math.min(wl.a[0], wl.b[0]) > x1 + 1 || Math.max(wl.a[1], wl.b[1]) < z0 - 1 || Math.min(wl.a[1], wl.b[1]) > z1 + 1) return null;
+  const ux = (wl.b[0] - wl.a[0]) / len, uz = (wl.b[1] - wl.a[1]) / len, h = Math.max(wl.t || 0, least) / 2, nx = -uz * h, nz = ux * h;
+  const spans = [];
+  let from = -h;
+  for (const [c, w] of [...(wl.doors || [])].sort((a, b) => a[0] - b[0])) {
+    if (c - w / 2 > from + EPS) spans.push([from, c - w / 2]);
+    from = Math.max(from, c + w / 2);
+  }
+  if (len + h > from + EPS) spans.push([from, len + h]);
+  return spans.map(([s0, s1]) => {
+    const A = [wl.a[0] + ux * s0, wl.a[1] + uz * s0], B = [wl.a[0] + ux * s1, wl.a[1] + uz * s1];
+    return [[A[0] + nx, A[1] + nz], [B[0] + nx, B[1] + nz], [B[0] - nx, B[1] - nz], [A[0] - nx, A[1] - nz]];
+  });
+}
+
+// The house's floor for the plan: each room rect near the sensed ones (not the outbuildings) grown
+// by half an outer wall, so it runs under every wall; clipped to the plan's box.
+export function houseRects(plan, box) {
+  const [x0, z0, x1, z1] = box, near = 1;
+  return (plan.rooms || []).flatMap(r => r.rects)
+    .filter(r => r[2] > x0 - near && r[0] < x1 + near && r[3] > z0 - near && r[1] < z1 + near)
+    .map(r => [Math.max(x0, r[0] - HALF_WALL), Math.max(z0, r[1] - HALF_WALL), Math.min(x1, r[2] + HALF_WALL), Math.min(z1, r[3] + HALF_WALL)])
+    .filter(r => r[2] > r[0] && r[3] > r[1]);
 }
 
 const TEAL = '#30b0c7', PW = 330, PH = 360;
-// The plan's SVG: every room rect as the house's faint outline, the sensed rooms as plates (the
-// trail's tinted, the room in motion now filled), the trail as one curve fading in from its start
-// with a dot at each room it passed and a ring where it ends, and the sensed rooms' names.
+// The plan's SVG, drawn as a floor plan: the house's floor, the rooms on the trail tinted to their
+// walls' middle (the room in motion now stronger), the walls at their thickness with the door
+// openings cut out, the trail as one curve fading in from its start with a dot at each room it
+// passed and a ring where it ends, and the sensed rooms' names, lifted over the trail's dots.
 // { svg, aria }; '' without a plan or a sensed room.
 export function planSvg(plan, rows, now, pal, lang = 'et', minutes = 15) {
   const w = words(lang);
@@ -3031,22 +3065,28 @@ export function planSvg(plan, rows, now, pal, lang = 'et', minutes = 15) {
   const rooms = ((plan && plan.rooms) || []).filter(r => sensed.has(r.id));
   if (!rooms.length) return { svg: '', aria: '' };
   const all = rooms.flatMap(r => r.rects);
-  const bx0 = Math.min(...all.map(r => r[0])), bz0 = Math.min(...all.map(r => r[1])), bx1 = Math.max(...all.map(r => r[2])), bz1 = Math.max(...all.map(r => r[3]));
+  // the box takes in the plates grown by up to half a wall, and the footprint around them
+  const bx0 = Math.min(...all.map(r => r[0])) - HALF_WALL, bz0 = Math.min(...all.map(r => r[1])) - HALF_WALL, bx1 = Math.max(...all.map(r => r[2])) + HALF_WALL, bz1 = Math.max(...all.map(r => r[3])) + HALF_WALL;
   const K = Math.min(PW / (bx1 - bx0), PH / (bz1 - bz0)), pad = 4;
   const X = x => pad + (x - bx0) * K, Z = z => pad + (z - bz0) * K, vw = (bx1 - bx0) * K + 2 * pad, vh = (bz1 - bz0) * K + 2 * pad;
   const g = graphOf(plan), trail = trailRooms(plan, rows, now, minutes), runs = trailRuns(g, trail);
   const roomOf = new Map(plan.pirs.map(p => [p.entity, p.room])), nowRooms = new Set(rows.filter(r => r.on).map(r => roomOf.get(r.entity)).filter(Boolean));
   const inTrail = new Set(trail.map(x => x.room));
   const c = pal.dark
-    ? { house: 'rgba(255,255,255,0.05)', room: 'rgba(255,255,255,0.10)', trail: 'rgba(48,176,199,0.22)' }
-    : { house: 'rgba(60,60,67,0.06)', room: 'rgba(255,255,255,0.92)', trail: 'rgba(48,176,199,0.16)' };
-  const f = v => v.toFixed(1);
-  const outline = (plan.rooms || []).flatMap(r => r.rects).map(r => `M${f(X(r[0]))} ${f(Z(r[1]))}H${f(X(r[2]))}V${f(Z(r[3]))}H${f(X(r[0]))}Z`).join('');
-  const plates = rooms.map(room => {
-    const fill = nowRooms.has(room.id) ? TEAL : inTrail.has(room.id) ? c.trail : c.room;
-    return `<path d="${room.rects.map(r => platePath(r, room.rects.filter(o => o !== r), X, Z)).join('')}" fill="${fill}"/>`;
-  }).join('');
+    ? { floor: '#2c2c31', trail: 'rgba(48,176,199,0.30)', now: 'rgba(48,176,199,0.55)', outer: '#8e8e93', inner: '#5c5c62' }
+    : { floor: '#eeede9', trail: 'rgba(48,176,199,0.18)', now: 'rgba(48,176,199,0.55)', outer: '#55555b', inner: '#a8a8ad' };
+  const f = v => v.toFixed(1), box = [bx0, bz0, bx1, bz1];
   const P = p => [X(p[0]), Z(p[1])];
+  const rectD = r => `M${f(X(r[0]))} ${f(Z(r[1]))}H${f(X(r[2]))}V${f(Z(r[3]))}H${f(X(r[0]))}Z`;
+  const floor = houseRects(plan, box).map(rectD).join('');
+  const allRects = (plan.rooms || []).flatMap(r => r.rects);
+  const tints = rooms.filter(room => inTrail.has(room.id) || nowRooms.has(room.id)).map(room =>
+    `<path d="${room.rects.map(r => rectD(growRect(r, allRects.filter(o => o !== r)))).join('')}" fill="${nowRooms.has(room.id) ? c.now : c.trail}"/>`).join('');
+  const walls = { outer: '', inner: '' };
+  for (const wl of plan.walls || []) {
+    for (const q of wallPieces(wl, box, 2.2 / K) || []) walls[(wl.t || 0) > 0.3 ? 'outer' : 'inner'] += `M${q.map(p => P(p).map(f).join(' ')).join('L')}Z`;
+  }
+  const plates = `${tints}<path d="${walls.inner}" fill="${c.inner}"/><path d="${walls.outer}" fill="${c.outer}"/>`;
   const pts = runs.map(run => run.map(P)), flat = pts.flat();
   let curve = '';
   if (flat.length) {
@@ -3058,11 +3098,12 @@ export function planSvg(plan, rows, now, pal, lang = 'et', minutes = 15) {
   }
   const labels = rooms.map(room => {
     const a = g.nodes[g.anchor[room.id]], on = nowRooms.has(room.id);
-    return `<text x="${f(X(a[0]))}" y="${f(Z(a[1]) + (inTrail.has(room.id) && !on ? -12 : 0))}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="${on ? 700 : 600}" fill="${on ? '#fff' : inTrail.has(room.id) ? pal.text : pal.sub}">${esc(room.name)}</text>`;
+    const lit = on || inTrail.has(room.id);
+    return `<text x="${f(X(a[0]))}" y="${f(Z(a[1]) - (lit ? 13 : 0))}" text-anchor="middle" dominant-baseline="middle" font-size="11.5" font-weight="${on ? 700 : 600}" fill="${lit ? pal.text : pal.sub}">${esc(room.name)}</text>`;
   }).join('');
   const names = trail.map(x => (plan.rooms.find(r => r.id === x.room) || {}).name).filter(Boolean);
   const aria = w.planAria(joinEt(names, lang));
-  return { svg: `<svg class="plan" viewBox="0 0 ${f(vw)} ${f(vh)}" role="img" aria-label="${esc(aria)}"><path d="${outline}" fill="${c.house}"/>${plates}${curve}${labels}</svg>`, aria };
+  return { svg: `<svg class="plan" viewBox="0 0 ${f(vw)} ${f(vh)}" role="img" aria-label="${esc(aria)}"><path d="${floor}" fill="${c.floor}"/>${plates}${curve}${labels}</svg>`, aria };
 }
 
 const MOTION_CSS = `${PRICE_A3_CSS}
@@ -3096,7 +3137,8 @@ const cellsOf = counts => counts.map(v => `<i${v ? ` style="background:${TEAL};o
 
 // Valve's motion (ADR-015): the headline, the plan with the trail of the last `minutes`, and a row
 // per room with its 24 hourly counts and its last time, which opens the PIR's history sheet.
-// Config: { plan, groups: [{ name, rooms: [{ entity, name }] }], alarms: [{ entity, name }], minutes }.
+// Config: { plan, groups: [{ name, rooms: [{ entity, name }] }], alarms: [{ entity, name }], minutes,
+// part }; part 'plan' draws the headline and the plan, 'rows' the rows, neither all of it.
 class MotionCard extends LoadingCard {
   static css = MOTION_CSS;
   _check(c) { if (!(c.groups || []).length) throw new Error('khe-motion-card: groups is required'); }
@@ -3125,7 +3167,8 @@ function motionA3(card, states, pal, on, now) {
     return `<span class="grp">${esc(g.name)}</span>${list}`;
   }).join('');
   const hours = binHours(now, tz), axis = `<span class="mx" aria-hidden="true"><span></span><span class="h">${[0, 6, 12, 18].map(k => `<span>${hours[k]}</span>`).join('')}<span>${w.now}</span></span><span></span></span>`;
-  return `<div class="glass main">${top}${plan}<span class="rows">${groups}</span>${axis}</div>`;
+  const rowsPart = `<span class="rows">${groups}</span>${axis}`;
+  return `<div class="glass main">${c.part === 'rows' ? rowsPart : c.part === 'plan' ? `${top}${plan}` : `${top}${plan}${rowsPart}`}</div>`;
 }
 
 // the motion card's markup for a config, states and on-times, without an element (the tests')

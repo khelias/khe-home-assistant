@@ -1118,8 +1118,8 @@ def fault_cell(entity, name, words, color):
 
 def valve(model):
     """Valve in A3's look (ADR-007, ADR-015): the status over both partitions, Maja and Garaaž with
-    their modes, the doors with when they last opened, the motion card with the trail through the
-    house plan and each room by the hour, and the panel's own sensors."""
+    their modes, the doors with when they last opened, the trail through the house plan and, in a
+    card of its own, each room by the hour, and the panel's own sensors."""
     v = dc.valve
     pirs = dc.SHARED + dc.PRIVATE
     plan = plan_slice(model, pirs)
@@ -1168,17 +1168,24 @@ def valve(model):
         fault_cell(dc.TAMPER, "Rikkumine", korras, "red"),
         fault_cell(dc.SIREN, "Sireen", korras, "red"),
     ]
-    motion = card(
-        "motion-card",
-        **({"plan": plan} if plan else {}),
-        groups=[
-            {"name": label, "rooms": [{"entity": e, "name": names[e]} for e in ents]}
-            for label, ents in (("Ühisruumid", dc.SHARED), ("Toad", dc.PRIVATE))
-        ],
-        alarms=[{"entity": e, "name": n} for e, n in dc.ALARMS],
-        minutes=15,
-        grid_options={"columns": "full"},
-    )
+    groups = [
+        {"name": label, "rooms": [{"entity": e, "name": names[e]} for e in ents]}
+        for label, ents in (("Ühisruumid", dc.SHARED), ("Toad", dc.PRIVATE))
+    ]
+    alarms = [{"entity": e, "name": n} for e, n in dc.ALARMS]
+    # the plan and the rows are two cards, so neither grows past a screen
+    motion = [
+        card(
+            "motion-card",
+            part=part,
+            **({"plan": plan} if plan and part == "plan" else {}),
+            groups=groups,
+            alarms=alarms,
+            minutes=15,
+            grid_options={"columns": "full"},
+        )
+        for part in ("plan", "rows")
+    ]
     notice = "Teavitus tuleb tulekahjust, häirest, paanikanupust, toite kadumisest ja rikkumisest."
     return {
         "title": v["title"],
@@ -1209,7 +1216,7 @@ def valve(model):
             section(
                 [
                     heading("Liikumine"),
-                    motion,
+                    *motion,
                     heading("Süsteem"),
                     card(
                         "reading-card",

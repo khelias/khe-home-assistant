@@ -1338,7 +1338,9 @@ test('Valve: the plan fills the room in motion now, tints the trail, and is left
   const rows = [row('binary_sensor.test_hall_motion', min(6)), row('binary_sensor.test_kitchen_motion', null, true), row('binary_sensor.test_living_motion', null)];
   const p = V.planSvg(PLAN, rows, T0, V.a3Palette(false));
   assert.match(p.svg, /<svg class="plan"/);
-  assert.match(p.svg, /fill="#30b0c7"\/>/, 'r1 filled while its kitchen PIR is on');
+  assert.match(p.svg, /fill="rgba\(48,176,199,0\.55\)"\/>/, 'r1 tinted strongly while its kitchen PIR is on');
+  assert.match(p.svg, /fill="rgba\(48,176,199,0\.18\)"\/>/, 'the hall tinted for the trail');
+  assert.match(p.svg, /fill="#55555b"\/>/, 'the outer walls');
   assert.match(p.svg, /stroke="url\(#trail\)"/);
   assert.match(p.svg, /class="ring"/);
   assert.equal(p.aria, 'Maja plaan, liikumise tee viimase veerandtunniga: Eeskoda ja Pere köök-elutuba');
@@ -1402,6 +1404,42 @@ test('Valve: the motion card draws loading, then the headline, the plan and a ro
   assert.match(m.html, /aria-label="Tuba 1, viimati üle 24 h, ajalugu"/);
   assert.deepEqual(m.sheets.get('r0').history, { entity: 'binary_sensor.test_hall_motion', source: 'history' });
   assert.doesNotMatch(V.motionA3Markup({ ...conf, plan: undefined }, states, {}, T0, 'et', hass).html, /<svg class="plan"/, 'no slice, no plan, the rows stay');
+});
+
+test('Valve: the motion card split in two, the plan with its headline and the rows on their own', () => {
+  const conf = { plan: PLAN, groups: [{ name: 'Ühisruumid', rooms: [{ entity: 'binary_sensor.test_hall_motion', name: 'Eeskoda' }] }], alarms: ALARM_CONF };
+  const states = alarmStates('disarmed', min(60), { 'binary_sensor.test_hall_motion': { state: 'off' } });
+  const hass = { config: { time_zone: 'Europe/Tallinn' } }, on = { 'binary_sensor.test_hall_motion': [min(4)] };
+  const plan = V.motionA3Markup({ ...conf, part: 'plan' }, states, on, T0, 'et', hass).html;
+  const rows = V.motionA3Markup({ ...conf, part: 'rows' }, states, on, T0, 'et', hass).html;
+  assert.match(plan, /Viimane liikumine 4 min tagasi/);
+  assert.match(plan, /<svg class="plan"/);
+  assert.doesNotMatch(plan, /class="mr /);
+  assert.doesNotMatch(rows, /<svg|Viimane liikumine/);
+  assert.match(rows, /aria-label="Eeskoda, viimati 16:20, ajalugu"/);
+});
+
+test('Valve: a wall is drawn in pieces between its door openings, at least a hairline thick', () => {
+  const box = [0, 0, 10, 10];
+  const one = V.wallPieces({ a: [0, 0], b: [4, 0], t: 0.2, doors: [] }, box);
+  assert.equal(one.length, 1);
+  assert.deepEqual(one[0].map(p => p.map(v => +v.toFixed(2))), [[-0.1, 0.1], [4.1, 0.1], [4.1, -0.1], [-0.1, -0.1]], 'carried on by half its thickness at each end');
+  const cut = V.wallPieces({ a: [0, 0], b: [4, 0], t: 0.2, doors: [[3, 1], [1, 0.8]] }, box);
+  assert.deepEqual(cut.map(q => [+q[0][0].toFixed(2), +q[1][0].toFixed(2)]), [[-0.1, 0.6], [1.4, 2.5], [3.5, 4.1]], 'two openings, in any order, leave three pieces');
+  assert.equal(V.wallPieces({ a: [0, 0], b: [4, 0], t: 0.2, doors: [[0.4, 1]] }, box).length, 1, 'an opening at the end leaves one piece');
+  assert.ok(Math.abs(V.wallPieces({ a: [0, 0], b: [0, 4], t: 0.02 }, box, 0.1)[0][0][0]) > 0.04, 'a thin wall drawn at the least thickness');
+  assert.equal(V.wallPieces({ a: [20, 20], b: [24, 20], t: 0.2 }, box), null, 'an outbuilding wall is left out');
+});
+
+test('Valve: the footprint grows each nearby room by half a wall, so walls and the garage close into one shape', () => {
+  const plan = { rooms: [{ id: 'a', rects: [[0, 0, 3, 5]] }, { id: 'b', rects: [[3.6, 0, 8, 5]] }, { id: 'far', rects: [[20, 20, 24, 24]] }] };
+  const box = [0, 0, 8, 5];
+  const out = V.houseRects(plan, box);
+  assert.equal(out.length, 2, 'a room well outside the box is left out');
+  assert.ok(out[0][2] >= out[1][0], 'a 0.6 m wall between two rooms closes');
+  assert.deepEqual(out[0].slice(0, 2), [0, 0], 'clipped to the box');
+  const svg = V.planSvg(PLAN, [], T0, { dark: false, text: '#000', sub: '#666' }).svg;
+  assert.ok(svg.startsWith('<svg class="plan"'));
 });
 
 test('Valve: the status by state over two partitions, first match wins, faults over all', () => {
