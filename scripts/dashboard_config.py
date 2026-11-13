@@ -113,6 +113,9 @@ VENT_POWER_USE = "sensor.komfovent_power_consumption"
 RECOVERED = "sensor.komfovent_total_recovered_energy"
 AHU_ENERGY = "sensor.komfovent_total_ahu_energy"
 TV_APP = "sensor.teleri_app"
+# Today's session log and yesterday's watch time (packages/google_tv.yaml), which Teler reads
+TV_SESSIONS = "sensor.teleri_seansid"
+TV_YESTERDAY = "sensor.teler_sees_eile"
 NVR = "sensor.nvr_ketas"
 
 
@@ -585,8 +588,8 @@ tv_sessions = {
     "grid_options": {"columns": "full"},
     "content": DUR
     + (
-        "{% set s = state_attr('sensor.teleri_seansid', 'seansid') or [] "
-        "if states('sensor.teleri_seansid') == now().date() | string else [] %}"
+        f"{{% set s = state_attr('{TV_SESSIONS}', 'seansid') or [] "
+        f"if states('{TV_SESSIONS}') == now().date() | string else [] %}}"
         "{% set ns = namespace(rows=[]) %}"
         "{% for x in s | reverse %}{% set e = x.end or as_timestamp(now()) %}"
         "{% if e - x.start >= 60 %}{% set ns.rows = ns.rows + ["

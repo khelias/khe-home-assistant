@@ -665,15 +665,27 @@ HINNANG = {
     "above": "Praegu üle päeva keskmise",
 }
 
-# the TV and its watch time
+# the TV and its watch time; the recorder sets the states that follow the date (ADR-017)
 entry(dc.TV, "media_player.demo_tv", "playing", "Teler", app_name="YouTube", device_class="tv")
-entry("sensor.teleri_app", "sensor.demo_tv_app", "YouTube", "Teler")
-# the week chart's statistics, as the generator names them
+entry(dc.TV_APP, "sensor.demo_tv_app", "YouTube", "Teler")
+entry(dc.TV_SESSIONS, "sensor.demo_tv_sessions", "2026-01-01", "Teleri seansid", seansid=[])
+TODAY_HOURS = {**HOURS, "state_class": "measurement"}
+entry(dc.TV_YESTERDAY, "sensor.demo_tv_yesterday", "0", "Teler sees eile", **TODAY_HOURS)
+# the week's statistics as the generator names them, and each app's counter of today
 TV_WEEK = [x["entity"] for x in dc.tv_week["entities"]]
-for (app, *_), real, word in zip(
-    dc.TV_APPS, TV_WEEK, ["youtube", "elisa", "jupiter", "go3", "stremio", "other"], strict=True
-):
-    entry(real, f"sensor.demo_tv_{word}", "0.9", app, **HOURS)
+TV_WORDS = ["youtube", "elisa", "jupiter", "go3", "stremio", "other"]
+for (app, today, *_), real, word in zip(dc.TV_APPS, TV_WEEK, TV_WORDS, strict=True):
+    entry(real, f"sensor.demo_tv_{word}", "0", app, **HOURS)
+    entry(today, f"sensor.demo_tv_{word}_today", "0", app, **TODAY_HOURS)
+# how often each app is on in an hour the TV is on, and the name its sessions carry: Muu is
+# every other app, so its sessions name one
+TV_WATCH = list(
+    zip(
+        [0.35, 0.25, 0.15, 0.1, 0.05, 0.1],
+        [*[a for a, *_ in dc.TV_APPS][:5], "Netflix"],
+        strict=True,
+    )
+)
 
 # the system: updates, the network, the NVR, the phone and the people
 UPDATE_WORDS = [
@@ -773,19 +785,7 @@ MIRRORS = {
 }
 
 # sample text for each templated markdown card, in the subset demo/cards.js renders
-TEXTS = {
-    dc.tv_today["content"]: (
-        "# 1 t 25 min\n\n"
-        '<ha-icon icon="mdi:youtube"></ha-icon> **YouTube** 52 min\n\n'
-        '<ha-icon icon="mdi:television-play"></ha-icon> **Jupiter** 33 min\n\n'
-    ),
-    dc.tv_sessions["content"]: (
-        "| Aeg | Äpp | Kestus |\n|:--|:--|--:|\n"
-        "| 19:40–praegu | YouTube | 22 min |\n"
-        "| 18:05–18:38 | Jupiter | 33 min |\n"
-        "| 16:10–16:40 | YouTube | 30 min |"
-    ),
-}
+TEXTS = {}
 
 
 def _walk(o, key=None):
@@ -910,7 +910,8 @@ def demo_states(model):
 # names). cost: a counter's kWh times the price. price: € per kWh with all fees, with a morning
 # and an evening peak. duty: an on/off entity's daily hours on. pulses: a PIR's or a door's short
 # on-events (ADR-015), `hours` [[from, to, per hour]] of the day, the same on every load, ending at
-# its catalogue state `ago` minutes back and none in the QUIET_AGO minutes before it.
+# its catalogue state `ago` minutes back and none in the QUIET_AGO minutes before it. watch: a TV
+# app's hours (ADR-017), one app in each hour the TV's duty has it on, by the `watch` weights.
 RECORDER_ZONE = "Europe/Tallinn"
 # older than the 3D view's 15-minute motion glow: the 3D scenarios start with every PIR off this long
 QUIET_AGO = 30
@@ -957,7 +958,8 @@ def _counter(base, amp, peak, state=None, last=None):
 
 
 def demo_recorder():
-    """recorder.json: {zone, profiles, house, forecast, weather, rules}, every id the demo's own."""
+    """recorder.json: {zone, profiles, house, forecast, weather, watch, rules}, every id the demo's
+    own."""
     ids = {real: e["id"] for real, e in CATALOGUE.items()}
     consumption, cost, price = (STATISTICS[k] for k in (dc.CONSUMPTION, dc.COST, dc.PRICE_STAT))
     boiler = (0.1, 0.06, 6)
@@ -1001,6 +1003,8 @@ def demo_recorder():
         ids[dc.PERGOLA_LIGHT]: {"kind": "duty", "on": [[17, 23]], "states": ["off", "on"]},
         ids[dc.TV]: {"kind": "duty", "on": [[7, 8], [19, 22]], "states": ["off", "playing"]},
         ids[dc.MODE]: {"kind": "duty", "on": [[18, 19]], "states": ["normal", "kitchen"]},
+        # each app's hours, drawn from the TV's duty hours above (ADR-017)
+        **{ids[real]: {"kind": "watch", "app": i} for i, real in enumerate(TV_WEEK)},
         **{
             ids[real]: _pulses(real, hours, i)
             for i, (real, hours) in enumerate(
@@ -1039,6 +1043,20 @@ def demo_recorder():
             "temperature": ids[dc.OUTDOOR],
             "hours": 24,
         },
+        # the TV's apps by its duty hours (ADR-017): its state and app now, each app's counter of
+        # today and its statistic, yesterday's total and today's sessions
+        "watch": {
+            "tv": ids[dc.TV],
+            "app": ids[dc.TV_APP],
+            "sessions": ids[dc.TV_SESSIONS],
+            "yesterday": ids[dc.TV_YESTERDAY],
+            "apps": [
+                {"statistic": ids[real], "today": ids[today], "name": name, "weight": weight}
+                for (_, today, *_), real, (weight, name) in zip(
+                    dc.TV_APPS, TV_WEEK, TV_WATCH, strict=True
+                )
+            ],
+        },
         # each rule's last run, the last time the clock read its [hour, minute] in the zone
         "rules": {ids[dc.RAIN_RULE]: [14, 19], ids[dc.SUNSET_RULE]: [15, 45]},
     }
@@ -1075,15 +1093,6 @@ def demo_series():
     ids = {real: e["id"] for real, e in CATALOGUE.items()}
     put(ids["sensor.komfovent_total_recovered_energy"], "day", _days(31, 9, 3, 1.5))
     put(ids["sensor.komfovent_total_ahu_energy"], "day", _days(31, 0.95, 0.12, 0.05, decimals=2))
-    for i, real in enumerate(TV_WEEK):
-        put(
-            ids[real],
-            "day",
-            [
-                [d, max(0.0, round(v, 1))]
-                for d, v in _days(7, 0.8 - 0.12 * i, 0.5, 0.3, period=4 + i)
-            ],
-        )
     put(ids["sensor.komfovent_supply_temperature"], "hour", _hours(19.5, 1.2, 0.3, 3))
     put(ids["sensor.komfovent_extract_temperature"], "hour", _hours(21.4, 0.5, 0.2, 1))
     put(ids[dc.OUTDOOR], "hour", _hours(7.5, 3.5, 0.3, 9))

@@ -1,6 +1,6 @@
 # ADR-012: The demo is the house's Overview, and the cards carry their own English
 
-- **Status:** Accepted (2026-11-12); decision 3 extended to the month period by [ADR-013](013-days-cards-open-a-long-range-sheet.md)
+- **Status:** Accepted (2026-11-12); decision 3 extended to the month period by [ADR-013](013-days-cards-open-a-long-range-sheet.md) and to the TV's watch time by [ADR-017](017-teler-cards-read-the-session-list-and-a-stacked-days-chart.md)
 - **Related:** [ADR-002](002-own-dashboard-cards.md), [ADR-003](003-demo-in-english.md), [ADR-005](005-a3-glass-cards-history-sheet.md), [ADR-007](007-a3-in-the-overview.md), [ADR-008](008-a3-page-cards-read-statistics.md)
 
 ## Context

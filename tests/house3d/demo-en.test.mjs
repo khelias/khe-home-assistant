@@ -43,7 +43,8 @@ test('a chart without data says so in English', () => {
   assert.match(CHARTS['history-graph']({ entities: [{ entity: 'sensor.none' }] }, {}, new Date()), /No data/);
 });
 
-test('every English chart draws from series.en.json', () => {
+// the English build: its charts draw from series.en.json, and Teler's cards (ADR-017) carry English
+test('every English chart draws from series.en.json, and the TV card is in English', () => {
   const out = mkdtempSync(join(tmpdir(), 'house3d-demo-en-'));
   let dashboard, series;
   try {
@@ -55,9 +56,22 @@ test('every English chart draws from series.en.json', () => {
   const charts = [];
   const walk = o => { if (Array.isArray(o)) o.forEach(walk); else if (o && typeof o === 'object') { if (CHARTS[o.type]) charts.push(o); Object.values(o).forEach(walk); } };
   walk(dashboard.views);
-  assert.ok(charts.length > 0);
-
+  // no view draws a stock chart; a new one must draw from the series
   for (const c of charts) assert.doesNotMatch(CHARTS[c.type](c, series, new Date(), 400, e => e), /No data/, c.type);
+
+  const teler = dashboard.views.find(v => v.path === 'teler'), cards = [];
+  const all = o => { if (Array.isArray(o)) o.forEach(all); else if (o && typeof o === 'object') { if (String(o.type).startsWith('custom:khe-')) cards.push(o); Object.values(o).forEach(all); } };
+  all(teler);
+  assert.ok(cards.length && cards.every(c => c.language === 'en'));
+  const tv = cards.find(c => c.type === 'custom:khe-tv-card');
+  assert.deepEqual(tv.profiles.map(p => [p.name, p.lock, p.tap_action.confirmation.text]), [
+    ['Main profile', true, 'Switch the TV to the Main profile? The PIN is entered on the TV.'],
+    ['Kids', false, 'Switch the TV to the Kids profile?']
+  ]);
+  assert.equal(tv.buttons.power_off.confirmation.text, 'Turn off the TV?');
+  assert.equal(tv.apps.at(-1).name, 'Other');
+  const days = cards.find(c => c.type === 'custom:khe-days-card');
+  assert.deepEqual(days.series[0].stack.map(x => x.name), tv.apps.map(a => a.name));
 });
 
 test('both languages have the same strings', () => {

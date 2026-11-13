@@ -257,6 +257,7 @@ class Build(unittest.TestCase):
             | ids(PERGOLA)
             | ids(VALVE)
             | ids(CAMERAS)
+            | ids(TELER)
         )
         self.assertEqual(quoted & spelled, set())
 
@@ -264,6 +265,7 @@ class Build(unittest.TestCase):
 VALVE = a3.valve(MODEL)
 H = dc.House(HOUSE, PEOPLE)
 CAMERAS = a3.cameras(H)
+TELER = a3.teler(H)
 OVERVIEW = a3.overview(HOUSE, PEOPLE, MODEL)
 BUILT = dc.build(HOUSE, PEOPLE, MODEL)
 
@@ -288,6 +290,7 @@ class Overview(unittest.TestCase):
             "pergola": PERGOLA,
             "valve": VALVE,
             "kaamerad": CAMERAS,
+            "teler": TELER,
         }
         built = [swapped.get(v["path"], v) for v in BUILT["views"] if v["path"] != "maja-3d"]
         self.assertEqual(OVERVIEW["views"][:-1], built)
@@ -554,7 +557,8 @@ class Ventilatsioon(unittest.TestCase):
 
 class DaysSheets(unittest.TestCase):
     """A days card's headline opens its series' sheet over 30 days, 90 days and 12 months
-    (ADR-013): the series names the sheet's title and a real entity for "Rohkem"."""
+    (ADR-013): the series names the sheet's title and a real entity for "Rohkem". A stack has no one
+    statistic and no sheet (ADR-017)."""
 
     def test_every_days_series_has_a_title_and_a_real_entity_for_more(self):
         series = [
@@ -564,7 +568,11 @@ class DaysSheets(unittest.TestCase):
             if c.get("type") == "custom:khe-days-card"
             for s in c["series"]
         ]
-        self.assertEqual(len(series), 5)
+        self.assertEqual(len(series), 6)
+        stacks = [s for s in series if "stack" in s]
+        self.assertEqual(len(stacks), 1)
+        self.assertTrue(all("statistic" not in s and "more" not in s for s in stacks))
+        series = [s for s in series if "stack" not in s]
         for s in series:
             with self.subTest(s["name"], statistic=s["statistic"]):
                 self.assertTrue(s["title"])
@@ -942,3 +950,105 @@ class Kaamerad(unittest.TestCase):
         before = copy.deepcopy(dc.cameras(H))
         a3.cameras(H)
         self.assertEqual(dc.cameras(H), before)
+
+
+class Teler(unittest.TestCase):
+    """Teler in A3's look (ADR-017)."""
+
+    def test_every_stock_entity_is_on_the_page(self):
+        stock = {i for i in ids(dc.teler(H)) if not i.startswith("mdi:")}
+        self.assertEqual(stock - ids(TELER), set())
+        self.assertLessEqual({dc.TV_SESSIONS, dc.TV_YESTERDAY}, ids(TELER))
+
+    def test_stock_title_path_and_icon_two_columns_and_a3s_background(self):
+        stock = dc.teler(H)
+        for k in ("title", "path", "icon"):
+            self.assertEqual(TELER[k], stock[k])
+        self.assertEqual(TELER["max_columns"], 2)
+        self.assertEqual(TELER["background"], VIEW["background"])
+        types = {c["type"] for s in TELER["sections"] for c in s["cards"]}
+        self.assertTrue(all(t.startswith("custom:khe-") for t in types))
+        (chips,) = cards_of(TELER, "chips-card")
+        self.assertNotIn("status", chips)
+
+    def test_every_stock_action_with_its_confirmation_and_turn_on(self):
+        (tv,) = cards_of(TELER, "tv-card")
+        b = tv["buttons"]
+        self.assertEqual(b["power_off"]["perform_action"], "media_player.turn_off")
+        self.assertEqual(b["power_off"]["confirmation"], {"text": "Lülitad teleri välja?"})
+        self.assertEqual(b["power_off"]["target"], {"entity_id": dc.TV})
+        self.assertEqual(
+            b["power_on"],
+            {
+                "action": "perform-action",
+                "perform_action": "media_player.turn_on",
+                "target": {"entity_id": dc.TV},
+            },
+        )
+        self.assertEqual(b["remote"], {"action": "more-info", "entity": dc.TV})
+        self.assertNotIn("on", tv, "the English walk translates an `on` key")
+        self.assertNotIn("off", tv)
+        stock = [x["tap_action"] for x in dc.teler(H)["badges"]]
+        self.assertEqual(
+            [a for a in stock if a["action"] != "more-info"],
+            [b["power_off"]] + [p["tap_action"] for p in tv["profiles"]],
+        )
+        self.assertEqual(
+            [(p["name"], p["lock"], p["tap_action"]) for p in tv["profiles"]],
+            [
+                (
+                    "Profiil A",
+                    True,
+                    {
+                        "action": "perform-action",
+                        "perform_action": "script.teler_profiil_1",
+                        "confirmation": {
+                            "text": "Vahetad teleri profiilile Profiil A? PIN tuleb sisestada teleris."
+                        },
+                    },
+                ),
+                (
+                    "Profiil B",
+                    False,
+                    {
+                        "action": "perform-action",
+                        "perform_action": "script.teler_profiil_2",
+                        "confirmation": {"text": "Vahetad teleri profiilile Profiil B?"},
+                    },
+                ),
+            ],
+        )
+
+    def test_names_and_colours_from_tv_apps(self):
+        want = [(n, e, c) for n, e, _, c in dc.TV_APPS]
+        (tv,) = cards_of(TELER, "tv-card")
+        self.assertEqual([(a["name"], a["color"]) for a in tv["apps"]], [(n, c) for n, _, c in want])
+        today, sessions = cards_of(TELER, "usage-card")
+        self.assertEqual((today["part"], sessions["part"]), ("today", "sessions"))
+        for u in (today, sessions):
+            self.assertEqual([(x["name"], x["entity"], x["color"]) for x in u["entities"]], want)
+        self.assertEqual(today["compare"], {"entity": dc.TV_YESTERDAY})
+        self.assertEqual(sessions["sessions"], dc.TV_SESSIONS)
+        (days,) = cards_of(TELER, "days-card")
+        self.assertEqual(days["days"], 7)
+        (series,) = days["series"]
+        stack = series["stack"]
+        self.assertEqual(
+            [(x["name"], x["statistic"], x["color"], x["today"]["entity"]) for x in stack],
+            [(n, w["entity"], c, e) for (n, e, c), w in zip(want, dc.tv_week["entities"])],
+        )
+
+    def test_kodus_tv_tile_still_lands_here(self):
+        (tile,) = tiles_of(VIEW, dc.TV)
+        self.assertEqual(tile["history"]["view"], "/lovelace/" + TELER["path"])
+        self.assertIn(TELER, OVERVIEW["views"])
+
+    def test_without_profiles_no_profile_buttons(self):
+        bare = a3.teler(dc.House({}, []))
+        (tv,) = cards_of(bare, "tv-card")
+        self.assertEqual(tv["profiles"], [])
+
+    def test_stock_teler_is_unchanged(self):
+        before = copy.deepcopy(dc.teler(H))
+        a3.teler(H)
+        self.assertEqual(dc.teler(H), before)

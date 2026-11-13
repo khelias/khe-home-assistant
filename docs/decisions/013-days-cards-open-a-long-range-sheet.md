@@ -1,6 +1,6 @@
 # ADR-013: A days card opens a long-range sheet: 30 days, 90 days, 12 months
 
-- **Status:** Accepted (2026-11-13)
+- **Status:** Accepted (2026-11-13); decisions 3 and 4 do not apply to a stacked series, [ADR-017](017-teler-cards-read-the-session-list-and-a-stacked-days-chart.md)
 - **Related:** extends [ADR-005](005-a3-glass-cards-history-sheet.md) decision 5, [ADR-008](008-a3-page-cards-read-statistics.md) decision 1 and [ADR-012](012-the-demo-is-the-houses-overview.md) decision 3
 
 ## Context

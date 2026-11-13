@@ -1,8 +1,8 @@
-"""A3, the house's Overview in A3's look, as data (ADR-005 to ADR-008, ADR-010, ADR-011, ADR-014 to ADR-016).
+"""A3, the house's Overview in A3's look, as data (ADR-005 to ADR-008, ADR-010, ADR-011, ADR-014 to ADR-017).
 
 overview(house, people, model) is the Overview the house saves: dashboard_config.build()'s views
 with A3's views in place of Kodu's at the same paths (`kodu`, `energia`, `soojuspump`,
-`ventilatsioon`, `pergola`, `valve`, `kaamerad`) and the 3D view moved last, which the public demo builds too (ADR-012). dashboard_config.build() itself
+`ventilatsioon`, `pergola`, `valve`, `kaamerad`, `teler`) and the 3D view moved last, which the public demo builds too (ADR-012). dashboard_config.build() itself
 stays Kodu with 3D first, the house's fallback. energia() is Energia: the month, the days, who used what and the price, from daily
 statistics. soojuspump(h) is Soojuspump: the status, the indoor and boiler temperatures as 48-hour
 lines from hourly statistics, the heating shift as a stepper, the boost and the boiler's
@@ -18,7 +18,9 @@ hourly motion, and the panel's own sensors; the plan is plan_slice(), a slice of
 its rooms, walls and doors and each PIR's room, never its devices (ADR-015). cameras(h) is
 Kaamerad: the status, the cameras' stills drawn from camera_proxy with the house file's first
 camera large (ADR-016), the recordings in the NVR app, the NVR disk with how many cameras answer
-and detect motion, and the settings row.
+and detect motion, and the settings row. teler(h) is Teler: what is on now with the TV's off and
+on switch, remote and profiles, today's watch time by app, today's sessions and the week stacked by
+app from the session log and the per-app counters (ADR-017).
 
 build(house, people, model) returns A3 as a one-view Lovelace config: the 3D house as
 the hero, then the page's title with the outdoor temperature, people, alarms and live faults as
@@ -60,6 +62,8 @@ Where each sheet reads its history, measured on the house on 2026-11-12
     PIRs, doors                   history      24 h of off-to-on changes, Valve (ADR-015)
     the panel's sensors           history      on/off; the battery from statistics (mean)
     camera stills                 camera_proxy the state's entity_picture, Kaamerad (ADR-016)
+    TV apps today, sessions       states       the _tana counters and the session log, Teler (ADR-017)
+    TV apps by the day            statistics   change (day) of the _vaadatud copies, Teler's week
     NVR disk                      history      its state words, Kaamerad's Süsteem
 """
 
@@ -1330,9 +1334,94 @@ def cameras(h):
     }
 
 
+def teler(h):
+    """Teler in A3's look (ADR-007, ADR-017): what is on now with the TV's controls, today's watch
+    time by app, today's sessions and the week stacked by app. The stock view's off switch, remote
+    and profile buttons with their confirmations are taken from dc.teler(h) as they are; turn_on is
+    the one action the stock view lacks, as its badges hide while the TV is off."""
+    stock = dc.teler(h)
+    acts = [b["tap_action"] for b in stock["badges"]]
+    (remote,) = [a for a in acts if a["action"] == "more-info"]
+    (off,) = [a for a in acts if a.get("perform_action") == "media_player.turn_off"]
+    switches = [a for a in acts if a.get("perform_action", "").startswith("script.teler_profiil_")]
+    entities = [{"entity": e, "name": n, "color": c} for n, e, _, c in dc.TV_APPS]
+    stack = [
+        {"statistic": w["entity"], "name": n, "color": c, "today": {"entity": e}}
+        for (n, e, _, c), w in zip(dc.TV_APPS, dc.tv_week["entities"], strict=True)
+    ]
+    return {
+        "title": stock["title"],
+        "path": stock["path"],
+        "icon": stock["icon"],
+        "type": "sections",
+        "max_columns": 2,
+        "background": BACKGROUND,
+        "sections": [
+            section(
+                [
+                    card(
+                        "chips-card",
+                        style="a3",
+                        title=stock["title"],
+                        grid_options={"columns": "full"},
+                    ),
+                    card(
+                        "tv-card",
+                        entity=dc.TV,
+                        app=dc.TV_APP,
+                        sessions=dc.TV_SESSIONS,
+                        apps=[{"name": x["name"], "color": x["color"]} for x in entities],
+                        buttons={
+                            "power_off": off,
+                            "power_on": {
+                                "action": "perform-action",
+                                "perform_action": "media_player.turn_on",
+                                "target": {"entity_id": dc.TV},
+                            },
+                            "remote": remote,
+                        },
+                        profiles=[
+                            {"name": n, "tap_action": a, "lock": i == 1}
+                            for (i, n), a in zip(h.tv_profiles, switches, strict=True)
+                        ],
+                        grid_options={"columns": "full"},
+                    ),
+                    heading("Täna"),
+                    card(
+                        "usage-card",
+                        part="today",
+                        entities=entities,
+                        compare={"entity": dc.TV_YESTERDAY},
+                        grid_options={"columns": "full"},
+                    ),
+                ]
+            ),
+            section(
+                [
+                    heading("Täna ajas"),
+                    card(
+                        "usage-card",
+                        part="sessions",
+                        entities=entities,
+                        sessions=dc.TV_SESSIONS,
+                        grid_options={"columns": "full"},
+                    ),
+                    heading("Nädal"),
+                    card(
+                        "days-card",
+                        days=7,
+                        series=[{"name": "Nädal", "stack": stack}],
+                        grid_options={"columns": "full"},
+                    ),
+                ]
+            ),
+        ],
+    }
+
+
 def overview(house, people, model):
     """The house's Overview: dashboard_config.build() with A3's views in place of Kodu's (`kodu`,
-    `energia`, `soojuspump`, `ventilatsioon`, `pergola`, `valve`, `kaamerad`) and the 3D view (`maja-3d`) last.
+    `energia`, `soojuspump`, `ventilatsioon`, `pergola`, `valve`, `kaamerad`, `teler`) and the 3D view (`maja-3d`) last.
     A fresh copy every call."""
     config = dc.build(house, people, model)
     h = dc.House(house, people)
@@ -1344,6 +1433,7 @@ def overview(house, people, model):
         "pergola": pergola(),
         "valve": valve(model),
         "kaamerad": cameras(h),
+        "teler": teler(h),
     }
     views = [a3.get(v["path"], v) for v in config["views"]]
     config["views"] = sorted(views, key=lambda v: v["path"] == "maja-3d")

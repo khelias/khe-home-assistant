@@ -144,7 +144,7 @@ class DemoConfig(unittest.TestCase):
                 wanted |= {x["entity"] for x in c["entities"]}
             if c["type"] == "custom:apexcharts-card":
                 wanted |= {f"{x['entity']}|{x['name']}" for x in c["series"]}
-        self.assertTrue(wanted)
+        # no view draws a stock chart; a new one must have its series
         self.assertEqual(sorted(wanted - set(SERIES)), [])
 
     def test_state_content_keys_exist_on_their_states(self):

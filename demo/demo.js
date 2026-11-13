@@ -58,9 +58,15 @@ document.documentElement.classList.toggle('light', light);
 // the states that follow the date (today's use, this month's, the prices) start from the
 // recorder's own data, so the cards' numbers agree with their history on any day
 const recorder = createRecorder(recorderSpec, { zoneParts, dayStart, lastMonthName });
-for (const [e, s] of Object.entries(recorder.dated(Date.now(), { comma: lang !== 'en', levels: data.levels, hinnang: data.hinnang }))) {
+const dated = recorder.dated(Date.now(), { comma: lang !== 'en', levels: data.levels, hinnang: data.hinnang });
+for (const [e, s] of Object.entries(dated)) {
   const s0 = data.states[e];
   if (s0) data.states[e] = { ...s0, state: s.state, attributes: { ...s0.attributes, ...(s.attributes || {}) } };
+}
+// a mirror follows a dated state it has a word for and the recorder left it (the TV's app while off)
+for (const [target, m] of Object.entries(data.mirrors || {})) {
+  const from = dated[m.from];
+  if (from && !dated[target] && from.state in m.map && data.states[target]) data.states[target] = { ...data.states[target], state: m.map[from.state] };
 }
 const sim = createSim(data);
 const byEntity = new Map((model.devices || []).map(d => [d.entity, d]));

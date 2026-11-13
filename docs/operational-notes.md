@@ -201,7 +201,11 @@ and the panel, both on 24 hours of state history
 ([ADR-015](decisions/015-a3-page-cards-read-state-history.md)), and for
 Kaamerad `custom:khe-cameras-card`, the cameras' stills from `camera_proxy`
 ([ADR-016](decisions/016-a3-cards-draw-camera-stills-from-camera-proxy.md)),
-beside count cells (`n / total` with the missing ones named). Kodu was drawn
+beside count cells (`n / total` with the missing ones named), and for Teler
+`custom:khe-tv-card`, what is on now with the TV's controls, and
+`custom:khe-usage-card`, today's watch time by app or today's sessions,
+beside a days card whose series stacks the apps
+([ADR-017](decisions/017-teler-cards-read-the-session-list-and-a-stacked-days-chart.md)). Kodu was drawn
 with them on 2026-10-17 and went back to stock cards the next day; A3
 uses them. Deploy replaces `www/khe-cards/` in HA's config volume, so HA
 serves them as `/local/khe-cards/`, and a change arrives without a restart.
@@ -245,7 +249,7 @@ behind every value and device. It replaced the Bubble Card trial of
 - **Saving:** `ha-dashboard.py` saves `dashboard_a3.overview()`:
   `dashboard_config.build()`'s views with A3's in place of Kodu's at the same
   paths (`kodu` and, since 2026-11-12, `energia` and `soojuspump`, since
-  2026-11-13 `ventilatsioon` and `pergola`) and the 3D view
+  2026-11-13 `ventilatsioon`, `pergola`, `valve`, `kaamerad` and `teler`) and the 3D view
   (`maja-3d`) last. Kodu stays in `dashboard_config.py` as the fallback and as
   A3's source of entities and confirmations; the demo builds `overview()` too.
 - **Undo:** revert the commit and run `ha-dashboard.py` for the Overview
@@ -329,6 +333,12 @@ behind every value and device. It replaced the Bubble Card trial of
   a token rotation (about five minutes): the stills refresh without a
   flash, the large one every 10 s in the network panel; blank stills with
   the names drawn mean `entity_picture` or `camera_proxy` changed (ADR-016).
+  On Teler compare the now card's app and minutes with `sensor.teleri_app`
+  and the last entry of `sensor.teleri_seansid`, today's total with the
+  `_tana` counters and the sessions with the attribute; a blank note or
+  "Täna pole veel vaadatud." while the TV is on means the package's session
+  list or counters changed (ADR-017). Tap Lülita välja and cancel HA's
+  confirmation.
 - **Energia** ([ADR-008](decisions/008-a3-page-cards-read-statistics.md)):
   the month card reads `maja_sel_kuul`, `maja_eelmine_kuu`, `maja_tana` and
   `maja_eile` with their `kulu` and `hind` attributes; the days cards read
@@ -417,6 +427,20 @@ behind every value and device. It replaced the Bubble Card trial of
   disk, how many substreams have a state and how many motion switches are
   on. Camera motion is not shown (it fires every half minute); the live
   views and the settings subview are still Kodu's.
+- **Teler** ([ADR-017](decisions/017-teler-cards-read-the-session-list-and-a-stacked-days-chart.md)):
+  the now card reads `media_player.google_tv_streamer`, `sensor.teleri_app`
+  and today's `sensor.teleri_seansid`: on, the app in its `TV_APPS` colour
+  with its running session's minutes (none on the home screen, which ends
+  a session), Lülita välja, Pult and the profiles with the stock
+  confirmations; off, "Teler on väljas" with today's last session and
+  Lülita sisse (no confirmation); without a state only Pult. Täna sums the
+  `_tana` counters (a counter last updated before midnight counts 0, as it
+  resets only after it), lists the apps used 30 s or more, each opening its
+  counter's sheet, beside `teler_sees_eile`. Täna ajas lists the sessions of
+  a minute or more. Nädal stacks the `_vaadatud` daily change by app over
+  seven days, today from the `_tana` counters; the headline is the seven
+  days' total and the average of the six ended days. Before 2026-11-11 the
+  week is mostly Muu: the household watched Telia TV, outside the five apps.
 
 ## The 3D house view (`house3d`)
 

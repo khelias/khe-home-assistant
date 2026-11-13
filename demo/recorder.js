@@ -7,6 +7,8 @@
 
 const HOUR = 3600e3, FIVE = 300e3, TAU = 2 * Math.PI;
 const round = (v, d) => Number(v.toFixed(d));
+// a fixed pseudo-random fraction of x, the same on every load
+const frac = x => { const v = Math.sin(x * 12.9898) * 43758.5453; return v - Math.floor(v); };
 
 // spec: recorder.json; tz: { zoneParts, dayStart, lastMonthName } from khe-cards.js
 export function createRecorder(spec, { zoneParts, dayStart, lastMonthName }) {
@@ -37,10 +39,29 @@ export function createRecorder(spec, { zoneParts, dayStart, lastMonthName }) {
     const h = hourOf(t), s = (p.showers || []).find(([a, b]) => h >= a && h < b);
     return s ? Math.max(0, s[2] * (0.4 + drift(hourStart(t)))) : 0;
   };
-  // a value at t, or a counter's kWh in the hour starting at t
+  // which of the watch apps is on at t (ADR-017): one per hour the TV is on by its duty hours,
+  // picked by the apps' weights, the same on every load; -1 while the TV is off
+  const W = spec.watch;
+  // a duty profile's entity is on in its daily hours
+  const dutyOn = (p, t) => { const h = hourOf(t); return p.on.some(([a, b]) => h >= a && h < b); };
+  const tvOn = t => dutyOn(profiles[W.tv], t);
+  // remembered by the hour, as every app's sums ask for the same hours
+  const watched = new Map();
+  function watching(t) {
+    if (!W) return -1;
+    const h = hourStart(t);
+    if (!watched.has(h)) {
+      let x = frac(h / HOUR / 7.7 + 0.31);
+      const i = W.apps.findIndex(a => (x -= a.weight) < 0);
+      watched.set(h, !tvOn(h) ? -1 : i < 0 ? W.apps.length - 1 : i);
+    }
+    return watched.get(h);
+  }
+  // a value at t, or a counter's kWh (a watch app's hours) in the hour starting at t
   function at(id, t) {
     const p = profiles[id];
     if (!p) return null;
+    if (p.kind === 'watch') return watching(t) === p.app ? 1 : 0;
     if (p.kind === 'rain') return rain(p, t);
     // the next hours' sum of another profile
     if (p.kind === 'ahead') { let s = 0; for (let k = 1; k <= p.hours; k++) s += at(p.of, hourStart(t) + k * HOUR); return s; }
@@ -78,7 +99,7 @@ export function createRecorder(spec, { zoneParts, dayStart, lastMonthName }) {
     for (const id of msg.statistic_ids || []) {
       const p = profiles[id];
       if (!p || p.kind === 'duty') continue;
-      const counter = p.kind === 'counter' || p.kind === 'cost';
+      const counter = p.kind === 'counter' || p.kind === 'cost' || p.kind === 'watch';
       const rows = [];
       for (const [a, b] of periods(msg.period, start, end)) {
         const r = { start: a, end: b };
@@ -105,7 +126,6 @@ export function createRecorder(spec, { zoneParts, dayStart, lastMonthName }) {
   // a PIR's or a door's rows (ADR-015): off at the start, short on-events by its hours of the day
   // (how many in an hour varies by the hour, the same on every load), none in the quiet minutes
   // before its last change, which is its catalogue state `ago` minutes back
-  const frac = x => { const v = Math.sin(x * 12.9898) * 43758.5453; return v - Math.floor(v); };
   function pulses(p, start, end, now) {
     const last = now - p.ago * 60e3, stop = now - Math.max(p.ago, p.quiet || 0) * 60e3 - 60e3;
     const rows = [{ s: 'off', lu: start / 1000 }], add = (t, s) => { if (t > start && t <= end) rows.push({ s, lu: t / 1000 }); };
@@ -133,7 +153,7 @@ export function createRecorder(spec, { zoneParts, dayStart, lastMonthName }) {
       } else if (p.kind === 'pulses') {
         rows.push(...pulses(p, start, end, now));
       } else if (p.kind === 'duty') {
-        const on = t => p.on.some(([a, b]) => hourOf(t) >= a && hourOf(t) < b);
+        const on = t => dutyOn(p, t);
         let last = null;
         for (let t = Math.floor(start / HOUR) * HOUR; t <= end; t += HOUR) {
           const s = p.states[on(t) ? 1 : 0];
@@ -225,6 +245,28 @@ export function createRecorder(spec, { zoneParts, dayStart, lastMonthName }) {
       if (said) attributes.hinnang = said;
       out[f.level] = { state: word, attributes };
 
+    }
+    // the TV by its duty hours (ADR-017): its state and app now, each app's hours today with the
+    // hour now so far, yesterday's total and today's sessions, so the Teler cards agree with the
+    // week's statistics; while the TV is off the app is its mirror's (demo.js)
+    if (W) {
+      const tv = profiles[W.tv], i = watching(now), hours = (k, a, b) => sum(W.apps[k].statistic, a, b, now);
+      out[W.tv] = { state: tv.states[tvOn(now) ? 1 : 0] };
+      if (i >= 0) out[W.app] = { state: W.apps[i].name };
+      W.apps.forEach((a, k) => { out[a.today] = { state: (hours(k, d0, now) + (k === i ? (now - hourStart(now)) / HOUR : 0)).toFixed(2) }; });
+      out[W.yesterday] = { state: W.apps.reduce((x, a, k) => x + hours(k, d1, d0), 0).toFixed(2) };
+      const list = [];
+      for (let t = d0; t <= now; t += HOUR) {
+        const k = watching(t);
+        if (k < 0) continue;
+        const last = list[list.length - 1], name = W.apps[k].name;
+        if (last && last.app === name && last.end === t / 1000) last.end = (t + HOUR) / 1000;
+        else list.push({ app: name, start: t / 1000, end: (t + HOUR) / 1000 });
+      }
+      const run = list[list.length - 1];
+      if (run && run.end * 1000 > now) run.end = null;
+      const p = zoneParts(now, zone), two = v => String(v).padStart(2, '0');
+      out[W.sessions] = { state: `${p.y}-${two(p.m)}-${two(p.d)}`, attributes: { seansid: list } };
     }
     // the weather entity's condition and temperature now, the forecast's first hour
     if (spec.weather) {

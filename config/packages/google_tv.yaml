@@ -49,6 +49,8 @@ template:
   # none while running. The raw label changes read as noise: Elisa, a 3 s voice search,
   # Elisa again. So a return to the same app within 3 minutes continues its session.
   # The state is the day the list belongs to; midnight starts a new list.
+  # Teler's A3 cards read this list and the per-app "täna" counters below (ADR-017):
+  # a change to their shape, the date state or the counters' reset needs the cards too.
   - trigger:
       - trigger: state
         entity_id: sensor.teleri_app

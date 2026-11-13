@@ -240,3 +240,28 @@ test("motion and doors (ADR-015): pulses by the hour that end at the catalogue's
   const back = pulses.find(([, p]) => !p.hours.length);
   assert.equal(on[back[0]].length, 0, 'the back door has not opened in a day');
 });
+
+test("the TV's state, its apps today, yesterday and today's sessions agree with its duty hours and the week (ADR-017)", async () => {
+  const W = spec.watch, tv = spec.profiles[W.tv];
+  for (const at of ['2026-11-13T19:48:00Z', '2026-11-13T05:30:00Z', '2026-11-14T06:20:00Z', '2026-03-29T18:10:00Z']) {
+    const now = Date.parse(at), s = rec.dated(now);
+    const p = zoneParts(now, TZ), d0 = dayStart(p.y, p.m, p.d, TZ), d1 = dayStart(p.y, p.m, p.d - 1, TZ);
+    const h = p.h + p.min / 60, on = tv.on.some(([a, b]) => h >= a && h < b);
+    assert.equal(s[W.tv].state, on ? 'playing' : 'off', at);
+    const list = s[W.sessions].attributes.seansid;
+    assert.equal(s[W.sessions].state, `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`, at);
+    assert.equal(list.length > 0 && list.at(-1).end === null, on, at);
+    // off, the app is left to its mirror
+    assert.equal((s[W.app] || {}).state, on ? list.at(-1).app : undefined, at);
+    // each app's counter is its sessions' time today, and its statistic's whole hours
+    for (const a of W.apps) {
+      const mine = list.filter(x => x.app === a.name).reduce((x, y) => x + ((y.end ?? now / 1000) - y.start) / 3600, 0);
+      assert.equal(s[a.today].state, mine.toFixed(2), `${at} ${a.name}`);
+      const day = (await stat(now, a.statistic, 'day', ['change'], d0))[a.statistic] || [];
+      const part = on && list.at(-1).app === a.name ? (now % 3600e3) / 3600e3 : 0;
+      assert.equal(sumOf(day).toFixed(6), (mine - part).toFixed(6), `${at} ${a.name}`);
+    }
+    const y = await Promise.all(W.apps.map(a => stat(now, a.statistic, 'day', ['change'], d1).then(r => (r[a.statistic] || [])[0])));
+    assert.equal(s[W.yesterday].state, y.reduce((x, r) => x + (r && r.start === d1 ? r.change : 0), 0).toFixed(2), at);
+  }
+});

@@ -311,6 +311,8 @@ EN = {
     "Telefon": "Phone",
     "Telefoni aku": "Phone battery",
     "Teler": "TV",
+    "Teler sees eile": "TV on yesterday",
+    "Teleri seansid": "TV sessions",
     "Temperatuurid 48 h": "Temperatures 48 h",
     "Terrassi uks": "Terrace door",
     "Toad": "Rooms",
@@ -591,24 +593,7 @@ WORDS = {
 }
 
 # keyed by the Estonian sample text, so a reworded sample needs its English here too
-TEXTS_EN = {
-    "# 1 t 25 min\n\n"
-    '<ha-icon icon="mdi:youtube"></ha-icon> **YouTube** 52 min\n\n'
-    '<ha-icon icon="mdi:television-play"></ha-icon> **Jupiter** 33 min\n\n': (
-        "# 1 h 25 min\n\n"
-        '<ha-icon icon="mdi:youtube"></ha-icon> **YouTube** 52 min\n\n'
-        '<ha-icon icon="mdi:television-play"></ha-icon> **Jupiter** 33 min\n\n'
-    ),
-    "| Aeg | Äpp | Kestus |\n|:--|:--|--:|\n"
-    "| 19:40–praegu | YouTube | 22 min |\n"
-    "| 18:05–18:38 | Jupiter | 33 min |\n"
-    "| 16:10–16:40 | YouTube | 30 min |": (
-        "| Time | App | Duration |\n|:--|:--|--:|\n"
-        "| 19:40–now | YouTube | 22 min |\n"
-        "| 18:05–18:38 | Jupiter | 33 min |\n"
-        "| 16:10–16:40 | YouTube | 30 min |"
-    ),
-}
+TEXTS_EN = {}
 
 
 # the sentences the house's templates write into tekst and hinnang, keyed by the demo's Estonian

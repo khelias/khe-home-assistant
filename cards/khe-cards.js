@@ -3,13 +3,14 @@
 // khe-status-card, with `style: a3` drawing glass boxes and a tap opening a history sheet;
 // Energia's month, days and split cards (ADR-008), a days card's long-range sheet (ADR-013),
 // Soojuspump's reading card (ADR-011), Pergola's forecast card (ADR-014) and Valve's motion card
-// with the cells-only reading card, both on state history (ADR-015).
+// with the cells-only reading card, both on state history (ADR-015), Kaamerad's stills (ADR-016)
+// and Teler's now and watch-time cards with a stacked days series (ADR-017).
 // The A2 and A3 designs are linked from the ADRs. Actions go through HA as a hass-action event, so HA runs the confirmation,
 // more-info, navigation and service call. No build step and no CDN; the pure helpers are
 // exported for the Node tests, where there is no DOM.
 // Bump KHE_CARDS_VERSION on every change to this file, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 25;
+export const KHE_CARDS_VERSION = 26;
 
 
 /* ---------- palette: the canvas's, with KHE Family's ink and paper ---------- */
@@ -72,6 +73,8 @@ const ICONS = {
   chevron: '<path d="M9 6l6 6-6 6"/>',
   tune: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8M16 5v4M10 15v4"/>',
   play: '<path d="M8 5v14l11-7z"/>',
+  remote: '<rect x="7" y="2" width="10" height="20" rx="3"/><circle cx="12" cy="8" r="2"/><path d="M10 14h4M10 17h4"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   rain: '<path d="M7 16a4 4 0 0 1-.9-7.9A5 5 0 0 1 16 7h.5a3.5 3.5 0 0 1 .5 7M9 19v2M13 18v2M17 17v2"/>',
   sunset: '<path d="M12 3v2M5.6 5.6 7 7M3 12h2M17 7l1.4-1.4M19 12h2M8 12a4 4 0 0 1 8 0M3 16h18M7 20h10"/>'
 };
@@ -142,6 +145,12 @@ const ET = {
   motionRow: (n, l) => `${n}, viimati ${l}, ajalugu`,
   camLive: 'Otsepilt', camTap: 'puuduta otsepildiks', camOpen: n => `${n}, ava otsepilt`, camShow: n => `${n}, näita suurelt`,
   camDown: 'Kaamera ei vasta', camLast: t => `Kaamera ei vasta, viimane pilt ${t}`,
+  hourShort: 't', tvIsOff: 'Teler on väljas', tvDown: 'Teler ei vasta', since: (d, t) => `${d}, alates ${t}`,
+  lastUntil: (a, t) => `viimati ${a}, kuni ${t}`, turnOff: 'Lülita välja', turnOn: 'Lülita sisse', remote: 'Pult',
+  switchProfile: 'Vaheta profiili', turnOffAria: 'Lülita teler välja', turnOnAria: 'Lülita teler sisse',
+  remoteAria: 'Pult: helitugevus ja taasesitus', profileAria: n => `Vaheta teleri profiilile ${n}`, pinNote: 'PIN tuleb sisestada teleris',
+  yesterdayDur: d => `eile ${d}`, notWatched: 'Täna pole veel vaadatud.', perDay: d => `keskmiselt ${d} päevas`,
+  weekdaysShort: ['P', 'E', 'T', 'K', 'N', 'R', 'L'], byDay: l => `Päevade kaupa: ${l}`,
   conditions: {
     'clear-night': 'selge', cloudy: 'pilves', exceptional: 'erakordne ilm', fog: 'udu', hail: 'rahe', lightning: 'äike',
     'lightning-rainy': 'äike ja vihm', partlycloudy: 'vahelduv pilvisus', pouring: 'paduvihm', rainy: 'vihm', snowy: 'lumi',
@@ -202,6 +211,12 @@ const EN = {
   motionRow: (n, l) => `${n}, last ${l}, history`,
   camLive: 'Live', camTap: 'tap for the live view', camOpen: n => `${n}, open the live view`, camShow: n => `${n}, show large`,
   camDown: 'Camera not responding', camLast: t => `Camera not responding, last image ${t}`,
+  hourShort: 'h', tvIsOff: 'The TV is off', tvDown: 'The TV is not responding', since: (d, t) => `${d}, since ${t}`,
+  lastUntil: (a, t) => `last ${a}, until ${t}`, turnOff: 'Turn off', turnOn: 'Turn on', remote: 'Remote',
+  switchProfile: 'Switch profile', turnOffAria: 'Turn the TV off', turnOnAria: 'Turn the TV on',
+  remoteAria: 'Remote: volume and playback', profileAria: n => `Switch the TV to the profile ${n}`, pinNote: 'the PIN is entered on the TV',
+  yesterdayDur: d => `yesterday ${d}`, notWatched: 'Nothing watched yet today.', perDay: d => `${d} a day on average`,
+  weekdaysShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], byDay: l => `By day: ${l}`,
   conditions: {
     'clear-night': 'clear', cloudy: 'cloudy', exceptional: 'exceptional weather', fog: 'fog', hail: 'hail', lightning: 'thunder',
     'lightning-rainy': 'thunder and rain', partlycloudy: 'partly cloudy', pouring: 'downpour', rainy: 'rain', snowy: 'snow',
@@ -1844,9 +1859,11 @@ export function monthPace(cost, cutoff, now, tz) {
 // "in <month>" of last month, by the month's number (1-12)
 export const inLastMonth = (now, tz, lang = 'et') => words(lang).inMonth[(zoneParts(now, tz).m + 10) % 12];
 // 'kolmapäev 11.11' ('Wednesday 11/11') for a day's start in HA's zone
+// the weekday of a moment in a zone, 0 for Sunday
+const weekdayOf = (t, tz) => { const p = zoneParts(t, tz); return new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay(); };
 export function dayName(t, tz, lang = 'et') {
   const p = zoneParts(t, tz), w = words(lang);
-  return `${w.weekdays[new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay()]} ${w.dayMonth(p.d, p.m)}`;
+  return `${w.weekdays[weekdayOf(t, tz)]} ${w.dayMonth(p.d, p.m)}`;
 }
 
 const hh = n => String(n).padStart(2, '0');
@@ -2075,6 +2092,7 @@ export function daysRequests(conf, now, tz) {
     if (!byType.get(k).ids.includes(id)) byType.get(k).ids.push(id);
   };
   for (const s of conf.series) {
+    if (s.stack) { for (const p of s.stack) add(['change'], p.statistic); continue; }
     add(seriesTypes(s), s.statistic);
     if (s.overlay) add([s.overlay.type], s.overlay.statistic);
   }
@@ -2395,7 +2413,20 @@ class MonthCard extends LoadingCard {
   }
 }
 
+// a chart key's colour square
+const swatch = (bg, op = 1) => `<i style="width:10px;height:10px;border-radius:3px;background:${bg}${op !== 1 ? `;opacity:${op}` : ''}"></i>`;
 const DAYS_CSS = `
+.wk{display:flex;flex-direction:column;gap:2px}
+.wk .n{font-size:26px;line-height:1.1;font-weight:700;letter-spacing:-0.022em}
+.cols,.lbl{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:10px}
+.cols{align-items:end;height:150px}
+.col{display:flex;flex-direction:column;justify-content:flex-end;gap:6px;height:100%;min-width:0}
+.col .v{font-size:11px;font-weight:600;text-align:center;color:var(--sub);white-space:nowrap}
+.stk{display:flex;flex-direction:column-reverse;gap:1.5px;border-radius:6px;overflow:hidden}
+.stk.none{background:var(--track)}
+.stk.old{opacity:.82}
+.lbl span{font-size:12px;font-weight:600;text-align:center;color:var(--sub)}
+.lbl b{font-size:12px;font-weight:700;text-align:center}
 .box{display:flex;flex-direction:column;gap:12px;padding:14px 16px;border-radius:24px}
 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px;padding:2px;border-radius:12px;background:var(--seg)}
 .seg button{height:34px;border-radius:10px;font-size:14px;font-weight:600;text-align:center;color:var(--text)}
@@ -2405,7 +2436,7 @@ const DAYS_CSS = `
 .avg .u{font-size:14px;font-weight:600;color:var(--sub)}
 svg.c{display:block;width:100%;height:120px;touch-action:pan-y}
 .ax{display:flex;justify-content:space-between;margin-top:4px;font-size:11px;font-weight:600;color:var(--sub)}
-.key{display:flex;gap:14px;font-size:12px;font-weight:600;color:var(--sub)}
+.key{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;font-weight:600;color:var(--sub)}
 .key span{display:flex;align-items:center;gap:5px}
 .key i{display:inline-block}
 .hr{height:1px;background:var(--hair)}
@@ -2418,6 +2449,55 @@ svg.c{display:block;width:100%;height:120px;touch-action:pan-y}
 .foot{font-size:12px;color:var(--sub)}
 `;
 
+// A stacked series (ADR-017): `stack: [{ statistic, name, color, today: { entity } }]`, `color` a
+// hex colour of the part's own (the TV's apps carry theirs), daily
+// change statistics of parts that add up; today's column comes from each part's live counter. One
+// point per day, { t, label, parts, v, today }, v the parts' sum, null when no part has a value
+// `per`, each part's dailySeries, may come from an earlier draw over the same response
+export function stackPoints(resp, stack, days, now, tz, states, per = stack.map(p => dailySeries(resp, p.statistic, 'change', days, now, tz))) {
+  return per[0].map((pt, j) => {
+    const today = j === days - 1;
+    const parts = stack.map((p, k) => (today && p.today ? todayHours(states[p.today.entity], now, tz) : per[k][j].v));
+    const known = parts.filter(v => v !== null);
+    return { t: pt.t, label: pt.label, parts, v: known.length ? known.reduce((a, v) => a + v, 0) : null, today };
+  });
+}
+// { total, avg }: the days' sum with today, the average of the ended days that have a value
+export function stackStats(pts) {
+  const ended = pts.filter(p => !p.today && p.v !== null);
+  return { total: pts.reduce((a, p) => a + (p.v ?? 0), 0), avg: ended.length ? ended.reduce((a, p) => a + p.v, 0) / ended.length : null };
+}
+// a day's short label under its column: the weekday, 'täna' for today
+export function stackLabel(p, tz, lang = 'et') {
+  const w = words(lang);
+  return p.today ? w.today : w.weekdaysShort[weekdayOf(p.t, tz)];
+}
+// the chart's text for a screen reader: each day's total and its parts by name
+export function stackAria(pts, stack, tz, lang = 'et') {
+  return words(lang).byDay(pts.map(p => {
+    const parts = stack.map((s, k) => [s.name, p.parts[k]]).filter(([, v]) => v > 0).map(([n, v]) => `${n} ${durText(v, lang)}`);
+    return `${dayName(p.t, tz, lang)} ${p.v === null ? '–' : durText(p.v, lang)}${parts.length ? ` (${parts.join(', ')})` : ''}`;
+  }).join('; '));
+}
+// a stacked series' body: the total and the ended days' average, the columns with their values and
+// days, and a legend of the parts that have a value; no sheet, as the parts have no one statistic
+function stackHtml(s, d, states, days, lang) {
+  // the statistics change only with the hourly load, the counters with every draw
+  const resp = d.res[dailyKey(['change'])];
+  const per = (d.stack ??= new Map()).get(s) || d.stack.set(s, s.stack.map(p => dailySeries(resp, p.statistic, 'change', days, d.now, d.tz))).get(s);
+  const w = words(lang), pts = stackPoints(resp, s.stack, days, d.now, d.tz, states, per);
+  if (pts.every(p => p.v === null)) return `<div class="msg">${w.noData}</div>`;
+  const { total, avg } = stackStats(pts), top = Math.max(...pts.map(p => p.v ?? 0)) || 1;
+  const cols = pts.map(p => {
+    const parts = s.stack.map((x, k) => [x, p.parts[k]]).filter(([, v]) => v > 0);
+    const bar = parts.map(([x, v]) => `<i style="flex:${v.toFixed(4)};background:${x.color}"></i>`).join('');
+    return `<span class="col"><span class="v num">${p.v === null ? '' : esc(colText(p.v, lang))}</span><span class="stk${p.today ? '' : ' old'}${parts.length ? '' : ' none'}" style="height:${p.v === null ? 0 : Math.max(4, Math.round((118 * p.v) / top))}px">${bar}</span></span>`;
+  }).join('');
+  const labels = pts.map(p => (p.today ? `<b>${esc(stackLabel(p, d.tz, lang))}</b>` : `<span>${esc(stackLabel(p, d.tz, lang))}</span>`)).join('');
+  const used = s.stack.filter((x, k) => pts.some(p => p.parts[k] > 0));
+  return `<span class="wk"><span class="n num">${esc(durText(total, lang))}</span><span class="sub">${avg === null ? '' : esc(w.perDay(durText(avg, lang)))}</span></span><span class="cols" role="img" aria-label="${esc(stackAria(pts, s.stack, d.tz, lang))}">${cols}</span><span class="lbl" aria-hidden="true">${labels}</span>${used.length ? chartKey(...used.map(x => [swatch(x.color), x.name])) : ''}`;
+}
+
 // daily bars of one statistic, or several behind a segmented control: the last `days` days in
 // HA's zone, the days past a delayed counter's cutoff lighter and out of the numbers. The
 // headline opens the picked series' sheet over 30 days, 90 days and 12 months (ADR-013). A series'
@@ -2428,7 +2508,8 @@ class DaysCard extends LoadingCard {
   _check(c) { if (!(c.series || []).length) throw new Error('khe-days-card: series is required'); }
   _watched() {
     const c = this._config;
-    return [...(c.series || []).map(s => s.today && s.today.entity), ...(c.cells || []).flatMap(x => [x.entity, x.share_of])].filter(Boolean);
+    const todays = s => (s.stack ? s.stack.map(p => p.today) : [s.today]).map(t => t && t.entity);
+    return [...(c.series || []).flatMap(todays), ...(c.cells || []).flatMap(x => [x.entity, x.share_of])].filter(Boolean);
   }
   _requests(now, tz) { return daysRequests(this._config, now, tz); }
   _html(states, pal) {
@@ -2442,6 +2523,7 @@ class DaysCard extends LoadingCard {
     this._point = null;
     if (!d) return shell(`<div class="msg">${w.loading}</div>`);
     if (d.error) return shell(`<div class="msg">${w.dataFailed}</div>`);
+    if (s.stack) return shell(stackHtml(s, d, states, c.days || 7, L));
     const daily = d.res[dailyKey(seriesTypes(s))], o = s.overlay;
     // a delayed counter's days after its cutoff are late; a price is known ahead
     // with no hour of data in two days the cutoff is today's start: only today is late, as it is
@@ -2490,7 +2572,6 @@ class DaysCard extends LoadingCard {
     const svg = `<svg class="c" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(s.aria || s.name)}">${sel}<path d="${grid}" stroke="${pal.hair}" fill="none" vector-effect="non-scaling-stroke"/>${bars}${peak ? `<path d="${peak}" stroke="${pal.text}" stroke-opacity="0.55" stroke-width="1.5" fill="none" vector-effect="non-scaling-stroke"/>` : ''}</svg>`;
     const marks = [0, Math.round(N / 4), Math.round(N / 2), Math.round((3 * N) / 4)].map(j => pts[j].label).concat(w.today);
     const axis = `<div class="ax" aria-hidden="true">${marks.map(l => `<span>${esc(l)}</span>`).join('')}</div>`;
-    const swatch = (bg, op = 1) => `<i style="width:10px;height:10px;border-radius:3px;background:${bg}${op !== 1 ? `;opacity:${op}` : ''}"></i>`;
     let key = '';
     if (o) key = chartKey([swatch(a3Color(s.color)[0]), s.legend || s.name], [o.color ? swatch(a3Color(o.color)[0]) : swatch(pal.text, 0.55), o.name || '']);
     else if (s.peak) key = chartKey([swatch(pal.sub), w.dayAvg], [`<i style="width:12px;height:2px;background:${pal.text};opacity:.55"></i>`, w.dearestHour]);
@@ -3412,6 +3493,165 @@ class CamerasCard extends KheCard {
   }
 }
 
+/* ---------- A3 Teler: what is on, today's watch time and sessions (ADR-017) ---------- */
+
+const GRAY = A3_COLORS.gray[0];
+// watch time in hours as the house says it: '1 t 5 min', '22 min', '2 t'
+export function durText(h, lang = 'et') {
+  const m = Math.round((h || 0) * 60), u = words(lang).hourShort;
+  return m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} ${u} ${m % 60} min` : `${m / 60} ${u}`;
+}
+// a column's value: hours with a decimal from an hour, minutes under one
+export const colText = (h, lang = 'et') => (Math.round(h * 60) >= 60 ? `${fmtN(h, 1, lang)} ${words(lang).hourShort}` : `${Math.round(h * 60)} min`);
+const dateIn = (t, tz) => { const p = zoneParts(t, tz); return `${p.y}-${hh(p.m)}-${hh(p.d)}`; };
+const appColor = (apps, name) => ((apps || []).find(a => a.name === name) || {}).color || GRAY;
+// a card's clock while a session runs is the minute, so its minutes move; otherwise HA's date, read
+// once a minute, for the date gate and the counters' reset
+function watchClock(card, sessions) {
+  const now = Date.now(), m = minuteKeyOf(now), list = ((card._hass.states[sessions] || {}).attributes || {}).seansid;
+  if (Array.isArray(list) && list.length && list[list.length - 1].end == null) return m;
+  if (card._dayAt !== m) { card._dayAt = m; card._day = dateIn(now, tzOf(card._hass)); }
+  return card._day;
+}
+
+// a counter of today's hours: its value, 0 while it still holds yesterday's (it resets only after
+// midnight, so a value last updated before today's start is yesterday's)
+export function todayHours(st, now, tz) {
+  const v = numOf(st);
+  if (v === null) return 0;
+  const p = zoneParts(now, tz), t = Date.parse(st.last_updated || '');
+  return Number.isFinite(t) && t < dayStart(p.y, p.m, p.d, tz) ? 0 : Math.max(0, v);
+}
+
+// today's sessions [{ app, start, end }] in ms, end null while running: the session sensor's list
+// while its state is today's date in HA's zone (ADR-017), none otherwise
+export function todaySessions(st, now, tz) {
+  if (!st || st.state !== dateIn(now, tz)) return [];
+  const list = (st.attributes || {}).seansid;
+  if (!Array.isArray(list)) return [];
+  return list.filter(x => x && Number.isFinite(x.start)).map(x => ({ app: String(x.app), start: x.start * 1000, end: Number.isFinite(x.end) ? x.end * 1000 : null }));
+}
+
+// the now card's text, { kind, label, big, note, color }: 'on' the app with how long its running
+// session has run (none on the home screen, which is no session), 'off' with today's last ended
+// session, 'down' while the TV has no state
+export function tvNow(conf, states, now, lang = 'et', tz = localZone()) {
+  const w = words(lang), st = states[conf.entity];
+  const list = todaySessions(states[conf.sessions], now, tz), last = list[list.length - 1];
+  if (!hasValue(st)) return { kind: 'down', label: w.stateNow, big: w.tvDown, note: '', color: GRAY };
+  if (st.state === 'off') return { kind: 'off', label: w.offState, big: w.tvIsOff, note: last && last.end !== null ? w.lastUntil(last.app, clockAt(last.end, tz)) : '', color: GRAY };
+  const app = states[conf.app], name = hasValue(app) ? app.state : cap(stateWord(st, lang));
+  const run = last && last.end === null ? last : null;
+  return { kind: 'on', label: w.stateNow, big: name, note: run ? w.since(durText((now - run.start) / HOUR, lang), clockAt(run.start, tz)) : '', color: appColor(conf.apps, name) };
+}
+
+// today's watch time, { total, rows, bar }: the counters' sum in hours, the apps used for 30 s or
+// more, longest first, and their shares of the bar in per cent
+export function usageToday(conf, states, now, tz) {
+  const all = conf.entities.map(e => ({ ...e, h: todayHours(states[e.entity], now, tz) }));
+  const rows = all.filter(r => r.h * 3600 >= 30).sort((a, b) => b.h - a.h), used = rows.reduce((a, r) => a + r.h, 0);
+  return { total: all.reduce((a, r) => a + r.h, 0), rows, bar: rows.map(r => ({ color: r.color, pct: (r.h / used) * 100 })) };
+}
+
+// today's sessions of a minute or more, newest first: { when, app, color, dur }, the running one
+// to now
+export function sessionRows(conf, states, now, lang = 'et', tz = localZone()) {
+  const w = words(lang);
+  return todaySessions(states[conf.sessions], now, tz).map(s => ({ ...s, to: s.end ?? now })).filter(s => s.to - s.start >= 60e3).reverse()
+    .map(s => ({ when: `${clockAt(s.start, tz)}–${s.end === null ? w.nowRow : clockAt(s.end, tz)}`, app: s.app, color: appColor(conf.entities, s.app), dur: durText((s.to - s.start) / HOUR, lang) }));
+}
+
+const TV_CSS = `
+.box{display:flex;flex-direction:column;gap:16px;padding:16px;border-radius:26px}
+.top{display:flex;align-items:center;gap:14px}
+.ic{flex:none;width:52px;height:52px;border-radius:15px;color:#fff;display:flex;align-items:center;justify-content:center}
+.tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.lab{font-size:13px;font-weight:600;color:var(--sub)}
+.big{font-size:26px;line-height:1.12;font-weight:700;letter-spacing:-0.022em;overflow-wrap:anywhere}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:8px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 8px;border-radius:14px;background:var(--iconOff);font-size:15px;font-weight:600;text-align:center}
+.btn.stop{background:var(--highBg);color:var(--high)}
+.prof{display:flex;flex-direction:column;gap:8px}
+.hr{height:0.5px;background:var(--hair)}
+.ps{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
+.ps .btn{gap:6px;border-radius:12px;font-size:14px}
+`;
+
+// Teler's now card (ADR-017): what is on, how long, and the TV's controls. Config: { entity, app,
+// sessions, apps: [{ name, color }], buttons: { power_off, power_on, remote }, profiles: [{ name,
+// tap_action, lock }] }; every action is the generator's tap_action, so HA asks for its
+// confirmation. Off it offers power_on and no profiles; without a state only the remote.
+class TvCard extends KheCard {
+  static a3only = true;
+  static css = TV_CSS;
+  _check(c) { if (!c.entity || !c.buttons) throw new Error('khe-tv-card: entity and buttons are required'); }
+  _watched() { const c = this._config; return [c.entity, c.app, c.sessions].filter(Boolean); }
+  _clock() { return this._hass ? watchClock(this, this._config.sessions) : 0; }
+  _html(states, pal) {
+    const c = this._config, w = this._w, b = c.buttons, n = tvNow(c, states, Date.now(), this._lang, tzOf(this._hass));
+    this._actions = new Map();
+    const btn = (k, action, cls, ic, text, aria, after = '') => {
+      this._actions.set(k, actionDetail(c.entity, action));
+      return `<button type="button" class="press btn${cls}" data-k="${k}" aria-label="${esc(aria)}">${ic ? icon(ic, 17, 'currentColor') : ''}${esc(text)}${after}</button>`;
+    };
+    const power = n.kind === 'on' ? btn('off', b.power_off, ' stop', 'power', w.turnOff, w.turnOffAria) : n.kind === 'off' && b.power_on ? btn('on', b.power_on, '', 'power', w.turnOn, w.turnOnAria) : '';
+    const remote = b.remote ? btn('remote', b.remote, '', 'remote', w.remote, w.remoteAria) : '';
+    const profiles = n.kind === 'on' && (c.profiles || []).length
+      ? `<span class="prof"><span class="hr"></span><span class="lab">${w.switchProfile}</span><span class="ps">${c.profiles.map((p, i) => btn(`p${i}`, p.tap_action, '', null, p.name, w.profileAria(p.name) + (p.lock ? `, ${w.pinNote}` : ''), p.lock ? icon('lock', 12, pal.sub) : '')).join('')}</span></span>`
+      : '';
+    const bg = n.kind === 'on' ? n.color : pal.dark ? '#3a3a40' : GRAY;
+    return `<div class="glass box"><span class="top"><span class="ic" style="background:${bg}">${icon('tv', 26, '#fff')}</span><span class="tx"><span class="lab">${esc(n.label)}</span><span class="big">${esc(n.big)}</span>${n.note ? `<span class="lab num">${esc(n.note)}</span>` : ''}</span></span>${power || remote ? `<span class="two">${power}${remote}</span>` : ''}${profiles}</div>`;
+  }
+}
+
+const USAGE_CSS = `
+.box{display:flex;flex-direction:column;gap:14px;padding:16px;border-radius:24px}
+.box.list{gap:0;padding:6px 16px}
+.hd{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.total{font-size:34px;line-height:1;font-weight:700;letter-spacing:-0.022em}
+.lab{font-size:13px;font-weight:600;color:var(--sub)}
+.bar{display:flex;height:10px;border-radius:5px;overflow:hidden;gap:2px;background:var(--track)}
+.rows{display:flex;flex-direction:column}
+.row{display:flex;align-items:center;gap:10px;min-height:44px;width:100%}
+.row + .row{border-top:0.5px solid var(--hair)}
+.dot{flex:none;width:10px;height:10px;border-radius:5px}
+.mark{flex:none;width:3px;height:22px;border-radius:2px}
+.nm{flex:1;min-width:0;font-size:15px;font-weight:600}
+.v{font-size:15px;font-weight:600;color:var(--sub)}
+.when{flex:none;width:104px;white-space:nowrap;font-size:14px;font-weight:600;color:var(--sub)}
+.d{font-size:14px;color:var(--sub)}
+.none{padding:10px 0;font-size:15px;color:var(--sub)}
+`;
+
+// Teler's watch time (ADR-017): `part: 'today'` today's total with yesterday's beside it, a bar by
+// app and the apps used today, each opening its counter's sheet; `part: 'sessions'` today's
+// sessions with their times. Config: { entities: [{ entity, name, color }], compare: { entity },
+// sessions, part }; the counters' units are hours.
+class UsageCard extends KheCard {
+  static a3only = true;
+  static css = USAGE_CSS;
+  _check(c) { if (!(c.entities || []).length) throw new Error('khe-usage-card: entities is required'); }
+  _watched() { const c = this._config; return [...c.entities.map(e => e.entity), (c.compare || {}).entity, c.sessions].filter(Boolean); }
+  _clock() { return this._hass ? watchClock(this, this._config.sessions) : 0; }
+  _html(states) {
+    const c = this._config, w = this._w, L = this._lang, now = Date.now(), tz = tzOf(this._hass);
+    this._actions = new Map();
+    this._sheets = new Map();
+    const none = `<span class="none">${esc(w.notWatched)}</span>`;
+    if (c.part === 'sessions') {
+      const rows = sessionRows(c, states, now, L, tz).map(r => `<span class="row"><span class="when num">${esc(r.when)}</span><span class="mark" style="background:${r.color}"></span><span class="nm">${esc(r.app)}</span><span class="d num">${esc(r.dur)}</span></span>`);
+      return `<div class="glass box list"><span class="rows">${rows.join('') || none}</span></div>`;
+    }
+    const u = usageToday(c, states, now, tz), cmp = c.compare && states[c.compare.entity];
+    const rows = u.rows.map((r, i) => {
+      this._sheets.set(`a${i}`, cellSheet({ name: r.name, entity: r.entity, decimals: 2, history: { source: 'history' } }, states, L));
+      return `<button type="button" class="press row" data-k="a${i}" aria-label="${esc(w.history(`${r.name} ${durText(r.h, L)}`))}"><span class="dot" style="background:${r.color}"></span><span class="nm">${esc(r.name)}</span><span class="v num">${esc(durText(r.h, L))}</span></button>`;
+    });
+    const bar = u.bar.map(x => `<i style="flex:${x.pct.toFixed(1)};background:${x.color}"></i>`).join('');
+    return `<div class="glass box"><span class="hd"><span class="total num">${esc(durText(u.total, L))}</span>${numOf(cmp) !== null ? `<span class="lab num">${esc(w.yesterdayDur(durText(numOf(cmp), L)))}</span>` : ''}</span>${rows.length ? `<span class="bar" aria-hidden="true">${bar}</span><span class="rows">${rows.join('')}</span>` : none}</div>`;
+  }
+}
+
 const ELEMENTS = [
   ['khe-summary-card', SummaryCard, 'KHE summary', 'The house in one sentence, with summary chips.'],
   ['khe-price-card', PriceCard, 'KHE price', 'The electricity price now, the hourly bars and the cheapest windows.'],
@@ -3425,7 +3665,9 @@ const ELEMENTS = [
   ['khe-reading-card', ReadingCard, 'KHE reading', 'One reading with its hourly line, cells and a stepper (A3).'],
   ['khe-forecast-card', ForecastCard, 'KHE forecast', "The next hours' precipitation and temperature from a weather entity, with cells (A3)."],
   ['khe-motion-card', MotionCard, 'KHE motion', 'Where there was motion: a trail through the house plan and each room by the hour (A3).'],
-  ['khe-cameras-card', CamerasCard, 'KHE cameras', "The cameras' stills, one large with the others as thumbnails (A3)."]
+  ['khe-cameras-card', CamerasCard, 'KHE cameras', "The cameras' stills, one large with the others as thumbnails (A3)."],
+  ['khe-tv-card', TvCard, 'KHE TV', 'What is on the TV now, for how long, and its controls (A3).'],
+  ['khe-usage-card', UsageCard, 'KHE usage', "Today's watch time by app, or today's sessions (A3)."]
 ];
 if (typeof customElements !== 'undefined') {
   window.customCards = window.customCards || [];
