@@ -1,0 +1,122 @@
+# Weekly waste pickup is Friday morning; the bin goes out on Thursday evening.
+# The reminder repeats until someone taps "Tehtud" on a phone, then clears on
+# every phone.
+#
+# Recipients are the phones whose device_tracker carries the label "prugi"
+# (set in HA's entity registry), so the repo names nobody. The mobile_app
+# notify service shares the tracker's object id. With no labelled tracker the
+# reminder goes to every phone rather than to nobody.
+#
+# The week resets on Friday at noon, not on Thursday evening, so a missed
+# Thursday run (HA restarting at 19:00) still leaves the Friday-morning one.
+
+input_boolean:
+  prugi_valjas:
+    name: "Prügikast väljas"
+    icon: mdi:delete-empty
+
+script:
+  prugi_teavitus:
+    alias: "Prügi: teavitus telefonidesse"
+    mode: parallel
+    fields:
+      payload:
+        description: "notify data: message, title, data"
+    sequence:
+      - variables:
+          saajad: >
+            {% set l = label_entities('prugi') | select('match', 'device_tracker\.')
+               | map('replace', 'device_tracker.', 'notify.mobile_app_') | list %}
+            {{ l if l else ['notify.notify'] }}
+      - repeat:
+          for_each: "{{ saajad }}"
+          sequence:
+            - action: "{{ repeat.item }}"
+              data: "{{ payload }}"
+
+automation:
+  - alias: "Prügi: kast välja"
+    id: waste_reminder
+    description: "Neljapäeva õhtul ja vajadusel reede hommikul, kuni keegi vajutab Tehtud."
+    mode: single
+    triggers:
+      - trigger: time
+        at: "19:00:00"
+        id: evening
+      - trigger: time
+        at: "06:30:00"
+        id: morning
+    conditions:
+      - condition: state
+        entity_id: input_boolean.prugi_valjas
+        state: "off"
+      - condition: template
+        value_template: >
+          {{ (trigger.id == 'evening' and now().isoweekday() == 4)
+             or (trigger.id == 'morning' and now().isoweekday() == 5) }}
+    actions:
+      - repeat:
+          while:
+            - condition: state
+              entity_id: input_boolean.prugi_valjas
+              state: "off"
+            - condition: template
+              value_template: "{{ now().hour < (23 if trigger.id == 'evening' else 8) }}"
+          sequence:
+            - action: script.prugi_teavitus
+              data:
+                payload:
+                  title: "Prügi"
+                  message: >
+                    {{ 'Homme hommikul on prügivedu, vii kast välja.'
+                       if trigger.id == 'evening'
+                       else 'Prügivedu on täna hommikul. Kas kast on väljas?' }}
+                  data:
+                    tag: prugi
+                    actions:
+                      - action: PRUGI_TEHTUD
+                        title: "Tehtud"
+            - wait_for_trigger:
+                - trigger: state
+                  entity_id: input_boolean.prugi_valjas
+                  to: "on"
+              timeout: "00:30:00"
+
+  - alias: "Prügi: tehtud"
+    id: waste_done
+    description: "Tehtud-nupp märgib kasti väljas olevaks ja kustutab teate kõigist telefonidest."
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: PRUGI_TEHTUD
+      - trigger: state
+        entity_id: input_boolean.prugi_valjas
+        to: "on"
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.prugi_valjas
+      - action: script.prugi_teavitus
+        data:
+          payload:
+            message: clear_notification
+            data:
+              tag: prugi
+
+  - alias: "Prügi: uus nädal"
+    id: waste_week_reset
+    description: "Reede lõunal on vedu läbi, järgmiseks neljapäevaks on kast jälle sees."
+    mode: single
+    triggers:
+      - trigger: time
+        at: "12:00:00"
+    conditions:
+      - condition: time
+        weekday: fri
+    actions:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.prugi_valjas

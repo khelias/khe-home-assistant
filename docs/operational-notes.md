@@ -28,6 +28,12 @@ files. Reload what reloads (automations, templates, then
 `khe_price_refresh`, above) or restart through the API,
 `POST /api/services/homeassistant/restart`.
 
+**Waste reminder recipients are a registry label, not config.** `waste.yaml`
+sends to every `device_tracker` labelled `prugi`, as
+`notify.mobile_app_<tracker object id>`. A rebuilt HA needs the label set
+again, or the reminder falls back to every phone; a phone re-added to the
+companion app gets a new tracker, which needs the label moved to it.
+
 ## Integrations and the dashboard
 
 **Grid consumption from Estfeed (since 2026-09-13).** HACS custom repository
