@@ -1544,7 +1544,9 @@ test('Valve: a cell says its state in its own words, red by its rules, a note of
   assert.equal(sheet.text(s('off', 'disarmed')), 'kinni', 'the sheet says it in the same words');
 });
 
-test('Valve: a reading card of cells alone draws no big value, its cells with their last opening, and the note under them', () => {
+test('Valve: a reading card of cells alone draws no big value, its cells with their last opening, and the note under them', t => {
+  // the card reads the clock itself: a fixed afternoon keeps the opening on the same day
+  t.mock.timers.enable({ apis: ['Date'], now: T0 });
   const conf = {
     cells: [{ entity: 'binary_sensor.door', name: 'Peauks', words: { off: 'kinni', on: 'lahti' }, note: { last_on: true, label: 'avati' }, bad_if: [[{ state: 'on' }, { entity: 'alarm_control_panel.maja', state: 'armed_*' }]], history: { source: 'history' } },
       { entity: 'sensor.aku', name: 'Aku', decimals: 1 }],
@@ -1558,7 +1560,7 @@ test('Valve: a reading card of cells alone draws no big value, its cells with th
   assert.match(loading.html, /<span class="v num bad">lahti<\/span><span class="sub"><\/span>/, 'red while open and armed, no note before the load');
   const now = Date.now(), d = { res: { hist: { 'binary_sensor.door': [now - 5 * 60e3] } }, now, tz: 'Europe/Tallinn' };
   const m = V.readingA3Markup(conf, states, d, 'et', hass);
-  assert.match(m.html, /<span class="sub">avati \d\d:\d\d<\/span>/);
+  assert.match(m.html, /<span class="sub">avati 16:19<\/span>/);
   assert.match(m.html, /13,8 V/);
   assert.match(m.html, /<span class="hr"><\/span><span class="sub">Teavitus tuleb tulekahjust\.<\/span><\/div>$/);
   assert.equal(m.sheets.get('c0').text(states), 'lahti');
