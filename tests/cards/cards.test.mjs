@@ -1196,12 +1196,14 @@ test("Pergola: a 'when' tile's clock is HA's day, turning at HA's midnight; othe
   assert.deepEqual(A3.tileDay({ entity: LIGHT }, Date.now(), ny), [0, Infinity]);
 });
 
-test('Pergola: the forecast card draws loading, the chart, and the cells with "Prognoos pole teada" for an empty or failed answer', () => {
+test('Pergola: the forecast card draws loading, the chart, and the cells with "Prognoos pole teada" for an empty or failed answer', t => {
+  // the card reads the clock itself: a fixed time keeps its hours and the test's in the same hour
+  const now = Date.parse('2026-11-13T14:30:00Z');
+  t.mock.timers.enable({ apis: ['Date'], now });
   const conf = { entity: FC_ID, hours: 14, cells: [{ entity: 'sensor.r', name: 'Praegu', decimals: 1, note_above: { value: 0, above: 'sajab', below: 'ei saja' } }] };
   const states = { 'sensor.r': st('0.4', { unit_of_measurement: 'mm' }) };
   const hass = { config: { time_zone: TZ } };
   const draw = (data, lang) => A3.forecastA3Markup(conf, states, data, lang, hass);
-  const now = Date.now();
   const live = answer(hoursFrom(new Date(now).getUTCHours(), [0, 0.4, 0]).map((r, i) => ({ ...r, datetime: new Date(Math.floor(now / 3600e3) * 3600e3 + i * 3600e3).toISOString() })));
   assert.match(draw(null).html, /class="msg">Laen/);
   const ok = draw({ res: { fc: live }, now, tz: TZ });
