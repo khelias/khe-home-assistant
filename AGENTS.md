@@ -124,7 +124,8 @@ tests/cards/       the dashboard cards' pure helpers (node:test), on recorder
   [ADR-012](docs/decisions/012-the-demo-is-the-houses-overview.md)). khe-sites
   runs it and publishes the result at <https://khe.ee/ha/> on its next
   deploy: a push to khe-sites, its weekly schedule, or
-  `gh workflow run deploy.yml -R khelias/khe-sites`.
+  `gh workflow run deploy.yml -R khelias/khe-sites`, which the agent runs
+  itself after a demo change lands on `main`.
 - `ha-ws.py` and `ha-dashboard.py` import `websockets`, and `pv-sim.py`
   needs numpy and scipy (plus websockets for its `fetch`). The `.venv` above
   carries only ruff; run those scripts from a venv that has them.
