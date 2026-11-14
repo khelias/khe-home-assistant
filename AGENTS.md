@@ -194,7 +194,7 @@ the operator first; an approval covers that task only.
 - **Token:** a long-lived token in `~/.config/khe/ha-token` on the operator's
   machine and on agent-vm, mode 600. Read it inside scripts; never print or
   commit it. On agent-vm the Bash sandbox hides the token and the LAN from
-  every command but `ssh` and `ha-ws.py` / `ha-dashboard.py` run from the
+  every command but `ssh`, `scp` and `ha-ws.py` / `ha-dashboard.py` run from the
   checkout's `.venv` by its full path, so REST calls with curl do not work
   there and the WebSocket script is the way in; each run asks the operator
   ([khe-homelab `infrastructure/agent-vm.md`](https://github.com/khelias/khe-homelab/blob/main/infrastructure/agent-vm.md),
