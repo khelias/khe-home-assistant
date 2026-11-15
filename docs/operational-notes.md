@@ -654,6 +654,14 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   file that actually failed shows in the network panel. The vendored
   three.js URLs carry no query, so when that file is a vendor one, a retry
   may meet the same failure and only a reload helps.
+- **While it loads** the card shows a picture of the view, kept in
+  `localStorage` per hero or full view and style (`house3d-poster:*`, a JPEG
+  of the scene without the markers, from the engine's `snapshot()`), and
+  fades it out at the first live frame; a first visit shows a slow wave.
+  The picture is taken once per page load, when a fresh mount (home view,
+  live time, no demo scene) first settles, since the next load starts from
+  that view; a remount swaps the canvas in place without it. The engine and three.js take a few seconds
+  over a phone connection on a first visit or after a version bump.
 - **three.js updates** are manual, Renovate does not see the vendored copy:
   `scripts/house3d-vendor.sh <version>`, point the engine's imports at the new
   directory, bump the version, remove the old directory.

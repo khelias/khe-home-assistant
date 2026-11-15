@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 49;
+const HOUSE3D_VERSION = 50;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -175,6 +175,25 @@ function readStyle() {
 function writeStyle(v) {
   seenMemory.set(STYLE_KEY, v);
   try { localStorage.setItem(STYLE_KEY, v); } catch (e) { /* the in-memory copy stands */ }
+}
+
+// A picture of the view, per hero or full view and style, shown at once on the next load until the
+// first live frame covers it; a first visit shows a slow wave instead. It is taken when a fresh
+// mount (home view, live time, no scene) first settles, since a next load starts from just that;
+// a picture taken on leaving would show the last orbit and time, and jump. Only a failed write
+// keeps it in memory, since it is an image; that newer copy then wins over the stored one.
+const POSTER_W = 640;
+export const posterKey = (hero, style) => `house3d-poster:${hero ? 'hero' : 'full'}:${style}`;
+export function readPoster(key) {
+  if (seenMemory.has(key)) return seenMemory.get(key);
+  try {
+    const v = localStorage.getItem(key);
+    if (v && v.startsWith('data:image/')) return v;
+  } catch (e) { /* none */ }
+  return null;
+}
+export function writePoster(key, url) {
+  try { localStorage.setItem(key, url); } catch (e) { seenMemory.set(key, url); }
 }
 
 // The real style's sliders: the time of day in quarter hours (96 is 24:00) and the day of this year.
@@ -370,6 +389,12 @@ const STYLE = `
   color: var(--ink); font: 14px/1.45 var(--paper-font-body1_-_font-family, system-ui, sans-serif); }
 :host([panel]) .wrap { border-radius: 0; }
 .view { position: absolute; inset: 0; }
+.view.loading { background: linear-gradient(100deg, transparent 35%, rgba(111, 227, 255, 0.06) 50%, transparent 65%) 0 0 / 300% 100%;
+  animation: wave 1.8s linear infinite; }
+@keyframes wave { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; transition: opacity 0.3s ease; }
+.poster.gone { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .view.loading { animation: none; } .poster { transition: none; } }
 .bar { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; align-items: center; }
 .seg { display: flex; padding: 3px; gap: 2px; background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; }
 .seg button, .icon-btn { font: inherit; font-size: 13px; font-weight: 500; line-height: 1; color: var(--muted); background: transparent; border: 0; border-radius: 7px; padding: 9px 12px; cursor: pointer; white-space: nowrap; }
@@ -552,6 +577,21 @@ export class House3dCard extends Base {
     this._unmount();
   }
 
+  // removed after its fade by a timer, since under reduced motion no transitionend comes
+  _unveil() {
+    const sr = this.shadowRoot, view = sr.querySelector('.view'), img = sr.querySelector('.poster');
+    if (view) view.classList.remove('loading');
+    if (!img) return;
+    img.classList.add('gone');
+    setTimeout(() => img.remove(), 400);
+  }
+  _savePoster() {
+    if (!this._posterDue || !this._view) return;
+    this._posterDue = false;
+    const url = this._view.snapshot(POSTER_W);
+    if (url) writePoster(posterKey(this._isHero, this._style), url);
+  }
+
   _unmount() {
     this._glowTick(false);
     if (this._seasonTimer) { clearInterval(this._seasonTimer); this._seasonTimer = null; }
@@ -567,7 +607,9 @@ export class House3dCard extends Base {
     if (!this._config || !this.isConnected || this._view || this._mounting) return;
     const sr = this.shadowRoot, t = this._t;
     // a hero is the page's picture: one corner button, the view's controls in its sheet
-    sr.innerHTML = `<style>${STYLE}</style><ha-card class="wrap"><div class="view"></div>
+    // a remount (a new style, a scene) swaps the canvas in place, as it carries the view over
+    const fresh = !this._keep, poster = fresh && readPoster(posterKey(this._isHero, this._style));
+    sr.innerHTML = `<style>${STYLE}</style><ha-card class="wrap"><div class="view${fresh && !poster ? ' loading' : ''}"></div>${poster ? `<img class="poster" alt="" src="${esc(poster)}">` : ''}
       <div class="bar">${this._isHero ? '' : `${this._modeSeg('roof')}
         <button type="button" class="icon-btn" data-act="reset" aria-label="${t.resetView}" title="${t.resetView}"></button>`}
         <button type="button" class="icon-btn" data-act="layers" aria-label="${this._isHero ? t.view : t.layersTitle}" title="${this._isHero ? t.view : t.layersTitle}" aria-expanded="false"></button></div>
@@ -588,6 +630,7 @@ export class House3dCard extends Base {
       this._mounting = null;
       this._keep = null;
       this._mod = mod;
+      this._posterDue = fresh && !this._time && this._sceneTime === undefined;
       const now = new Date();
       this._season = mod.seasonOn(now);
       const start = heroMount(this._isHero, this._style, resolveLayers(this._readLayers(), mod.seasonWindow(now)), { [SEASONAL]: this._season });
@@ -606,6 +649,8 @@ export class House3dCard extends Base {
         onFeature: id => this._openFeature(id),
         // the sun moves on once a minute and with the sliders; an open PV sheet follows it
         onSun: sun => { if (this._view && this._sheet === 'feature') this._renderPv(sun); },
+        onFirstFrame: () => this._unveil(),
+        onIdle: () => this._savePoster(),
         layers: start.layers,
         snowfall: start.snowfall,
         style: this._style,
@@ -617,6 +662,7 @@ export class House3dCard extends Base {
         onCar: () => { if (this._carHome) this._view.setCar('arrive'); },
         noWebGL: t.noWebGL
       });
+      if (this._view.failed) this._unveil();
       this._seasonTimer = setInterval(() => this._checkSeason(), 60000);
       sr.querySelector('.bar').addEventListener('click', ev => {
         const mode = ev.target.closest('[data-mode]');
@@ -654,6 +700,7 @@ export class House3dCard extends Base {
       // a newer render or a disconnect owns the card now; a mount that threw has cleared the token
       if ((this._mounting && this._mounting !== token) || !this.isConnected) return;
       this._mounting = null;
+      this._unveil();
       sr.querySelector('.view').innerHTML = `<div class="msg"><span>${t.loadFailed}</span>
         <button type="button" class="now" data-act="retry">${t.retry}</button><small>${esc(err && err.message || err)}</small></div>`;
       sr.querySelector('[data-act="retry"]').addEventListener('click', () => this._render());

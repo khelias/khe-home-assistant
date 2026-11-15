@@ -518,6 +518,8 @@ export function inChip(m, chip, focus) {
  *   onFeature(id)    a layer's feature (a future item) was tapped; no room tap follows
  *   onSun(sun)       the sun changed: setSun, setTime and the minute tick while live, in both
  *                    styles; sun as the sun getter gives it
+ *   onFirstFrame()   the first frame is on the canvas
+ *   onIdle()         the frame loop has stopped: nothing moves until the next change
  *   bloom            default true; always off below 720 px width and in the real style
  *   mode             the starting mode, 'roof' (default) or 'open'
  *   style            'simple' (default) or 'real'; another style is another mount
@@ -538,6 +540,9 @@ export function inChip(m, chip, focus) {
  *   surroundings     { buildings: [{ outline: [[x, z], ...], height }], roads: [{ outline, holes? }] }:
  *                    the neighbouring buildings as flat-topped boxes and the street as a flat
  *                    surface, faint, never tapped
+ * snapshot(maxWidth): the scene as it stands, without the markers, as a JPEG data URL at most
+ *   maxWidth pixels wide, or null (not framed yet, the WebGL context lost, no WebGL); the card
+ *   keeps one as the next load's first picture.
  * setCar('away' | 'parked' | 'arrive'): 'arrive' drives the whole path (3-6 s, restarts if it is
  *   already driving; 'parked' under reduced motion), after the drive gate, if any, has opened
  *   (1.2 s); the gate closes once the car is through. 'parked' stands it at the path's end, 'away'
@@ -602,7 +607,7 @@ export function mount(element, model, options = {}) {
     stage.appendChild(msg);
     const noop = () => {};
     return { failed: true, setMarkers: noop, setRoomChips: noop, focusRoom: noop, setMode: noop, setSelection: noop, setCar: noop, setLayer: noop, reset: noop, resize: noop,
-      setSun: noop, setTime: noop, dispose: () => root.remove(), mode: 'roof', carState: 'away', carScreen: null, layers: [], time: null, view: null, sun: null };
+      setSun: noop, setTime: noop, snapshot: () => null, dispose: () => root.remove(), mode: 'roof', carState: 'away', carScreen: null, layers: [], time: null, view: null, sun: null };
   }
   const PR = Math.min(window.devicePixelRatio || 1, 2);
   renderer.setPixelRatio(PR);
@@ -1330,7 +1335,7 @@ export function mount(element, model, options = {}) {
       });
     }
     layers.forEach(({ L }) => { if (L.update && L.update(dt, k)) { moving = true; if (L.shades) shadowsDirty(); } });
-    if (!moving && !dirty) { raf = 0; return; }
+    if (!moving && !dirty) { raf = 0; if (options.onIdle) options.onIdle(); return; }
     dirty = false;
     raf = requestAnimationFrame(frame);
     // past the farthest neighbour at full zoom-out, about 12 degrees across
@@ -1340,8 +1345,25 @@ export function mount(element, model, options = {}) {
     }
 
     if (overlayFrame(dt)) dirty = true;
-    if (bloomOn()) getComposer().render();
-    else renderer.render(scene, camera);
+    draw();
+    if (onFirstFrame) { onFirstFrame(); onFirstFrame = null; }
+  }
+  let onFirstFrame = options.onFirstFrame;
+  const draw = () => (bloomOn() ? getComposer().render() : renderer.render(scene, camera));
+  // draws a frame first, since the canvas keeps no drawing buffer between frames
+  function snapshot(maxWidth) {
+    if (!framed || renderer.getContext().isContextLost()) return null;
+    draw();
+    const src = renderer.domElement, k = Math.min(1, maxWidth / src.width);
+    const out = document.createElement('canvas');
+    out.width = Math.round(src.width * k);
+    out.height = Math.round(src.height * k);
+    const g = out.getContext('2d');
+    if (!g) return null;
+    try {
+      g.drawImage(src, 0, 0, out.width, out.height);
+      return out.toDataURL('image/jpeg', 0.8);
+    } catch (e) { return null; }
   }
 
   resize();
@@ -1379,7 +1401,7 @@ export function mount(element, model, options = {}) {
 
   // carState and carScreen stay getters, so a copy of this object would freeze them
   return {
-    setMarkers, setRoomChips, focusRoom, setMode, setSelection, setLayer, reset, resize, dispose, setSun, setTime,
+    setMarkers, setRoomChips, focusRoom, setMode, setSelection, setLayer, reset, resize, dispose, setSun, setTime, snapshot,
     setCar: s => { if (byId.car) byId.car.api.setCar(s); },
     get mode() { return mode; },
     get time() { return sunTime ? new Date(sunTime) : new Date(); },

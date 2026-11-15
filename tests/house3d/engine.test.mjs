@@ -1878,3 +1878,30 @@ test('card: the hero rule lets vertical swipes scroll the page only outside a pa
   assert.match(src, /:host\(\[hero\]:not\(\[panel\]\)\) canvas \{ touch-action: pan-y !important; \}/);
   assert.match(src, /:host \{ display: block; height: var\(--house3d-height, 480px\); \}/);
 });
+
+test('card: a poster is kept per hero or full view and per style', () => {
+  const keys = [[true, 'real'], [true, 'simple'], [false, 'real'], [false, 'simple']].map(([h, s]) => card.posterKey(h, s));
+  assert.equal(new Set(keys).size, 4);
+  keys.forEach(k => assert.match(k, /^house3d-poster:/));
+});
+
+test('card: a poster reads back only as an image, and a failed write keeps the newer one in memory', () => {
+  const store = new Map(), full = { value: false };
+  globalThis.localStorage = {
+    getItem: k => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => { if (full.value) throw new Error('quota'); store.set(k, v); }
+  };
+  try {
+    const key = card.posterKey(false, 'real') + ':test';
+    assert.equal(card.readPoster(key), null);
+    store.set(key, 'not an image');
+    assert.equal(card.readPoster(key), null, 'a stored value that is no image is ignored');
+    card.writePoster(key, 'data:image/jpeg;base64,AAA');
+    assert.equal(card.readPoster(key), 'data:image/jpeg;base64,AAA');
+    full.value = true;
+    card.writePoster(key, 'data:image/jpeg;base64,BBB');
+    assert.equal(card.readPoster(key), 'data:image/jpeg;base64,BBB', 'the newer picture wins over the stored one');
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
