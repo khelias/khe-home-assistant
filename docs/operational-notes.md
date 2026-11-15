@@ -459,12 +459,16 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   directory is versioned (`vendor/three-<version>/`), so its URLs change with
   it.
 - **Engine layout:** `house3d.js` is the core (renderer, camera and framing,
-  the marker overlay, roof mode, taps, the frame loop, the layer registry) and
-  builds no geometry. `scene/kit.js` makes each mount's colours, materials and
+  roof mode, taps, the frame loop, the layer registry) and builds no
+  geometry. `scene/kit.js` makes each mount's colours, materials and
   geometry helpers, and `scene/layers/` holds one module per scene layer
   (ground, site, trees, gates, surroundings, pergola, building, interior,
   outdoor lights, car, future, camera view fans); `scene/sun.js` holds the
-  sun's position and direction, pure functions loaded like the kit. The
+  sun's position and direction, pure functions loaded like the kit;
+  `scene/overlay.js` is the marker and label overlay (markers, room labels
+  and chips, their CSS, the collision pass and the hover and tap
+  rectangles), loaded with the kit and the sun and built by the core with
+  what it reads passed in (`createOverlay(deps)`). The
   interior layer is the real style's only and reads the building layer's
   room probe and wall cut (`inRoom`, `cutOf`) through its `api`
   (`ctx.layer('building')`), so it comes after
@@ -482,8 +486,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   know yet), is left out and logged as `house3d: layer <id> failed`; the rest
   draws. A layer whose per-frame update, marker hook, tap test or API throws
   is logged once and switched off for good, so the frame loop keeps running.
-  The kit and `sun.js` are required: if either fails to load, the card shows
-  its load error.
+  The kit, `sun.js` and `overlay.js` are required: if any of them fails to
+  load, the card shows its load error.
 - **Styles:** "Lihtne" (the neon wireframe, the default) and "Päris" (lit
   surfaces in the house's colours and diagonal boarding with anthracite
   trims and corners from photos, paving stones, the play area, bar and mesh
@@ -761,9 +765,14 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
 - **Tests:** `scripts/house3d-test.sh` runs the model and build tests
   (`tests/house3d/test_house3d_model.py`), the placement apply's tests
   (`tests/house3d/test_house3d_place.py`), the engine tests in Node
-  (`tests/house3d/engine.test.mjs`: every layer builds, the simple style
-  matches `simple-snapshot.json`, failure isolation, the sun, the real
-  style's materials and shadow flags, the scene import rule), the demo
+  (`tests/house3d/engine-*.test.mjs` by area over the shared
+  `engine-harness.mjs`: `engine-core` for every layer building, the simple
+  style matching `simple-snapshot.json`, failure isolation, the camera, the
+  sun, the kit, the real style's materials and shadow flags and the scene
+  import rule; `engine-overlay` for the overlay's placement and taps;
+  `engine-building` for the building and the interior; `engine-outdoor` for
+  the site, ground, car, lights, winter and future layers; `engine-card` for
+  the card's own logic), the demo
   dashboard's tests (`tests/house3d/demo.test.mjs`: every card type, feature
   and icon drawn, every perform-action through the simulation, visibility
   conditions, no fixture name in `demo/`), the demo recorder's tests
@@ -775,7 +784,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   `tests/house3d/fixture-model.md`. `scripts/check.sh` runs it, so CI and
   the workspace commit gate do too. A deliberate change to the simple
   style rewrites the snapshot with `UPDATE_SNAPSHOT=1 node --test
-  tests/house3d/engine.test.mjs`.
+  tests/house3d/engine-core.test.mjs`.
 - **The car** stands in the carport when it is home and drives in from the
   street the first time the view opens after it arrived; a tap on it replays
   the drive. The engine only draws a generic vehicle from data: the car's

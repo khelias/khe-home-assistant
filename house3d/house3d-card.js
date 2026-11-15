@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 50;
+const HOUSE3D_VERSION = 51;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -294,7 +294,7 @@ export function toMarker(d, st, now = new Date(), lang = 'et') {
 // 'on' ones, then the rest, so the compact chip (its first part) is the most urgent. A room with
 // none of these shows its name alone. The chip is 'alert' with a door open, smoke or the alarm
 // triggered, 'on' with motion or a light. ids are the markers counted in a part, which the engine
-// then draws in the chip instead of beside it (inChip()).
+// then draws in the chip instead of beside it (scene/overlay.js's inChip()).
 export function roomChips(markers, rooms, lang = 'et') {
   const t = textFor(lang);
   const domain = m => m.id.split('.')[0];
