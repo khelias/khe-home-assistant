@@ -1410,7 +1410,7 @@ test('winter layer: icicle strands in the lift with their halo and wall wash, th
   assert.equal(info.icicles.length, paths.length);
   info.icicles.forEach((ic, i) => {
     assert.deepEqual([ic.leds, ic.length], [icicleLeds(paths[i].path, paths[i].drop).leds.length, icicleLeds(paths[i].path).length]);
-    assert.ok(ic.leds > ic.length * 20, `path ${i}: a curtain, ${ic.leds} LEDs on ${ic.length.toFixed(2)} m`);
+    assert.ok(ic.leds > ic.length * 12, `path ${i}: a curtain, ${ic.leds} LEDs on ${ic.length.toFixed(2)} m`);
     assert.equal(ic.lift, !paths[i].ground);
   });
   const roofLeds = partsUnder(L.lift, 'icicles'), groundLeds = partsUnder(L.group, 'leds');
@@ -1430,18 +1430,18 @@ test('winter layer: icicle strands in the lift with their halo and wall wash, th
   assert.equal(partsUnder(L.group, 'cable').length, 1);
 });
 
-test('icicleLeds: a strand every 0.12 m with an LED every 5 cm, the drop cycling, LEDs along a climb', () => {
+test('icicleLeds: a strand every 0.18 m with an LED every 7 cm, the drop cycling, LEDs along a climb', () => {
   const level = icicleLeds([[0, 3, 0], [3, 3, 0]], 0.4);
-  assert.equal(level.wires.length, 2 + 25 * 2, 'the cable and 25 strands');
+  assert.equal(level.wires.length, 2 + 17 * 2, 'the cable and 17 strands');
   assert.equal(level.length, 3);
   assert.deepEqual(level.runs, [[[0, 3, 0], [3, 3, 0]]]);
   const drops = [];
   for (let i = 3; i < level.wires.length; i += 2) drops.push(Number((level.wires[i - 1][1] - level.wires[i][1]).toFixed(4)));
   assert.deepEqual(drops.slice(0, 6), [0.4, 0.22, 0.32, 0.14, 0.26, 0.4]);
-  assert.equal(level.leds.length, drops.reduce((n, s) => n + Math.round(s / 0.05), 0));
+  assert.equal(level.leds.length, drops.reduce((n, s) => n + Math.round(s / 0.07), 0));
   level.leds.forEach(([, y]) => assert.ok(y < 3 && y >= 3 - 0.4 - 1e-9));
   const climb = icicleLeds([[0, 1, 0], [0, 4, 0]]);
-  assert.equal(climb.leds.length, 60);
+  assert.equal(climb.leds.length, 43);
   assert.equal(climb.wires.length, 2, 'no strands on a climb');
   assert.deepEqual(climb.runs, []);
   climb.leds.forEach(([x, , z]) => assert.ok(x === 0 && z === 0));

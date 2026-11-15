@@ -551,8 +551,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   lights and the snow. The lights are `site.festive` in the geometry layer,
   shareable decoration like `site.lights`, every key optional: `icicles`
   `[{ "path": [[x, y, z], ...], "drop"?: 0.4, "ground"?: false }]` (a dark
-  cable along the path with a strand every 0.12 m, the strands' lengths
-  cycling through shares of `drop`, an LED every 5 cm down each, and the
+  cable along the path with a strand every 0.18 m, the strands' lengths
+  cycling through shares of `drop`, an LED every 7 cm down each, and the
   LEDs along the cable on a near-vertical segment) and `planters: true` (a
   string winding round every tall planter plant). The trees carry no lights.
   They glow whenever it is dark: each LED a bright point with a soft halo,

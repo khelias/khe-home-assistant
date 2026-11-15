@@ -21,12 +21,12 @@
 // layer is on; the card asks for it in the full view only, since a moving layer keeps the render
 // loop running. Nothing here casts a shadow.
 const LED = '#ffd59a', CABLE = '#1d1f21', WASH = '#ffb466';
-const STRAND_STEP = 0.12, LED_GAP = 0.05, DROP = 0.4, DROPS = [1, 0.55, 0.8, 0.35, 0.65];
+const STRAND_STEP = 0.18, LED_GAP = 0.07, DROP = 0.4, DROPS = [1, 0.55, 0.8, 0.35, 0.65];
 const NEAR_VERTICAL = 0.5; // a segment rising more than this share of its length
 const WRAP_OUT = 0.03, WRAP_TURNS = 9, WRAP_GAP = 0.06; // the string round a tall plant
 // an LED's sprite size in metres and its colour's share, by day and at night; its halo's size at
 // night and its share of the LED's colour
-const LED_DAY = 0.05, LED_NIGHT = 0.13, LED_DAY_LEVEL = 0.35, HALO = 0.55, HALO_LEVEL = 0.16;
+const LED_DAY = 0.05, LED_NIGHT = 0.11, LED_DAY_LEVEL = 0.35, HALO = 0.45, HALO_LEVEL = 0.13;
 const WASH_H = 1, WASH_LEVEL = 0.15; // the wall wash under a roof path: its height and its top's share
 const ROOF_SNOW = 0.08, ROOF_INSET = 0.05, CAP = 0.12, CAP_OUT = 0.04, TIP = 0.8;
 const DUST_OPACITY = 0.5, DUST_LIFT = 0.004;
