@@ -525,6 +525,12 @@
    "Group 0"
   ]
  },
+ "winter": {
+  "materials": {},
+  "objects": [
+   "Group 0"
+  ]
+ },
  "car": {
   "materials": {
    "m0": "MeshBasicMaterial #1b2c5e 0.22 transparent=true depthWrite=false side=2",

@@ -21,7 +21,10 @@ front door. A path runs from the front step past the street wing into the courty
 deck is. The play area and the fruit trees are in the south garden. The future items are 20 PV
 panels in a strip along the north wing's roof, a charger in the carport, a battery in the
 utility room behind it, a small greenhouse off the garden wing's south-east corner and a hot tub
-in the courtyard's mouth, its step towards the deck; only the first three have facts. The
+in the courtyard's mouth, its step towards the deck; only the first three have facts. For
+winter, icicles hang along the carport's street fascia and along the street wing's eave from a
+climb up past the canopy, a column runs down the canopy's post, and a string winds round the
+thuja. The
 engine tests count the outer walls and their corners, the street wall's openings and the site's
 planters, steps and paving, so change those together with the tests.
 
@@ -153,7 +156,15 @@ model, never this file.
    { "id": "t4", "kind": "apple", "pos": [13.5, 17.5], "height": 4.5, "crown": 3.5 },
    { "id": "t5", "kind": "apple", "pos": [10, 21.5], "height": 4, "crown": 3 },
    { "id": "t6", "kind": "maple", "pos": [40, 25.5], "height": 7, "crown": 4.5 }
-  ]
+  ],
+  "festive": {
+   "icicles": [
+    { "path": [[33.28, 2.48, -3.02], [37.42, 2.48, -3.02]], "drop": 0.4 },
+    { "path": [[31.32, 2.72, 1.68], [31.32, 3.74, 1.68], [21.68, 3.16, 1.68]] },
+    { "path": [[31.35, 2.48, 2.45], [31.35, 0.1, 2.45]], "ground": true }
+   ],
+   "planters": true
+  }
  }
 }
 ```

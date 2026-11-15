@@ -26,7 +26,7 @@ const COLORS = {
 // (wireMesh()). The play area is stained timber with a sand box, a mint slide and a dark nest
 // seat; the trampoline a green edge pad on a black mat with a black net.
 // The car and surroundings are plain stand-ins; outside the lot is a light base, like an
-// architectural model's.
+// architectural model's. Snow (the winter layer) is a cool white.
 const REAL = {
   cladding: '#bebeb8', roof: '#7b8083', frame: '#383e42', unit: '#e4e4e0',
   glass: '#9fb8c4', interior: '#dddcd8', door: '#f2f1ed', floor: '#c39566', tile: '#5e4a3c', deck: '#4d4540', paving: '#b8b1a3',
@@ -35,7 +35,8 @@ const REAL = {
   timber: '#8a6a4c', sand: '#d6c6a0', slide: '#9ed8c2', nest: '#3d4a5c', pad: '#3f8a4b', mat: '#202325',
   net: '#151719', mesh: '#2c2f31', stone: '#56595b',
   cut: '#2a2d30', skirting: '#efeeea', linen: '#ecebe6', fabric: '#7d8792', oak: '#d6c2a2', worktop: '#3b3b3b',
-  cabinet: '#e6e5e0', furniture: '#a59f95'
+  cabinet: '#e6e5e0', furniture: '#a59f95',
+  snow: '#f1f4f7'
 };
 // the cladding's boards: about 12 cm wide, rising to the right at 45 degrees, only their grooves
 // drawn, on a 2 m tile of the walls' metre UVs
@@ -256,10 +257,13 @@ export function createKit(THREE, style = 'simple') {
   }
 
   // real style: (night) -> sets each material's colour from its colour now towards low of it at
-  // night 1, for the land and neighbours beyond the lot
+  // night 1, for the land and neighbours beyond the lot; the function's day holds those colours,
+  // for a caller that changes one by day (the ground's snow)
   function nightTint(materials, low) {
     const day = materials.map(m => m.color.clone());
-    return night => materials.forEach((m, i) => m.color.copy(day[i]).multiplyScalar(1 - (1 - low) * night));
+    const tint = night => materials.forEach((m, i) => m.color.copy(day[i]).multiplyScalar(1 - (1 - low) * night));
+    tint.day = day;
+    return tint;
   }
 
   // scales every material's opacity under group from its first-seen value; sprites are left out

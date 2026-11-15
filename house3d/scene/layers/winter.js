@@ -1,0 +1,300 @@
+// Winter, the real style's alone: the Christmas lights (site.festive) and the snow, one switchable
+// layer. The card switches it on by the season; the layer itself knows no date and no weather.
+//
+// The lights are a view effect of the dark, like the outdoor luminaires (lights.js): they follow
+// no HA entity and glow as ctx.state.night rises. Icicles hang along each site.festive.icicles
+// path: a dark cable along the path, and along every segment that is not near-vertical a strand
+// hangs straight down every STRAND_STEP, its length cycling through DROPS of the path's drop, an
+// LED every LED_GAP down it, so the strands read as a curtain of light. A near-vertical segment (a
+// climb, a post) carries its LEDs along the cable. With planters true a string winds round every
+// tall planter plant. Each LED is a small bright point with a soft halo round it, and under a
+// roof path a warm wash falls down the wall below; the real style has no bloom, so the halo and
+// the wash are the glow. A path rides the lift, so it rises and fades with the roof, unless it is
+// marked ground. kit.applyFade owns the opacity of everything in the lift, so the glow is colour
+// and size on additive materials, never opacity.
+//
+// The snow: a slab on every roof and on the garage roof (in the lift), the lawn and the land round
+// the lot blended white through the ground layer's api.snow, a light dusting over the paving and
+// the decks, a cap on every hedge and tree crown and a white tip on each tall plant, all placed
+// from those layers' api. The crowns' caps hang on the trees (trees api.attach), so they hide with
+// them. With options.snowfall, and not under reduced motion, flakes fall over the lot while the
+// layer is on; the card asks for it in the full view only, since a moving layer keeps the render
+// loop running. Nothing here casts a shadow.
+const LED = '#ffd59a', CABLE = '#1d1f21', WASH = '#ffb466';
+const STRAND_STEP = 0.12, LED_GAP = 0.05, DROP = 0.4, DROPS = [1, 0.55, 0.8, 0.35, 0.65];
+const NEAR_VERTICAL = 0.5; // a segment rising more than this share of its length
+const WRAP_OUT = 0.03, WRAP_TURNS = 9, WRAP_GAP = 0.06; // the string round a tall plant
+// an LED's sprite size in metres and its colour's share, by day and at night; its halo's size at
+// night and its share of the LED's colour
+const LED_DAY = 0.05, LED_NIGHT = 0.13, LED_DAY_LEVEL = 0.35, HALO = 0.55, HALO_LEVEL = 0.16;
+const WASH_H = 1, WASH_LEVEL = 0.15; // the wall wash under a roof path: its height and its top's share
+const ROOF_SNOW = 0.08, ROOF_INSET = 0.05, CAP = 0.12, CAP_OUT = 0.04, TIP = 0.8;
+const DUST_OPACITY = 0.5, DUST_LIFT = 0.004;
+const FLAKES = 1500, FLAKE_MARGIN = 4, FLAKE_TOP = 12, FLAKE_SIZE = 0.14, FLAKE_FALL = [0.5, 1], FLAKE_SWAY = 0.15, FLAKE_NIGHT = 0.45;
+
+// a seeded 0..1 sequence (mulberry32), so two builds place every flake alike
+function seeded(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * icicleLeds(path, drop) -> { leds: [[x, y, z], ...], wires: [[x, y, z], ...], runs: [[a, b], ...],
+ * length }: one icicle path's LEDs, its cable and strand wires as segment pairs, its segments that
+ * carry strands, and its length, as described above.
+ */
+export function icicleLeds(path, drop = DROP) {
+  const leds = [], wires = [], runs = [];
+  let strand = 0, length = 0;
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1], b = path[i], d = b.map((v, k) => v - a[k]), len = Math.hypot(...d);
+    if (!len) continue;
+    length += len;
+    wires.push(a, b);
+    const at = t => a.map((v, k) => v + d[k] * t);
+    if (Math.abs(d[1]) >= NEAR_VERTICAL * len) {
+      const m = Math.max(1, Math.round(len / LED_GAP));
+      for (let j = 0; j < m; j++) leds.push(at((j + 0.5) / m));
+      continue;
+    }
+    runs.push([a, b]);
+    const k = Math.max(1, Math.round(len / STRAND_STEP));
+    for (let j = 0; j < k; j++) {
+      const [x, y, z] = at((j + 0.5) / k), s = drop * DROPS[strand++ % DROPS.length], m = Math.max(1, Math.round(s / LED_GAP));
+      wires.push([x, y, z], [x, y - s, z]);
+      for (let q = 0; q < m; q++) leds.push([x, y - (s * (q + 1)) / m, z]);
+    }
+  }
+  return { leds, wires, runs, length };
+}
+
+// the outline [[x, z], ...] moved d inwards along every edge
+function insetOutline(pts, d) {
+  const n = pts.length;
+  let area = 0;
+  pts.forEach(([x, z], i) => { const [x2, z2] = pts[(i + 1) % n]; area += x * z2 - x2 * z; });
+  const s = area > 0 ? 1 : -1;
+  const inward = ([xa, za], [xb, zb]) => { const l = Math.hypot(xb - xa, zb - za) || 1; return [(-(zb - za) / l) * s, ((xb - xa) / l) * s]; };
+  return pts.map((p, i) => {
+    // a corner near 180 degrees would throw the point far out: past 4 d it is cut back
+    const n1 = inward(pts[(i - 1 + n) % n], p), n2 = inward(p, pts[(i + 1) % n]), k = d / Math.max(0.25, 1 + n1[0] * n2[0] + n1[1] * n2[1]);
+    return [p[0] + (n1[0] + n2[0]) * k, p[1] + (n1[1] + n2[1]) * k];
+  });
+}
+
+// a plant's radius at height h on its outline [[radius, height], ...] from the foot up
+function radiusAt(profile, h) {
+  for (let i = 1; i < profile.length; i++) {
+    const [r0, h0] = profile[i - 1], [r1, h1] = profile[i];
+    if (h <= h1 && h1 > h0) return r0 + ((r1 - r0) * (Math.max(h, h0) - h0)) / (h1 - h0);
+  }
+  return 0;
+}
+
+export default function build({ THREE, kit, model, options, style, state, roof, frame, reduceMotion, layer }) {
+  const group = new THREE.Group();
+  if (style !== 'real') return { id: 'winter', group };
+  const lift = new THREE.Group(), site = model.site || {}, festive = site.festive || {};
+  const api = id => { const L = layer(id); return (L && L.api) || {}; };
+  const siteApi = api('site'), treesApi = api('trees'), ground = api('ground');
+  const plants = siteApi.planters ? siteApi.planters() : [];
+
+  /* ---------- the lights ---------- */
+  const ledColor = new THREE.Color(LED), washColor = new THREE.Color(WASH);
+  const additive = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
+  const ledSprite = kit.canvasTexture(64, [[0, 'rgba(255,255,255,1)'], [0.35, 'rgba(255,245,225,0.9)'], [1, 'rgba(255,225,180,0)']]);
+  const haloSprite = kit.canvasTexture(64, [[0, 'rgba(255,220,170,0.9)'], [0.3, 'rgba(255,200,140,0.35)'], [1, 'rgba(255,180,110,0)']]);
+  const ledMats = [], haloMats = [], washMats = [];
+  // one geometry for an LED's point and its halo
+  const points = (pts, parent, part) => {
+    if (!pts.length) return;
+    const geo = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pts.flat(), 3));
+    const led = kit.keep(new THREE.PointsMaterial({ color: 0, size: LED_DAY, map: ledSprite, ...additive }));
+    const halo = kit.keep(new THREE.PointsMaterial({ color: 0, size: HALO, map: haloSprite, ...additive }));
+    ledMats.push(led);
+    haloMats.push(halo);
+    [[halo, `${part}-halo`, 5], [led, part, 6]].forEach(([m, name, order]) => {
+      const p = new THREE.Points(geo, m);
+      p.userData.part = name;
+      p.renderOrder = order;
+      parent.add(p);
+    });
+  };
+  // a warm wash down the wall under each strand-carrying segment: a vertical quad, bright at the
+  // cable and black (nothing, being additive) WASH_H below
+  const wash = (runs, parent) => {
+    if (!runs.length) return;
+    const pos = [], col = [];
+    runs.forEach(([[xa, ya, za], [xb, yb, zb]]) => {
+      pos.push(xa, ya, za, xb, yb, zb, xb, yb - WASH_H, zb, xa, ya, za, xb, yb - WASH_H, zb, xa, ya - WASH_H, za);
+      col.push(1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0);
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    const m = kit.keep(new THREE.MeshBasicMaterial({ color: 0, vertexColors: true, side: THREE.DoubleSide, ...additive }));
+    washMats.push(m);
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.userData.part = 'wash';
+    mesh.renderOrder = 4;
+    parent.add(mesh);
+  };
+  const cableM = kit.lineMat({ color: CABLE, opacity: 0.9 });
+  const onRoof = { leds: [], wires: [], runs: [] }, onGround = { leds: [], wires: [], runs: [] }, icicles = [];
+  (Array.isArray(festive.icicles) ? festive.icicles : []).forEach(ic => {
+    const one = icicleLeds(ic.path, ic.drop ?? DROP), to = ic.ground ? onGround : onRoof;
+    ['leds', 'wires', 'runs'].forEach(k => to[k].push(...one[k]));
+    icicles.push({ leds: one.leds.length, length: one.length, lift: !ic.ground });
+  });
+  [[onRoof, lift], [onGround, group]].forEach(([w, parent]) => {
+    if (!w.wires.length) return;
+    const line = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(w.wires.map(p => new THREE.Vector3(...p))), cableM);
+    line.userData.part = 'cable';
+    parent.add(line);
+  });
+  points(onRoof.leds, lift, 'icicles');
+  wash(onRoof.runs, lift);
+  const plantLeds = [];
+  if (festive.planters) plants.forEach(({ pos: [x, y, z], profile }) => {
+    const height = profile[profile.length - 1][1] * 0.95, n = Math.round((WRAP_TURNS * 2 * Math.PI * profile[1][0]) / WRAP_GAP);
+    for (let i = 0; i < n; i++) {
+      const t = (i + 0.5) / n, h = t * height, a = t * WRAP_TURNS * 2 * Math.PI, r = radiusAt(profile, h) + WRAP_OUT;
+      plantLeds.push([x + r * Math.cos(a), y + h, z + r * Math.sin(a)]);
+    }
+  });
+  points([...onGround.leds, ...plantLeds], group, 'leds');
+  group.userData.winter = { icicles, plants: plantLeds.length };
+
+  /* ---------- the snow ---------- */
+  const snowM = kit.surface('snow'), roofSnowM = kit.surface('snow', { transparent: true });
+  const snowy = (m, part) => { m.castShadow = false; m.receiveShadow = true; m.userData.part = part; return m; };
+  for (const [id, r] of Object.entries(model.roofs || {})) {
+    if (!Array.isArray(r.outline) || r.outline.length < 3) continue;
+    const top = roof.top(id), pts = insetOutline(r.outline, ROOF_INSET);
+    const geo = new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, z))), { depth: ROOF_SNOW, bevelEnabled: false });
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getY(i), d = p.getZ(i); p.setXYZ(i, x, top(x) + DUST_LIFT + d, z); }
+    // swapping y and z mirrors the shape, so each triangle turns its back: turn it round again,
+    // or the face seen from above is the bottom one, 4 mm over the slab
+    const a = p.array;
+    for (let i = 0; i < a.length; i += 9) for (let k = 0; k < 3; k++) [a[i + 3 + k], a[i + 6 + k]] = [a[i + 6 + k], a[i + 3 + k]];
+    geo.computeVertexNormals();
+    const m = snowy(new THREE.Mesh(geo, roofSnowM), 'roof-snow');
+    m.userData.roof = id;
+    lift.add(m);
+  }
+  // on the garage roof, inside its fascia: an edge shared with another of its rects stays, so the
+  // snow runs on across the joint
+  const gr = site.garage_roof;
+  const grRects = gr ? gr.rects || [gr.rect] : [];
+  grRects.forEach((r, i) => {
+    // side k of r (0: x0, 1: z0, 2: x1, 3: z1) lies on a side of another rect that overlaps it along
+    const shared = k => grRects.some((o, j) => {
+      if (j === i) return false;
+      const along = k % 2 ? [0, 2] : [1, 3];
+      return (o[k % 2] === r[k] || o[(k % 2) + 2] === r[k]) && Math.min(r[along[1]], o[along[1]]) > Math.max(r[along[0]], o[along[0]]);
+    });
+    const rect = r.map((v, k) => (shared(k) ? v : v + (k < 2 ? ROOF_INSET : -ROOF_INSET)));
+    const y = gr.y[1] + DUST_LIFT;
+    snowy(kit.solid(lift, roofSnowM, rect, [y, y + ROOF_SNOW]), 'garage-snow');
+  });
+  const dustM = kit.surface('snow', { transparent: true, opacity: DUST_OPACITY, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  (siteApi.slabs ? siteApi.slabs() : []).forEach(({ outline, top }) => {
+    const m = snowy(new THREE.Mesh(kit.flatShape(outline), dustM), 'dust');
+    m.position.y = top + DUST_LIFT;
+    m.renderOrder = 1;
+    group.add(m);
+  });
+  (siteApi.hedges ? siteApi.hedges() : []).forEach(({ a: [xa, za], b: [xb, zb], height, width }) => {
+    const m = snowy(new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(xb - xa, zb - za) + CAP_OUT, CAP, width + CAP_OUT), snowM), 'cap');
+    m.position.set((xa + xb) / 2, height + CAP / 2 - 0.02, (za + zb) / 2);
+    m.rotation.y = -Math.atan2(zb - za, xb - xa);
+    group.add(m);
+  });
+  plants.forEach(({ pos, profile }) => {
+    const from = profile[profile.length - 1][1] * TIP;
+    const tip = [[radiusAt(profile, from), from], ...profile.filter(([, h]) => h > from)].map(([r, h]) => new THREE.Vector2(r && r + CAP_OUT / 2, h + 0.01));
+    const m = snowy(new THREE.Mesh(new THREE.LatheGeometry(tip, 14), snowM), 'cap');
+    m.position.set(...pos);
+    group.add(m);
+  });
+  // the crown's upper third: a sphere cap down to a third of its height above the centre
+  const dress = new THREE.Group();
+  dress.userData.part = 'winter';
+  const capGeo = new THREE.SphereGeometry(1, 18, 8, 0, 2 * Math.PI, 0, Math.acos(1 / 3));
+  Object.values(treesApi.crowns ? treesApi.crowns() : {}).forEach(({ centre, radii }) => {
+    const m = snowy(new THREE.Mesh(capGeo, snowM), 'cap');
+    m.position.set(...centre);
+    m.scale.set(...radii.map(v => v + CAP_OUT));
+    dress.add(m);
+  });
+  if (treesApi.attach) treesApi.attach(dress);
+
+  /* ---------- falling snow ---------- */
+  let flakes = null, flakeM = null, fall = null, phase = null, t = 0;
+  if (options.snowfall && !reduceMotion) {
+    const rand = seeded(20261115), [x0, z0, x1, z1] = frame.lotBox;
+    const box = [x0 - FLAKE_MARGIN, z0 - FLAKE_MARGIN, x1 + FLAKE_MARGIN, z1 + FLAKE_MARGIN];
+    const pos = new Float32Array(FLAKES * 3);
+    fall = new Float32Array(FLAKES);
+    phase = new Float32Array(FLAKES);
+    for (let i = 0; i < FLAKES; i++) {
+      pos.set([box[0] + rand() * (box[2] - box[0]), rand() * FLAKE_TOP, box[1] + rand() * (box[3] - box[1])], i * 3);
+      fall[i] = FLAKE_FALL[0] + rand() * (FLAKE_FALL[1] - FLAKE_FALL[0]);
+      phase[i] = rand() * 2 * Math.PI;
+    }
+    flakeM = kit.keep(new THREE.PointsMaterial({ color: 0xffffff, size: FLAKE_SIZE, map: ledSprite, transparent: true, opacity: 0.9, depthWrite: false }));
+    flakes = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(pos, 3)), flakeM);
+    flakes.userData.part = 'flakes';
+    flakes.frustumCulled = false;
+    group.add(flakes);
+  }
+
+  let on = true, glow = 0, shown = -1;
+  // the lights as they are at glow g: by day small dim points, no halo and no wash
+  const light = g => {
+    const level = LED_DAY_LEVEL + (1 - LED_DAY_LEVEL) * g;
+    ledMats.forEach(m => { m.size = LED_DAY + (LED_NIGHT - LED_DAY) * g; m.color.copy(ledColor).multiplyScalar(level); });
+    haloMats.forEach(m => m.color.copy(ledColor).multiplyScalar(HALO_LEVEL * g));
+    washMats.forEach(m => m.color.copy(washColor).multiplyScalar(WASH_LEVEL * g));
+    if (flakeM) flakeM.color.setScalar(1 - (1 - FLAKE_NIGHT) * g);
+  };
+  light(0);
+  return {
+    id: 'winter',
+    group,
+    lift,
+    toggle: true,
+    // mount() calls it with the starting state before the first frame
+    setOn(v) {
+      on = !!v;
+      dress.visible = on;
+      if (ground.snow) ground.snow(on ? 1 : 0);
+    },
+    update(dt, k) {
+      let moving = false;
+      const goal = state.night || 0;
+      if (kit.near(glow, goal)) glow = goal;
+      else { glow += (goal - glow) * k; moving = true; }
+      if (glow !== shown) { shown = glow; light(glow); }
+      if (on && flakes) {
+        t += dt;
+        const p = flakes.geometry.attributes.position, a = p.array;
+        for (let i = 0; i < FLAKES; i++) {
+          let y = a[i * 3 + 1] - fall[i] * dt;
+          if (y < 0) y += FLAKE_TOP;
+          a[i * 3 + 1] = y;
+          a[i * 3] += Math.sin(t * 0.8 + phase[i]) * FLAKE_SWAY * dt;
+        }
+        p.needsUpdate = true;
+        moving = true;
+      }
+      return moving;
+    }
+  };
+}

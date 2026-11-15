@@ -546,6 +546,36 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   and a pool of light on the ground (at 0.14 m, over the decks and the
   step), all scaled by the night; no real-time light, no shadow. It is a view
   effect of the dark, not the motion sensors: it follows no HA entity.
+- **Winter:** the `winter` layer (Kihid: Talv), the real style's alone (the
+  simple style has no night, so there it is not listed), holds the Christmas
+  lights and the snow. The lights are `site.festive` in the geometry layer,
+  shareable decoration like `site.lights`, every key optional: `icicles`
+  `[{ "path": [[x, y, z], ...], "drop"?: 0.4, "ground"?: false }]` (a dark
+  cable along the path with a strand every 0.12 m, the strands' lengths
+  cycling through shares of `drop`, an LED every 5 cm down each, and the
+  LEDs along the cable on a near-vertical segment) and `planters: true` (a
+  string winding round every tall planter plant). The trees carry no lights.
+  They glow whenever it is dark: each LED a bright point with a soft halo,
+  and a warm wash down the wall under a roof path, since the real style has
+  no bloom. The glow is colour and size on additive materials, never
+  opacity, since the roof mode fades the lift's opacity: a path rides the
+  lift with the roof unless `ground` is true. The snow lies on every roof
+  and the garage roof (in the lift), on the lawn and the land
+  round the lot (blended in through the ground layer's `api.snow`), as a
+  light dusting on the paving and decks, as a cap on the hedges and tree
+  crowns and a white tip on the thujas. It is placed from the other layers'
+  `api` (`site`: `hedges()`, `planters()`, `slabs()`; `trees`: `crowns()`,
+  `attach()`) rather than copied constants, and the crowns' caps hang on the
+  trees, so they hide with them. The season is a view default, not data:
+  `seasonOn(date)` in `house3d.js` is true from 1 November to 31 March, and
+  the card and the viewer mount the layer on then and off outside it, the
+  card re-checking once a minute so a wall tablet changes over on
+  1 November. A switch the user flips is stored as `{ on, window }`
+  (`seasonWindow(date)`, `2026-11` or `gap-2027`) and holds only for that
+  season window or gap, so the next season starts from its default. Falling
+  snow (`options.snowfall`) animates in the full view and the viewer only,
+  never in the hero or under reduced motion, since a moving layer keeps the
+  render loop running.
 - **Room chips:** with the roof off each house room (every room but the
   carport) shows one chip at its label: icons for open doors, smoke alarms
   going off and the alarm, motion now and lights on, with a count past one,
@@ -601,9 +631,9 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   live, which moves on once a minute; the time is not stored. Below them the
   switches for the devices' markers and room chips (an alert always shows),
   the camera view fans, the trees, the car (off, an arrival parks it and the
-  gate stays shut), the neighbours and street and Tulevik (below, off until
-  switched on); that choice is kept per browser in
-  `localStorage` under `house3d-layers`. In the simple style a slider time
+  gate stays shut), the neighbours and street, Tulevik (below, off until
+  switched on) and Talv (on in its season, above); that choice is kept per browser in
+  `localStorage` under `house3d-layers`, Talv's for its season window only. In the simple style a slider time
   kept from the real style shows a Praegu button there too. Escape closes any sheet, and so
   does a tap on empty canvas. Below 600 px of the card's own width (not the
   screen's) the bar moves to the bottom and a sheet opens just above it, so

@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 46;
+const HOUSE3D_VERSION = 47;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -36,7 +36,7 @@ function loadEngine() {
 export const TEXT = {
   et: {
     locale: 'et-EE',
-    layers: { markers: 'Seadmed', fans: 'Kaamerate vaated', trees: 'Puud', car: 'Auto', surroundings: 'Ümbrus', future: 'Tulevik' },
+    layers: { markers: 'Seadmed', fans: 'Kaamerate vaated', trees: 'Puud', car: 'Auto', surroundings: 'Ümbrus', future: 'Tulevik', winter: 'Talv' },
     view: 'Vaade',
     roof: 'Katusega',
     open: 'Katuseta',
@@ -77,7 +77,7 @@ export const TEXT = {
   },
   en: {
     locale: 'en-GB',
-    layers: { markers: 'Devices', fans: 'Camera views', trees: 'Trees', car: 'Car', surroundings: 'Surroundings', future: 'Future' },
+    layers: { markers: 'Devices', fans: 'Camera views', trees: 'Trees', car: 'Car', surroundings: 'Surroundings', future: 'Future', winter: 'Winter' },
     view: 'View',
     roof: 'Roof on',
     open: 'Roof off',
@@ -147,7 +147,7 @@ function writeSeen(entity, key) {
 }
 
 // The Kihid sheet's switches, in this order; the choice is kept per browser like the arrival key.
-const LAYER_ORDER = ['markers', 'fans', 'trees', 'car', 'surroundings', 'future'];
+const LAYER_ORDER = ['markers', 'fans', 'trees', 'car', 'surroundings', 'future', 'winter'];
 // switched off until the user turns it on: what the house does not have yet
 const LAYERS_KEY = 'house3d-layers';
 const LAYERS_OFF = { future: false };
@@ -331,13 +331,33 @@ export function stretchHeight({ min, top, rest, beside, bottom }) {
   return Math.max(min, Math.round(Math.min(bottom, Math.max(...beside)) - top - rest));
 }
 
-// heroMount(hero, style, layers) -> { style, layers }: what the engine mounts with. A hero (a card
-// with `height`, a dashboard's top) is always the real style with the live sun; it keeps its layer
-// switches to itself, not in the stored ones of the full 3D view (ADR-006, ADR-009). Any other
-// card is as the visitor left it.
-export function heroMount(hero, style, layers) {
-  const all = { ...LAYERS_OFF, ...(layers || {}) };
-  return { style: hero ? 'real' : style, layers: all };
+// heroMount(hero, style, layers, season) -> { style, layers, snowfall }: what the engine mounts
+// with. A hero (a card with `height`, a dashboard's top) is always the real style with the live
+// sun; it keeps its layer switches to itself, not in the stored ones of the full 3D view (ADR-006,
+// ADR-009). Any other card is as the visitor left it. season holds the seasonal layers' defaults
+// for today ({ winter: seasonOn(now) }), under the switches; snow falls in the full view only,
+// since it keeps the render loop running and the hero sits on an always-on dashboard.
+export function heroMount(hero, style, layers, season) {
+  const all = { ...LAYERS_OFF, ...(season || {}), ...(layers || {}) };
+  return { style: hero ? 'real' : style, layers: all, snowfall: !hero };
+}
+
+// The seasonal layer's switch holds only for the season window, or the gap between windows, it
+// was flipped in: it is stored as { on, window } (the engine's seasonWindow), and a value from
+// another window is dropped, so the next season starts from its default again.
+const SEASONAL = 'winter';
+// the stored switches without a seasonal one from another window than win
+const fresh = (stored, win) => Object.fromEntries(Object.entries(stored || {})
+  .filter(([id, v]) => id !== SEASONAL || (v && typeof v === 'object' && v.window === win)));
+// resolveLayers(stored, win) -> { id: bool }: the stored switches as the engine takes them, win
+// being today's seasonWindow
+export function resolveLayers(stored, win) {
+  return Object.fromEntries(Object.entries(fresh(stored, win)).map(([id, v]) => [id, id === SEASONAL ? !!v.on : v]));
+}
+// storeLayer(stored, id, on, win) -> the stored switches with id set, the seasonal one stamped
+// with today's window and an expired one dropped
+export function storeLayer(stored, id, on, win) {
+  return { ...fresh(stored, win), [id]: id === SEASONAL ? { on: !!on, window: win } : on };
 }
 
 const STYLE = `
@@ -534,6 +554,7 @@ export class House3dCard extends Base {
 
   _unmount() {
     this._glowTick(false);
+    if (this._seasonTimer) { clearInterval(this._seasonTimer); this._seasonTimer = null; }
     if (this._view) { this._view.dispose(); this._view = null; }
     if (this._ro) { this._ro.disconnect(); this._ro = null; }
     this._mounting = null;
@@ -567,6 +588,9 @@ export class House3dCard extends Base {
       this._mounting = null;
       this._keep = null;
       this._mod = mod;
+      const now = new Date();
+      this._season = mod.seasonOn(now);
+      const start = heroMount(this._isHero, this._style, resolveLayers(this._readLayers(), mod.seasonWindow(now)), { [SEASONAL]: this._season });
       const reset = sr.querySelector('.bar [data-act="reset"]');
       if (reset) reset.innerHTML = mod.icon('reset');
       sr.querySelector('[data-act="layers"]').innerHTML = mod.icon('layers');
@@ -582,7 +606,8 @@ export class House3dCard extends Base {
         onFeature: id => this._openFeature(id),
         // the sun moves on once a minute and with the sliders; an open PV sheet follows it
         onSun: sun => { if (this._view && this._sheet === 'feature') this._renderPv(sun); },
-        layers: heroMount(this._isHero, this._style, this._readLayers()).layers,
+        layers: start.layers,
+        snowfall: start.snowfall,
         style: this._style,
         mode: keep.mode,
         view: keep.view,
@@ -592,6 +617,7 @@ export class House3dCard extends Base {
         onCar: () => { if (this._carHome) this._view.setCar('arrive'); },
         noWebGL: t.noWebGL
       });
+      this._seasonTimer = setInterval(() => this._checkSeason(), 60000);
       sr.querySelector('.bar').addEventListener('click', ev => {
         const mode = ev.target.closest('[data-mode]');
         if (mode) this._view.setMode(mode.dataset.mode);
@@ -921,8 +947,20 @@ export class House3dCard extends Base {
 
   _switchLayer(id, on) {
     this._view.setLayer(id, on);
-    this._writeLayers({ ...this._readLayers(), [id]: on });
+    this._writeLayers(storeLayer(this._readLayers(), id, on, this._mod.seasonWindow(new Date())));
     this._renderLayers();
+  }
+
+  // once a minute while mounted: a season that starts or ends (a tablet mounted on 31 October)
+  // switches its layer to the new default, unless a switch flipped in the new window holds it
+  _checkSeason(now = new Date()) {
+    if (!this._view || !this._mod) return;
+    const on = this._mod.seasonOn(now);
+    if (on === this._season) return;
+    this._season = on;
+    if (SEASONAL in resolveLayers(this._readLayers(), this._mod.seasonWindow(now))) return;
+    this._view.setLayer(SEASONAL, on);
+    if (this._sheet === 'layers') this._renderLayers();
   }
 }
 

@@ -166,6 +166,18 @@ def _light_off_lot(L):
     _site(L)["lights"][0]["pos"] = [4, 2, 30]
 
 
+def _festive_one_point(L):
+    _site(L)["festive"]["icicles"][0]["path"] = [[33.28, 2.48, -3.02]]
+
+
+def _festive_off_lot(L):
+    _site(L)["festive"]["icicles"][1]["path"][0] = [31.32, 2.72, -7]
+
+
+def _festive_drop(L):
+    _site(L)["festive"]["icicles"][0]["drop"] = 2
+
+
 def _planter_finish(L):
     _site(L)["planters"][1]["finish"] = "brick"
 
@@ -291,6 +303,9 @@ MUTATIONS = [
     ("unknown light kind", _light_kind, "site.lights[0]: kind 'spot' is not one of ceiling, wall"),
     ("wall light without face", _light_face, "site.lights[1]: a wall light needs face [dx, dz], its outward direction"),
     ("light off the lot", _light_off_lot, "site.lights[0]: pos is outside the lot"),
+    ("icicle path of one point", _festive_one_point, "site.festive.icicles[0]: path must be two or more [x, y, z] points"),
+    ("icicle point off the lot", _festive_off_lot, "site.festive.icicles[1]: a point is outside the lot"),
+    ("icicle drop of 2", _festive_drop, "site.festive.icicles[0]: drop must be above 0 and at most 1"),
     ("unknown planter finish", _planter_finish, "site.planters[1]: finish 'brick' is not one of frame, cladding"),
     ("step without height", _step_height, "site.steps[0]: height is not a positive number"),
     ("planter not an object", _planter_list, "site.planters[0]: not a JSON object"),
@@ -326,6 +341,18 @@ class Mutations(unittest.TestCase):
                 mutate(L)
                 problems = hm.validate(L)
                 self.assertTrue(any(problem in p for p in problems), f"{problem!r} not in {problems}")
+
+
+class Festive(unittest.TestCase):
+    def test_every_key_is_optional(self):
+        for key in ("icicles", "planters"):
+            with self.subTest(key):
+                L = layers()
+                del _site(L)["festive"][key]
+                self.assertEqual(hm.validate(L), [])
+        L = layers()
+        del _site(L)["festive"]
+        self.assertEqual(hm.validate(L), [])
 
 
 class FurnitureKind(unittest.TestCase):

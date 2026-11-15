@@ -451,6 +451,8 @@ def validate(layers):
         for k in ("height", "crown"):
             if not (_num(t.get(k)) and t[k] > 0):
                 bad(f"{where}: {k} is not a positive number")
+    if "festive" in site:
+        _validate_festive(site["festive"], lot, bad)
     if "future" in model:
         _validate_future(model, roofs, bad)
 
@@ -511,6 +513,41 @@ def validate(layers):
         if not _point(f.get("pos"), 3):
             bad(f"showcase feature {f.get('id')}: pos must be [x, y, z]")
     return problems
+
+
+def _validate_festive(festive, lot, bad):
+    """site.festive, the winter layer's lights, every key optional: icicles [{ path: [[x, y, z],
+    ...], drop?, ground? }] with each path of two or more points on the lot above the ground, and
+    planters (true winds a string round every tall planter plant)."""
+    if not isinstance(festive, dict):
+        bad("site.festive: not a JSON object")
+        return
+    icicles = festive.get("icicles", [])
+    if not isinstance(icicles, list):
+        bad("site.festive.icicles: not a list")
+        icicles = []
+    for i, ic in enumerate(icicles):
+        where = f"site.festive.icicles[{i}]"
+        if not isinstance(ic, dict):
+            bad(f"{where}: not a JSON object")
+            continue
+        path = ic.get("path")
+        if not (isinstance(path, list) and len(path) >= 2 and all(_point(p, 3) for p in path)):
+            bad(f"{where}: path must be two or more [x, y, z] points")
+        else:
+            for p in path:
+                if p[1] <= 0:
+                    bad(f"{where}: a point's y is not above 0")
+                    break
+                if lot and not _inside([p[0], p[2]], lot):
+                    bad(f"{where}: a point is outside the lot")
+                    break
+        if "drop" in ic and not (_num(ic["drop"]) and 0 < ic["drop"] <= 1):
+            bad(f"{where}: drop must be above 0 and at most 1")
+        if "ground" in ic and not isinstance(ic["ground"], bool):
+            bad(f"{where}: ground must be true or false")
+    if "planters" in festive and not isinstance(festive["planters"], bool):
+        bad("site.festive.planters: must be true or false")
 
 
 def _validate_future(model, roofs, bad):

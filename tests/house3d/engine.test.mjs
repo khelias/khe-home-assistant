@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const E = new URL('../../house3d/', import.meta.url);
 const SNAPSHOT = new URL('./simple-snapshot.json', import.meta.url);
-const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'interior', 'lights', 'car', 'future', 'fans'];
+const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'interior', 'lights', 'winter', 'car', 'future', 'fans'];
 
 // kit.canvasTexture is the only thing under scene/ that touches the DOM
 globalThis.document = {
@@ -24,12 +24,13 @@ globalThis.document = {
 const THREE = await import(new URL('vendor/three-0.186.1/build/three.module.js', E));
 const { createKit } = await import(new URL('scene/kit.js', E));
 const BUILDERS = await Promise.all(LAYERS.map(id => import(new URL(`scene/layers/${id}.js`, E))));
-const { modelFrame, buildLayer, guardLayer, syncCamera, toScreen, hitRect, releaseVelocity, coast, homeBox, homeDir, homeView, collide, inChip, pvNow, roofNormal, roofTop, tapAction } = await import(new URL('house3d.js', E));
+const { modelFrame, seasonOn, seasonWindow, buildLayer, guardLayer, syncCamera, toScreen, hitRect, releaseVelocity, coast, homeBox, homeDir, homeView, collide, inChip, pvNow, roofNormal, roofTop, tapAction } = await import(new URL('house3d.js', E));
 const card = await import(new URL('house3d-card.js', E));
 const { OrbitControls } = await import(new URL('vendor/three-0.186.1/examples/jsm/controls/OrbitControls.js', E));
 const { sunPosition, gridBearing, sunDirection, sunGlow, realLight } = await import(new URL('scene/sun.js', E));
 const { cornerBoards } = await import(new URL('scene/layers/building.js', E));
 const { panelGrid } = await import(new URL('scene/layers/future.js', E));
+const { icicleLeds } = await import(new URL('scene/layers/winter.js', E));
 
 const model = JSON.parse(execFileSync('python3', ['-I', fileURLToPath(new URL('../../scripts/house3d_model.py', import.meta.url)), '--layers', 'all',
   fileURLToPath(new URL('./fixture-model.md', import.meta.url))], { encoding: 'utf-8' }));
@@ -211,7 +212,8 @@ const REAL_FLAGS = {
     timber: [true, false], sand: [false, true], slide: [true, false], nest: [true, false], pad: [true, false], mat: [true, false], net: [false, false]
   },
   gates: { fence: [true, false] },
-  trees: { trunk: [true, false], crown: [true, false] },
+  // the winter layer's caps on the crowns hang in the trees' group
+  trees: { trunk: [true, false], crown: [true, false], snow: [false, true] },
   pergola: { frame: [true, false] },
   car: { car: [true, false], glass: [false, false] }
 };
@@ -1365,6 +1367,185 @@ test('lights layer: a fixture, halo and pool per light, lit only at night, casti
   assert.equal(BUILDERS[LAYERS.indexOf('lights')].default(makeCtx(options, { ...model, site: { ...model.site, lights: [] } }).ctx), null);
 });
 
+test('site, trees and ground api: the hedges, tall plants and crowns as built, the ground\'s snow', () => {
+  const { byId } = buildAll({ ...options, style: 'real' });
+  const hedges = byId.site.api.hedges();
+  assert.equal(hedges.length, model.site.hedges.length);
+  const hedge = byId.site.group.children.find(o => o.geometry && o.geometry.type === 'BoxGeometry' && o.material.color.getHexString() === new THREE.Color(createKit(THREE, 'real').REAL.hedge).getHexString());
+  assert.ok(Math.abs(hedge.geometry.parameters.height - hedges[0].height) < 1e-9 && Math.abs(hedge.geometry.parameters.depth - hedges[0].width) < 1e-9);
+  assert.deepEqual(hedges[0].a, model.site.hedges[0][0]);
+  const plants = byId.site.api.planters(), thujas = model.site.planters.filter(p => p.plant === 'thuja');
+  assert.equal(plants.length, thujas.length);
+  const column = byId.site.group.children.find(o => o.geometry && o.geometry.type === 'LatheGeometry');
+  assert.deepEqual(column.geometry.parameters.points.map(v => [v.x, v.y]), plants[0].profile, 'the thuja is turned from its outline');
+  assert.deepEqual(column.position.toArray(), plants[0].pos);
+  const slabs = byId.site.api.slabs();
+  assert.equal(slabs.length, model.site.paving.length + model.site.decks.length);
+  assert.deepEqual(slabs.map(q => q.top), [...model.site.paving.map(() => 0.02), ...model.site.decks.map(() => 0.12)]);
+  assert.deepEqual(buildAll().byId.site.api.planters(), [], 'the simple style has no plants');
+  const crowns = byId.trees.api.crowns();
+  assert.deepEqual(Object.keys(crowns).sort(), model.site.trees.map(t => t.id).sort());
+  const t4 = model.site.trees.find(t => t.id === 't4'), crown = byId.trees.group.children.find(o => o.geometry && o.geometry.type === 'IcosahedronGeometry' && o.position.x === t4.pos[0] && o.position.z === t4.pos[1]);
+  assert.deepEqual(crowns.t4.centre, crown.position.toArray());
+  assert.deepEqual(crowns.t4.radii, crown.scale.toArray());
+  // the ground alone, so no winter layer has snowed on it
+  const { ctx } = makeCtx({ ...options, style: 'real' });
+  const G = buildLayer(BUILDERS[LAYERS.indexOf('ground')], 'ground', ctx), lawn = G.group.children[1].material, day = lawn.color.clone();
+  G.api.snow(1);
+  assert.ok(!lawn.color.equals(day) && lawn.color.r > day.r, 'the lawn whitens');
+  ctx.state.night = 1;
+  G.update(0, 1);
+  const out = G.group.children[0].material;
+  assert.ok(out.color.r < new THREE.Color(ctx.kit.REAL.snow).r * 0.3, 'the night darkens the snowed land beyond the lot');
+  G.api.snow(0);
+  assert.ok(lawn.color.equals(day), 'snow(0) restores the lawn');
+});
+
+const winterOf = (o = {}) => buildAll({ ...options, style: 'real', ...o });
+const partsUnder = (root, part) => { const out = []; root.traverse(o => { if (o.userData.part === part) out.push(o); }); return out; };
+
+test('winter layer: icicle strands in the lift with their halo and wall wash, the post on the ground', () => {
+  const { byId } = winterOf(), L = byId.winter, info = L.group.userData.winter;
+  const paths = model.site.festive.icicles;
+  assert.equal(info.icicles.length, paths.length);
+  info.icicles.forEach((ic, i) => {
+    assert.deepEqual([ic.leds, ic.length], [icicleLeds(paths[i].path, paths[i].drop).leds.length, icicleLeds(paths[i].path).length]);
+    assert.ok(ic.leds > ic.length * 20, `path ${i}: a curtain, ${ic.leds} LEDs on ${ic.length.toFixed(2)} m`);
+    assert.equal(ic.lift, !paths[i].ground);
+  });
+  const roofLeds = partsUnder(L.lift, 'icicles'), groundLeds = partsUnder(L.group, 'leds');
+  assert.equal(roofLeds.length, 1);
+  assert.equal(partsUnder(L.lift, 'icicles-halo')[0].geometry, roofLeds[0].geometry, 'the halo shares the LEDs\' points');
+  assert.equal(partsUnder(L.lift, 'wash').length, 1);
+  assert.equal(partsUnder(L.group, 'wash').length, 0, 'no wash for the post');
+  const roofCount = info.icicles.filter(ic => ic.lift).reduce((n, ic) => n + ic.leds, 0), postCount = info.icicles.filter(ic => !ic.lift).reduce((n, ic) => n + ic.leds, 0);
+  assert.equal(roofLeds[0].geometry.attributes.position.count, roofCount);
+  assert.equal(groundLeds[0].geometry.attributes.position.count, postCount + info.plants);
+  // the post's LEDs stand on its line, the roof's hang under their path
+  const post = paths.find(p => p.ground), pos = groundLeds[0].geometry.attributes.position;
+  for (let i = 0; i < postCount; i++) assert.ok(Math.abs(pos.getX(i) - post.path[0][0]) < 1e-6 && Math.abs(pos.getZ(i) - post.path[0][2]) < 1e-6);
+  const rp = roofLeds[0].geometry.attributes.position, top = Math.max(...paths.filter(p => !p.ground).flatMap(p => p.path.map(q => q[1])));
+  for (let i = 0; i < rp.count; i++) assert.ok(rp.getY(i) <= top + 1e-6);
+  assert.equal(partsUnder(L.lift, 'cable').length, 1);
+  assert.equal(partsUnder(L.group, 'cable').length, 1);
+});
+
+test('icicleLeds: a strand every 0.12 m with an LED every 5 cm, the drop cycling, LEDs along a climb', () => {
+  const level = icicleLeds([[0, 3, 0], [3, 3, 0]], 0.4);
+  assert.equal(level.wires.length, 2 + 25 * 2, 'the cable and 25 strands');
+  assert.equal(level.length, 3);
+  assert.deepEqual(level.runs, [[[0, 3, 0], [3, 3, 0]]]);
+  const drops = [];
+  for (let i = 3; i < level.wires.length; i += 2) drops.push(Number((level.wires[i - 1][1] - level.wires[i][1]).toFixed(4)));
+  assert.deepEqual(drops.slice(0, 6), [0.4, 0.22, 0.32, 0.14, 0.26, 0.4]);
+  assert.equal(level.leds.length, drops.reduce((n, s) => n + Math.round(s / 0.05), 0));
+  level.leds.forEach(([, y]) => assert.ok(y < 3 && y >= 3 - 0.4 - 1e-9));
+  const climb = icicleLeds([[0, 1, 0], [0, 4, 0]]);
+  assert.equal(climb.leds.length, 60);
+  assert.equal(climb.wires.length, 2, 'no strands on a climb');
+  assert.deepEqual(climb.runs, []);
+  climb.leds.forEach(([x, , z]) => assert.ok(x === 0 && z === 0));
+});
+
+test('winter layer: a string round each thuja, no lights on the trees, glowing only at night', () => {
+  const { ctx, byId } = winterOf(), L = byId.winter, info = L.group.userData.winter;
+  const thujas = byId.site.api.planters();
+  assert.ok(info.plants > 50 * thujas.length);
+  // the string sits just outside the plant's outline, up to its top
+  const pos = partsUnder(L.group, 'leds')[0].geometry.attributes.position, postCount = info.icicles.filter(ic => !ic.lift).reduce((n, ic) => n + ic.leds, 0);
+  const [{ pos: [px, py, pz], profile }] = thujas, H = profile.at(-1)[1];
+  for (let i = postCount; i < postCount + info.plants / thujas.length; i++) {
+    const h = pos.getY(i) - py, r = Math.hypot(pos.getX(i) - px, pos.getZ(i) - pz);
+    assert.ok(h >= 0 && h <= H && r > 0.02 && r < 0.4, `LED ${i} at ${h.toFixed(2)} m, ${r.toFixed(2)} m out`);
+  }
+  let treeLights = 0;
+  byId.trees.group.traverse(o => { if (o.isPoints) treeLights++; });
+  assert.equal(treeLights, 0);
+  const all = part => [...partsUnder(L.group, part), ...partsUnder(L.lift, part === 'leds' ? 'icicles' : `icicles-${part.split('-')[1]}`)];
+  const leds = all('leds').map(p => p.material), halos = all('leds-halo').map(p => p.material), wash = partsUnder(L.lift, 'wash')[0].material;
+  const settle = () => { for (let i = 0; i < 80; i++) L.update(0.05, 0.5); };
+  settle();
+  const day = leds.map(m => [m.size, m.color.r]);
+  halos.forEach(m => assert.equal(m.color.r, 0, 'no halo by day'));
+  assert.equal(wash.color.r, 0, 'no wash by day');
+  ctx.state.night = 1;
+  settle();
+  leds.forEach((m, i) => assert.ok(m.size > day[i][0] * 2 && m.color.r > day[i][1], 'glows at night'));
+  halos.forEach(m => assert.ok(m.color.r > 0));
+  assert.ok(wash.color.r > 0);
+  [...leds, ...halos, wash].forEach(m => assert.equal(m.opacity, 1, 'the glow is never opacity'));
+  assert.equal(L.update(0.05, 0.5), false, 'nothing moves once settled');
+  ctx.state.night = 0;
+  settle();
+  leds.forEach((m, i) => assert.ok(Math.abs(m.size - day[i][0]) < 1e-3, 'back by day'));
+  L.group.traverse(o => assert.ok(!o.castShadow, 'casts nothing'));
+  L.lift.traverse(o => assert.ok(!o.castShadow, 'casts nothing'));
+  assert.ok(!L.shades);
+});
+
+test('winter layer: two builds place every LED alike; the simple style has no toggle', () => {
+  const a = winterOf().byId.winter, b = winterOf().byId.winter;
+  const arr = L => [...partsUnder(L.group, 'leds'), ...partsUnder(L.lift, 'icicles')].map(p => Array.from(p.geometry.attributes.position.array));
+  assert.deepEqual(arr(a), arr(b));
+  const simple = buildAll().byId.winter;
+  assert.equal(simple.toggle, undefined);
+  assert.equal(simple.group.children.length, 0);
+  const none = buildLayer(BUILDERS[LAYERS.indexOf('winter')], 'winter', makeCtx({ ...options, style: 'real' }, { ...model, site: { ...model.site, festive: undefined } }).ctx);
+  assert.ok(none && none.toggle, 'the snow builds without festive');
+  assert.equal(none.group.userData.winter.icicles.length, 0);
+});
+
+test('winter layer: snow on every roof and garage rect in the lift, caps, dust, and the ground\'s snow switched', () => {
+  const { ctx, byId } = winterOf(), L = byId.winter;
+  const roofSnow = partsUnder(L.lift, 'roof-snow'), garage = partsUnder(L.lift, 'garage-snow');
+  assert.deepEqual(roofSnow.map(m => m.userData.roof).sort(), Object.keys(model.roofs).sort());
+  assert.equal(garage.length, model.site.garage_roof.rects.length);
+  [...roofSnow, ...garage].forEach(m => assert.ok(m.material.transparent, 'fades with the roof'));
+  ['roof-snow', 'garage-snow', 'cap', 'dust'].flatMap(part => [...partsUnder(L.group, part), ...partsUnder(L.lift, part)])
+    .forEach(m => assert.ok(m.receiveShadow && !m.castShadow, `${m.userData.part} takes shadows and casts none`));
+  // a roof's snow lies on its slab's top
+  const id = roofSnow[0].userData.roof, top = ctx.roof.top(id), p = roofSnow[0].geometry.attributes.position;
+  for (let i = 0; i < p.count; i++) assert.ok(p.getY(i) >= top(p.getX(i)) - 1e-6 && p.getY(i) <= top(p.getX(i)) + 0.1);
+  // the face turned up is the snow's top, not its bottom
+  const n = roofSnow[0].geometry.attributes.normal;
+  let up = 0;
+  for (let i = 0; i < n.count; i++) if (n.getY(i) > 0.9) { up++; assert.ok(p.getY(i) > top(p.getX(i)) + 0.07, `vertex ${i} faces up at ${(p.getY(i) - top(p.getX(i))).toFixed(3)} over the slab`); }
+  assert.ok(up >= 3);
+  const caps = partsUnder(L.group, 'cap'), crownCaps = partsUnder(byId.trees.group, 'cap');
+  assert.equal(caps.length, model.site.hedges.length + model.site.planters.filter(q => q.plant === 'thuja').length);
+  assert.equal(crownCaps.length, model.site.trees.length);
+  assert.equal(partsUnder(L.group, 'dust').length, model.site.paving.length + model.site.decks.length);
+  const lawn = byId.ground.group.children[1].material, snowHex = new THREE.Color(ctx.kit.REAL.snow).getHexString();
+  // mount() tells every switchable layer its starting state
+  L.setOn(true);
+  assert.equal(lawn.color.getHexString(), snowHex, 'the lawn is snowed while the layer is on');
+  L.setOn(false);
+  assert.notEqual(lawn.color.getHexString(), snowHex);
+  assert.equal(partsUnder(byId.trees.group, 'winter')[0].visible, false, 'the crowns\' snow hides');
+  L.setOn(true);
+  assert.equal(lawn.color.getHexString(), snowHex);
+});
+
+test('winter layer: snow falls only with snowfall, never under reduced motion, and stops when off', () => {
+  const still = winterOf().byId.winter;
+  assert.equal(partsUnder(still.group, 'flakes').length, 0);
+  for (let i = 0; i < 80; i++) still.update(0.05, 0.5);
+  assert.equal(still.update(0.05, 0.5), false, 'nothing moves without snowfall');
+  const { ctx } = makeCtx({ ...options, style: 'real', snowfall: true });
+  ctx.reduceMotion = true;
+  ['ground', 'site', 'trees'].forEach(id => BUILDERS[LAYERS.indexOf(id)].default(ctx));
+  assert.equal(partsUnder(BUILDERS[LAYERS.indexOf('winter')].default(ctx).group, 'flakes').length, 0, 'none under reduced motion');
+  const L = winterOf({ snowfall: true }).byId.winter, flakes = partsUnder(L.group, 'flakes')[0];
+  assert.ok(flakes);
+  const y0 = flakes.geometry.attributes.position.getY(0);
+  assert.equal(L.update(0.05, 0.5), true);
+  const y1 = flakes.geometry.attributes.position.getY(0);
+  assert.ok(y1 < y0 || y1 > y0 + 5, 'the flake fell or wrapped to the top');
+  for (let i = 0; i < 80; i++) L.update(0.05, 0.5);
+  L.setOn(false);
+  assert.equal(L.update(0.05, 0.5), false, 'an off layer keeps no frame loop going');
+});
+
 // a sun at alt degrees in the model's plane, from the horizontal direction [hx, hz]
 const sunAt = (alt, [hx, hz]) => {
   const h = Math.cos(alt * Math.PI / 180), n = Math.hypot(hx, hz);
@@ -1568,11 +1749,73 @@ test('card: a stretching hero leaves its grid rows at auto', () => {
 test('card: heroMount puts a hero in the real style with its layers as given, and leaves any other card as stored', () => {
   const stored = { surroundings: true, garden: false };
   assert.deepEqual(card.heroMount(true, 'simple', stored),
-    { style: 'real', layers: { future: false, surroundings: true, garden: false } });
+    { style: 'real', layers: { future: false, surroundings: true, garden: false }, snowfall: false });
   assert.deepEqual(card.heroMount(false, 'simple', stored),
-    { style: 'simple', layers: { future: false, surroundings: true, garden: false } });
-  assert.deepEqual(card.heroMount(false, 'real', undefined), { style: 'real', layers: { future: false } });
+    { style: 'simple', layers: { future: false, surroundings: true, garden: false }, snowfall: true });
+  assert.deepEqual(card.heroMount(false, 'real', undefined), { style: 'real', layers: { future: false }, snowfall: true });
   assert.deepEqual(stored, { surroundings: true, garden: false });
+  // the season's defaults sit under the switches
+  assert.deepEqual(card.heroMount(true, 'simple', {}, { winter: true }), { style: 'real', layers: { future: false, winter: true }, snowfall: false });
+  assert.deepEqual(card.heroMount(true, 'simple', { winter: false }, { winter: true }).layers.winter, false);
+});
+
+test('seasonOn and seasonWindow: 1 November to 31 March, the window across a new year', () => {
+  const d = (y, m, day) => new Date(y, m - 1, day, 12);
+  assert.equal(seasonOn(d(2026, 10, 31)), false);
+  assert.equal(seasonOn(new Date(2026, 10, 1, 0, 0)), true);
+  assert.equal(seasonOn(new Date(2027, 2, 31, 23, 59)), true);
+  assert.equal(seasonOn(d(2027, 4, 1)), false);
+  assert.equal(seasonWindow(d(2026, 11, 5)), '2026-11');
+  assert.equal(seasonWindow(d(2026, 12, 31)), '2026-11');
+  assert.equal(seasonWindow(d(2027, 1, 1)), '2026-11');
+  assert.equal(seasonWindow(d(2027, 3, 31)), '2026-11');
+  assert.equal(seasonWindow(d(2027, 4, 1)), 'gap-2027');
+  assert.equal(seasonWindow(d(2026, 10, 31)), 'gap-2026');
+});
+
+test('card: a winter switch holds for its season window only, the other switches as they were', () => {
+  const d = (y, m, day) => seasonWindow(new Date(y, m - 1, day, 12));
+  const stored = card.storeLayer({ trees: false }, 'winter', false, d(2026, 11, 5));
+  assert.deepEqual(stored, { trees: false, winter: { on: false, window: '2026-11' } });
+  assert.deepEqual(card.resolveLayers(stored, d(2027, 1, 20)), { trees: false, winter: false });
+  assert.deepEqual(card.resolveLayers(stored, d(2027, 11, 5)), { trees: false }, 'dropped next year');
+  assert.deepEqual(card.resolveLayers(stored, d(2027, 5, 1)), { trees: false }, 'dropped in the gap');
+  // a new switch drops the expired one; a plain boolean for the seasonal layer is never taken
+  assert.deepEqual(card.storeLayer(stored, 'trees', true, d(2027, 11, 5)), { trees: true });
+  assert.deepEqual(card.resolveLayers({ winter: true }, d(2026, 11, 5)), {});
+});
+
+test('card: the minute check turns winter on from 31 October to 1 November, unless a switch holds it', () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: k => store.delete(k) };
+  try {
+    const mod = { seasonOn, seasonWindow }, calls = [];
+    const el = Object.create(card.House3dCard.prototype);
+    Object.assign(el, { _heroLayers: {}, _isHero: false, _mod: mod, _view: { setLayer: (id, on) => calls.push([id, on]) } });
+    el._season = seasonOn(new Date(2026, 9, 31, 23, 59));
+    el._checkSeason(new Date(2026, 9, 31, 23, 59));
+    assert.deepEqual(calls, []);
+    el._checkSeason(new Date(2026, 10, 1, 0, 0));
+    assert.deepEqual(calls, [['winter', true]]);
+    el._checkSeason(new Date(2026, 10, 1, 0, 1));
+    assert.equal(calls.length, 1, 'once per change');
+    // a switch flipped in the new window holds
+    calls.length = 0;
+    el._season = false;
+    el._writeLayers(card.storeLayer({}, 'winter', false, seasonWindow(new Date(2026, 10, 1, 0, 1))));
+    el._checkSeason(new Date(2026, 10, 1, 0, 2));
+    assert.deepEqual(calls, []);
+  } finally { delete globalThis.localStorage; }
+});
+
+test('card: the hero mounts with the season\'s default and no snowfall, keeping its switch to itself', () => {
+  const mod = { seasonOn, seasonWindow }, now = new Date(2026, 11, 15, 12);
+  const el = Object.create(card.House3dCard.prototype);
+  Object.assign(el, { _heroLayers: {}, _isHero: true, _mod: mod, _view: { setLayer() {} }, _renderLayers() {} });
+  const start = card.heroMount(true, 'simple', card.resolveLayers(el._readLayers(), seasonWindow(now)), { winter: mod.seasonOn(now) });
+  assert.deepEqual(start, { style: 'real', layers: { future: false, winter: true }, snowfall: false });
+  el._switchLayer('winter', false);
+  assert.deepEqual(card.resolveLayers(el._heroLayers, seasonWindow(new Date())), { winter: false });
 });
 
 test('card: a hero keeps its layer switches to itself and a full view stores them', () => {

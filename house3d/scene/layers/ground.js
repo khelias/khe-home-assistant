@@ -1,6 +1,8 @@
 // The ground: a soft glow under the lot and the metre grid. The real style lays a lawn over the
 // lot and a neutral plane round it, both taking shadows, and no grid; the plane darkens to
-// OUT_NIGHT of its colour with the night, so the lot stays the lit place.
+// OUT_NIGHT of its colour with the night, so the lot stays the lit place. api.snow(amount), from
+// the winter layer, blends both towards the snow's colour, 0 none to 1 all; the night's darkening
+// works on top of it.
 const OUT_NIGHT = 0.22;
 export default function build({ THREE, kit, C, frame, model, style, state }) {
   const { ext, lotCx, lotCz } = frame;
@@ -14,8 +16,21 @@ export default function build({ THREE, kit, C, frame, model, style, state }) {
     out.position.set(lotCx, -0.1, lotCz);
     lawn.receiveShadow = out.receiveShadow = true;
     group.add(out, lawn);
-    const tint = kit.nightTint([out.material], OUT_NIGHT);
-    return { id: 'ground', group, update() { tint(state.night); } };
+    const tint = kit.nightTint([out.material], OUT_NIGHT), white = new THREE.Color(kit.REAL.snow);
+    const day = [lawn.material.color.clone(), out.material.color.clone()];
+    let night = 0;
+    return {
+      id: 'ground', group,
+      update() { if (night !== state.night) { night = state.night; tint(night); } },
+      api: {
+        snow(amount) {
+          const a = Math.min(1, Math.max(0, amount));
+          lawn.material.color.copy(day[0]).lerp(white, a);
+          tint.day[0].copy(day[1]).lerp(white, a);
+          tint(night);
+        }
+      }
+    };
   }
   const tex = kit.canvasTexture(256, [[0, 'rgba(32,58,120,0.6)'], [0.45, 'rgba(16,30,68,0.4)'], [1, 'rgba(6,12,27,0)']]);
   const pl = new THREE.Mesh(new THREE.PlaneGeometry(ext * 2.7, ext * 2.7), kit.basic({ map: tex }));

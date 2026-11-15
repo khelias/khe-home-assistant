@@ -8,6 +8,13 @@
 // hedges, the play area, fences, planters and the outdoor units cast them. See-through things
 // (the net, the mesh) do neither.
 const FENCE_H = 1.2, POST_STEP = 2.5;
+const HEDGE_H = 1.6, HEDGE_W = 0.8;
+// a thuja's outline over its planter, [radius, height] from the foot up: a column that narrows to
+// a point, turned round its axis
+const THUJA = [[0, 0], [0.26, 0], [0.3, 0.25], [0.29, 0.7], [0.23, 1.1], [0.13, 1.4], [0.04, 1.58], [0, 1.62]];
+const DECK_TOP = 0.12, PAVING_TOP = 0.02;
+
+const isTall = p => p.plant === 'thuja';
 
 export default function build({ THREE, kit, C, model, style }) {
   const site = model.site || {};
@@ -68,7 +75,7 @@ export default function build({ THREE, kit, C, model, style }) {
     }
   }
   (site.decks || []).forEach(v => {
-    shade(slab(v, deckM, deckE, [0, 0.12]), false);
+    shade(slab(v, deckM, deckE, [0, DECK_TOP]), false);
     const pts = [];
     if (isOutline(v)) outlinePlanks(v, pts);
     else {
@@ -77,7 +84,7 @@ export default function build({ THREE, kit, C, model, style }) {
     }
     group.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), plankM));
   });
-  (site.paving || []).forEach(v => shade(slab(paved(v), pathM, pathE, [0, 0.02]), false));
+  (site.paving || []).forEach(v => shade(slab(paved(v), pathM, pathE, [0, PAVING_TOP]), false));
   if (site.porch) shade(slab(paved(site.porch), pathM, pathE, [0, 0.03]), false);
   if (site.sandpit) {
     if (real) sandpit(site.sandpit);
@@ -100,9 +107,9 @@ export default function build({ THREE, kit, C, model, style }) {
   const hedgeM = real ? kit.surface('hedge') : basic({ color: C.hedge, opacity: 0.2 });
   const hedgeE = lineMat({ color: C.teal, opacity: 0.28 });
   (site.hedges || []).forEach(([[xa, za], [xb, zb]]) => {
-    const geo = new THREE.BoxGeometry(Math.hypot(xb - xa, zb - za), 1.6, 0.8);
+    const geo = new THREE.BoxGeometry(Math.hypot(xb - xa, zb - za), HEDGE_H, HEDGE_W);
     const m = new THREE.Mesh(geo, hedgeM);
-    m.position.set((xa + xb) / 2, 0.8, (za + zb) / 2);
+    m.position.set((xa + xb) / 2, HEDGE_H / 2, (za + zb) / 2);
     m.rotation.y = -Math.atan2(zb - za, xb - xa);
     if (!real) m.add(edges(geo, hedgeE));
     group.add(shade(m, true));
@@ -134,7 +141,21 @@ export default function build({ THREE, kit, C, model, style }) {
     (site.steps || []).forEach(s => box(group, pathM, pathE, s.rect, [0, s.height]));
     (site.planters || []).forEach(p => box(group, frameM, frameE, p.rect, p.y));
   }
-  return { id: 'site', group };
+  // for the winter layer, which dresses the hedges, the tall plants, the paving and the decks as
+  // built here
+  const api = {
+    // per hedge line: its ends [x, z], height and width
+    hedges: () => (site.hedges || []).map(([a, b]) => ({ a, b, height: HEDGE_H, width: HEDGE_W })),
+    // per tall plant (a thuja; the real style's alone): its foot [x, y, z] and its outline
+    // [[radius, height], ...] from the foot up
+    planters: () => (real ? (site.planters || []).filter(isTall) : []).map(({ rect: [x0, z0, x1, z1], y }) => ({
+      pos: [(x0 + x1) / 2, y[1], (z0 + z1) / 2], profile: THUJA
+    })),
+    // every paving and deck item as an outline [[x, z], ...] with its top
+    slabs: () => [...(site.paving || []).map(v => [v, PAVING_TOP]), ...(site.decks || []).map(v => [v, DECK_TOP])]
+      .map(([v, top]) => ({ outline: isOutline(v) ? v : outlineOf(v), top }))
+  };
+  return { id: 'site', group, api };
 
   // real style: a frame of four boards 0.05 thick, a 0.15 wide ledge on top, the sand inset
   // and 0.08 under the frame's top
@@ -287,9 +308,9 @@ export default function build({ THREE, kit, C, model, style }) {
     (site.planters || []).forEach(p => {
       const [x0, z0, x1, z1] = p.rect, top = p.y[1];
       shade(kit.solid(group, fin[p.finish || 'frame'], p.rect, p.y), true).userData.part = 'planter';
-      if (p.plant === 'thuja') {
-        const t = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 1.5, 12), hedgeM);
-        t.position.set((x0 + x1) / 2, top + 0.75, (z0 + z1) / 2);
+      if (isTall(p)) {
+        const t = new THREE.Mesh(new THREE.LatheGeometry(THUJA.map(([r, h]) => new THREE.Vector2(r, h)), 14), hedgeM);
+        t.position.set((x0 + x1) / 2, top, (z0 + z1) / 2);
         group.add(shade(t, true));
       } else if (p.plant === 'low') shade(kit.solid(group, hedgeM, [x0 + 0.08, z0 + 0.08, x1 - 0.08, z1 - 0.08], [top, top + 0.25]), true);
     });

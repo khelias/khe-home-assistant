@@ -41,7 +41,7 @@
 //                   or { feature: id, target } (a tap goes to options.onFeature). Layers are tried
 //                   in reverse build order, so the car wins over the floors, and a layer that is
 //                   off is skipped
-//   setOn(on)?      the layer was switched, also before the first frame
+//   setOn(on)?      its starting state before the first frame, then every switch
 //   api?            what the core re-exports (setCar, carState, carScreen) or another layer
 //                   calls through ctx.layer(id)
 //   dispose()?      frees what the kit's list and the scene traversal do not
@@ -61,7 +61,7 @@ import { RenderPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/R
 import { UnrealBloomPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/OutputPass.js';
 
-const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'interior', 'lights', 'car', 'future', 'fans'];
+const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'interior', 'lights', 'winter', 'car', 'future', 'fans'];
 const QUERY = new URL(import.meta.url).search;
 // a layer module that fails to load drops its layer, not the engine; the kit and the sun are required
 const [KIT, SUN, ...LOADED] = await Promise.allSettled(['kit', 'sun', ...LAYERS.map(id => `layers/${id}`)].map(p => import(`./scene/${p}.js${QUERY}`)));
@@ -192,6 +192,26 @@ export function modelFrame(model) {
   const ext = Math.max(lotBox[2] - lotBox[0], lotBox[3] - lotBox[1]);
   const E = ext / 41; // the prototype's framing was tuned on a 41 m lot
   return { roof, frame: { lotBox, wallBox, ext, E, lotCx, lotCz } };
+}
+
+/**
+ * seasonOn(date) -> true from 1 November to 31 March inclusive, by the local calendar date: the
+ * winter layer's default, shared by the card and the viewer.
+ */
+export function seasonOn(date) {
+  const m = date.getMonth();
+  return m >= 10 || m <= 2;
+}
+
+/**
+ * seasonWindow(date) -> the season window or the gap between two the date is in: 'YYYY-11' for
+ * the winter that starts in November of YYYY, 'gap-YYYY' for April to October of YYYY. A switch
+ * the user flips holds for that window only.
+ */
+export function seasonWindow(date) {
+  const y = date.getFullYear(), m = date.getMonth();
+  if (!seasonOn(date)) return `gap-${y}`;
+  return `${m >= 10 ? y : y - 1}-11`;
 }
 
 /**
@@ -507,6 +527,8 @@ export function inChip(m, chip, focus) {
  *   noWebGL          the text shown where WebGL is missing; default Estonian (the card passes
  *                    its language's)
  *   layers           { id: bool }: the starting state of the switchable layers, default on
+ *   snowfall         true lets the winter layer's snow fall while it is on (never under reduced
+ *                    motion); the card asks for it in the full view, not in the hero
  *   car              { profile, path }: a vehicle drawn from profile, built hidden. profile is in
  *                    metres in the car's frame (origin on the ground at its centre, +x forward,
  *                    y up): length, width, height, side and glass outlines [[x, y], ...],
@@ -531,9 +553,9 @@ export function inChip(m, chip, focus) {
  *   draws it. view is { position, target } for options.view; the fog follows the camera.
  * layers: [{ id, on }] for the switchable layers present and listed now; setLayer(id, on) switches
  *   one and ignores an unknown id. Switchable: 'markers' (the overlay; off hides every marker but
- *   an alert), 'fans' (listed while a marker has a look), 'trees', 'surroundings' and 'car' (off
- *   parks a running drive and closes the gate at once, and 'arrive' then parks). A layer that is
- *   off takes no taps.
+ *   an alert), 'fans' (listed while a marker has a look), 'trees', 'surroundings', 'winter' (the
+ *   real style's lights and snow) and 'car' (off parks a running drive and closes the gate at
+ *   once, and 'arrive' then parks). A layer that is off takes no taps.
  * markers: { id, pos: [x, y, z], icon, state: 'idle'|'on'|'alert'|'off', value?, label?,
  *            stateText?, room?, look?: [dx, dz], role?, level?: 0..1, glow?: 0..1, pulse?, warm? }
  *   label and stateText make the marker's accessible name. Markers take no pointer, so a drag
@@ -645,8 +667,14 @@ export function mount(element, model, options = {}) {
     scene.add(wrap);
     byId[L.id] = L;
     const e = { L, wrap, on: true, failed: false };
-    // a failed layer stays hidden, leaves the Kihid list and takes no more taps
-    guardLayer(L, () => { e.failed = true; e.on = false; wrap.visible = false; });
+    // a failed layer stays hidden, leaves the Kihid list and takes no more taps, and is told it is
+    // off (once, unguarded), so what it changed in another layer (the winter's snow on the
+    // ground) goes too
+    const setOn = L.setOn;
+    guardLayer(L, () => {
+      e.failed = true; e.on = false; wrap.visible = false;
+      try { if (setOn) setOn.call(L, false); } catch (err) { /* already logged as failed */ }
+    });
     layers.push(e);
   });
   function switchLayer(e, on) {
@@ -664,9 +692,10 @@ export function mount(element, model, options = {}) {
     shadowsDirty();
     invalidate();
   }
-  // a stored choice applies before the first frame, also to a layer not listed yet
+  // a stored choice applies before the first frame, also to a layer not listed yet; every
+  // switchable layer hears its starting state, on or off
   const start = options.layers || {};
-  layers.forEach(e => { if (e.L.toggle && start[e.L.id] === false) switchLayer(e, false); });
+  layers.forEach(e => { if (e.L.toggle) switchLayer(e, start[e.L.id] !== false); });
 
   /* ---------- post-processing, created on first use ---------- */
   let composer = null;
@@ -685,7 +714,7 @@ export function mount(element, model, options = {}) {
 
   /* ---------- the real style's sun, sky and shadows ---------- */
   // sun is the one shadow-casting light: the sun while it is up, the moon below the horizon
-  let sun = null, fill = null, hemi = null, glow = null, sunPlace = null, sunTime = null, sunTimer = 0, liftCasts = true;
+  let sun = null, fill = null, hemi = null, glow = null, sunPlace = null, sunTime = null, sunTimer = 0, liftCasts = true, liftAt = null;
   // the sky behind the scene, and the same sky as the environment the surfaces reflect, both
   // redrawn only when their colours move by a 40th (skyKey), not on every minute or slider step
   let skyTex = null, pmrem = null, envScene = null, envMat = null, envTarget = null, skyKey = '';
@@ -1279,11 +1308,15 @@ export function mount(element, model, options = {}) {
       while (samples.length > 2 && now - samples[0].t > 200) samples.shift();
     }
     if (!kit.near(fade.cur, fade.to)) { fade.cur += (fade.to - fade.cur) * k; moving = true; shadowsDirty(); } else if (fade.cur !== fade.to) { fade.cur = fade.to; shadowsDirty(); }
-    layers.forEach(({ L }) => {
-      if (!L.lift) return;
-      L.lift.position.y = (1 - fade.cur) * 4.5;
-      kit.applyFade(L.lift, Math.max(0, fade.cur * 1.25 - 0.25));
-    });
+    // the lifts move only with the roof; a layer that keeps animating (falling snow) leaves them be
+    if (liftAt !== fade.cur) {
+      liftAt = fade.cur;
+      layers.forEach(({ L }) => {
+        if (!L.lift) return;
+        L.lift.position.y = (1 - fade.cur) * 4.5;
+        kit.applyFade(L.lift, Math.max(0, fade.cur * 1.25 - 0.25));
+      });
+    }
     // the shadow pass ignores opacity, so the lift casts only while the roof is fully on
     if (real && liftCasts !== fade.cur > 0.99) {
       liftCasts = fade.cur > 0.99;
