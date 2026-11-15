@@ -8,10 +8,10 @@
 // LED every LED_GAP down it, so the strands read as a curtain of light. A near-vertical segment (a
 // climb, a post) carries its LEDs along the cable. With planters true a string winds round every
 // tall planter plant. Each LED is a small bright point with a soft halo round it, and under a
-// roof path a warm wash falls down the wall below; the real style has no bloom, so the halo and
-// the wash are the glow. A path rides the lift, so it rises and fades with the roof, unless it is
-// marked ground. kit.applyFade owns the opacity of everything in the lift, so the glow is colour
-// and size on additive materials, never opacity.
+// roof path a warm wash falls down the wall behind it, where there is one; the real style has no
+// bloom, so the halo and the wash are the glow. A path rides the lift, so it rises and fades with
+// the roof, unless it is marked ground. kit.applyFade owns the opacity of everything in the lift,
+// so the glow is colour and size on additive materials, never opacity.
 //
 // The snow: a slab on every roof and on the garage roof (in the lift), the lawn and the land round
 // the lot blended white through the ground layer's api.snow, a light dusting over the paving and
@@ -27,10 +27,20 @@ const WRAP_OUT = 0.03, WRAP_TURNS = 9, WRAP_GAP = 0.06; // the string round a ta
 // an LED's sprite size in metres and its colour's share, by day and at night; its halo's size at
 // night and its share of the LED's colour
 const LED_DAY = 0.05, LED_NIGHT = 0.11, LED_DAY_LEVEL = 0.35, HALO = 0.45, HALO_LEVEL = 0.13;
-const WASH_H = 1, WASH_LEVEL = 0.15; // the wall wash under a roof path: its height and its top's share
+// the wall wash under a roof path
+const WASH_LEVEL = 0.16; // its top's share of the LED colour
+const WASH_FADE = [[0, 1], [0.2, 0.72], [0.5, 0.42], [0.9, 0.2], [1.4, 0.07], [2, 0]]; // [depth, share] down the wall
+const WASH_REACH = 1; // how far behind the cable a wall may stand
+const WASH_STEP = 0.25; // the step between the rays that find it
+const WASH_PROBE = [0.3, 1]; // the rays' depths below the cable: a wall must stand at both
+const WASH_OFF = 0.01; // the wash's gap off the wall
+const WASH_EDGE = 0.03; // how far in from a segment's end its first ray goes
+const WASH_FLAT = 0.05; // how much the wall's distance may change across one piece
 const ROOF_SNOW = 0.08, ROOF_INSET = 0.05, CAP = 0.12, CAP_OUT = 0.04, TIP = 0.8;
 const DUST_OPACITY = 0.5, DUST_LIFT = 0.004;
 const FLAKES = 1500, FLAKE_MARGIN = 4, FLAKE_TOP = 12, FLAKE_SIZE = 0.14, FLAKE_FALL = [0.5, 1], FLAKE_SWAY = 0.15, FLAKE_NIGHT = 0.45;
+
+const lerp = (a, b, t) => a.map((v, k) => v + (b[k] - v) * t);
 
 // a seeded 0..1 sequence (mulberry32), so two builds place every flake alike
 function seeded(seed) {
@@ -56,7 +66,7 @@ export function icicleLeds(path, drop = DROP) {
     if (!len) continue;
     length += len;
     wires.push(a, b);
-    const at = t => a.map((v, k) => v + d[k] * t);
+    const at = t => lerp(a, b, t);
     if (Math.abs(d[1]) >= NEAR_VERTICAL * len) {
       const m = Math.max(1, Math.round(len / LED_GAP));
       for (let j = 0; j < m; j++) leds.push(at((j + 0.5) / m));
@@ -125,15 +135,47 @@ export default function build({ THREE, kit, model, options, style, state, roof, 
       parent.add(p);
     });
   };
-  // a warm wash down the wall under each strand-carrying segment: a vertical quad, bright at the
-  // cable and black (nothing, being additive) WASH_H below
+  // a warm wash on the wall behind each strand-carrying segment, where the building has one within
+  // WASH_REACH: found every WASH_STEP (building api.wallBehind), drawn on the wall itself,
+  // brightest under the cable and fading down WASH_FADE, and tapered where the wall behind it
+  // starts or ends; an open front (a porch, a carport) or a lintel over one gets none, since light
+  // hanging in the air reads as a curtain. Runs that meet end to end are one wall for the taper
+  const wallBehind = api('building').wallBehind;
   const wash = (runs, parent) => {
-    if (!runs.length) return;
     const pos = [], col = [];
-    runs.forEach(([[xa, ya, za], [xb, yb, zb]]) => {
-      pos.push(xa, ya, za, xb, yb, zb, xb, yb - WASH_H, zb, xa, ya, za, xb, yb - WASH_H, zb, xa, ya - WASH_H, za);
-      col.push(1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0);
+    const quad = (p, q, fp, fq) => {
+      for (let i = 1; i < WASH_FADE.length; i++) {
+        const [h0, v0] = WASH_FADE[i - 1], [h1, v1] = WASH_FADE[i];
+        const p0 = [p.x, p.y - h0, p.z, v0 * fp], q0 = [q.x, q.y - h0, q.z, v0 * fq];
+        const q1 = [q.x, q.y - h1, q.z, v1 * fq], p1 = [p.x, p.y - h1, p.z, v1 * fp];
+        [p0, q0, q1, p0, q1, p1].forEach(([x, y, z, c]) => { pos.push(x, y, z); col.push(c, c, c); });
+      }
+    };
+    const pieces = [];
+    let last = null;
+    if (wallBehind) runs.forEach(([a, b]) => {
+      const dx = b[0] - a[0], dz = b[2] - a[2], len = Math.hypot(dx, dz), joined = !!last && a.every((v, k) => v === last[k]);
+      last = b;
+      if (len < WASH_STEP / 2) return;
+      const n = Math.round(len / WASH_STEP), nx = -dz / len, nz = dx / len, e = WASH_EDGE / len;
+      const edges = Array.from({ length: n + 1 }, (_, i) => {
+        const [x, y, z] = lerp(a, b, Math.min(Math.max(i / n, e), 1 - e));
+        const [h, low] = WASH_PROBE.map(depth => wallBehind(x, y - depth, z, nx, nz, WASH_REACH));
+        if (!h || !low || low.s !== h.s || Math.abs(low.d - h.d) > WASH_FLAT) return null;
+        const d = (h.d - WASH_OFF) * h.s;
+        return { x: x + nx * d, y, z: z + nz * d, s: h.s, d: h.d };
+      });
+      // a piece needs the same wall at both its ends, so the end face of a thin wall takes none
+      for (let i = 0; i < n; i++) {
+        const p = edges[i], q = edges[i + 1];
+        pieces.push({ p, q, ok: !!(p && q && p.s === q.s && Math.abs(p.d - q.d) < WASH_FLAT), joined: i > 0 || joined });
+      }
     });
+    pieces.forEach((pc, i) => {
+      const next = pieces[i + 1], fp = pc.joined && pieces[i - 1].ok ? 1 : 0, fq = next && next.joined && next.ok ? 1 : 0;
+      if (pc.ok && (fp || fq)) quad(pc.p, pc.q, fp, fq);
+    });
+    if (!pos.length) return;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));

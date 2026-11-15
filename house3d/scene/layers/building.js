@@ -1,6 +1,7 @@
 // The buildings: walls, room floors, the simple style's furniture, roofs and roof steps, and the
 // garage roof. The real style's furniture, skirting and the walls' cut tops are the interior
-// layer's, which reads inRoom and cutOf through this layer's api.
+// layer's, which reads inRoom and cutOf through this layer's api; the winter layer finds the
+// walls behind its lights through wallBehind.
 // Walls that run up to a roof are cut at the ceiling, and the part above goes in lift with the
 // roofs, which rises and fades with the roof mode. The floors are the room tap targets and warm
 // with a room's markers in state 'on'. The real style draws them as lit surfaces: exterior walls
@@ -448,6 +449,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     });
   }
 
+  const roofMeshes = [];
   function shedRoof(points, h, thick) {
     const shape = new THREE.Shape(points.map(([x, z]) => new THREE.Vector2(x, z)));
     const geo = new THREE.ExtrudeGeometry(shape, { depth: thick, bevelEnabled: false });
@@ -461,9 +463,11 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
       // the extrusion's first group is the top and underside, the second the edge band
       const mesh = new THREE.Mesh(geo, [mR.roof, mR.frame]);
       mesh.castShadow = mesh.receiveShadow = true;
+      roofMeshes.push(mesh);
       return lift.add(mesh);
     }
     const mesh = new THREE.Mesh(geo, mR.wall);
+    roofMeshes.push(mesh);
     mesh.renderOrder = 4;
     lift.add(mesh, edges(geo, mR.edge, 20));
   }
@@ -481,12 +485,34 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     floorMeshes.forEach(m => { m.material.emissive.copy(glowColor); m.material.emissiveIntensity = 0; m.userData.glow = 0; });
     roomGlass.forEach(mt => { mt.emissive.copy(glowColor); mt.emissiveIntensity = 0; mt.userData.glow = 0; mt.userData.day = mt.opacity; });
   }
+  // the nearest wall face from (x, y, z) within reach along the horizontal normal (nx, nz), looked
+  // for both ways: { d, s }, its distance and side (1 along the normal, -1 against), or null. A
+  // wall is any of this layer's meshes but the floors and the roofs, the list made on first use.
+  // It reads the walls where they stand, so it answers for the rest pose only: call it at build
+  let walls = null;
+  const probe = new THREE.Raycaster(), from = new THREE.Vector3(), dir = new THREE.Vector3();
+  function wallBehind(x, y, z, nx, nz, reach) {
+    if (!walls) {
+      const skip = new Set([...floorMeshes, ...roofMeshes]);
+      walls = [];
+      [group, lift].forEach(g => { g.updateMatrixWorld(true); g.traverse(o => { if (o.isMesh && !skip.has(o)) walls.push(o); }); });
+    }
+    let best = null;
+    probe.far = reach;
+    [1, -1].forEach(s => {
+      probe.set(from.set(x, y, z), dir.set(nx * s, 0, nz * s));
+      const hit = probe.intersectObjects(walls, false)[0];
+      if (hit) { best = { d: hit.distance, s }; probe.far = hit.distance; }
+    });
+    return best;
+  }
+
   return {
     id: 'building',
     group,
     lift,
-    // for the interior layer, which dresses the real style's walls
-    api: { inRoom, cutOf },
+    // for the interior layer, which dresses the real style's walls, and the winter layer's wash
+    api: { inRoom, cutOf, wallBehind },
     markers(list) {
       const on = list.filter(m => m.state === 'on' && m.warm !== false && roomIds.has(m.room));
       warm = new Set(on.map(m => m.room));

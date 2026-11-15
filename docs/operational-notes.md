@@ -556,10 +556,12 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   LEDs along the cable on a near-vertical segment) and `planters: true` (a
   string winding round every tall planter plant). The trees carry no lights.
   They glow whenever it is dark: each LED a bright point with a soft halo,
-  and a warm wash down the wall under a roof path, since the real style has
-  no bloom. The glow is colour and size on additive materials, never
-  opacity, since the roof mode fades the lift's opacity: a path rides the
-  lift with the roof unless `ground` is true. The snow lies on every roof
+  and a warm wash fading down the wall behind a roof path, since the real
+  style has no bloom. The building api finds that wall (`wallBehind`), and
+  where none stands within a metre (an open porch or carport front) the
+  wash is left out, as light in the air reads as a curtain. The glow is colour and size on additive materials,
+  never opacity, since the roof mode fades the lift's opacity: a path rides
+  the lift with the roof unless `ground` is true. The snow lies on every roof
   and the garage roof (in the lift), on the lawn and the land
   round the lot (blended in through the ground layer's `api.snow`), as a
   light dusting on the paving and decks, as a cap on the hedges and tree

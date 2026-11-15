@@ -1402,6 +1402,16 @@ test('site, trees and ground api: the hedges, tall plants and crowns as built, t
 });
 
 const winterOf = (o = {}) => buildAll({ ...options, style: 'real', ...o });
+
+test('building api.wallBehind: the nearest wall face either way along a normal, within reach', () => {
+  const { wallBehind } = winterOf().byId.building.api;
+  // under the street wing's eave, the wall stands a little way in from the eave's path
+  const hit = wallBehind(28, 2.5, 1.68, 0, -1, 1);
+  assert.equal(hit.s, -1, 'the wall is against the normal');
+  assert.ok(hit.d > 0.05 && hit.d < 0.5, `the wall is just behind the eave (${hit.d})`);
+  assert.deepEqual(wallBehind(28, 2.5, 1.68, 0, 1, 1), { d: hit.d, s: 1 }, 'the same wall with the normal flipped, on the other side');
+  assert.equal(wallBehind(28, 2.5, 1.68, 0, -1, hit.d / 2), null, 'nothing within a shorter reach');
+});
 const partsUnder = (root, part) => { const out = []; root.traverse(o => { if (o.userData.part === part) out.push(o); }); return out; };
 
 test('winter layer: icicle strands in the lift with their halo and wall wash, the post on the ground', () => {
@@ -1418,6 +1428,15 @@ test('winter layer: icicle strands in the lift with their halo and wall wash, th
   assert.equal(partsUnder(L.lift, 'icicles-halo')[0].geometry, roofLeds[0].geometry, 'the halo shares the LEDs\' points');
   assert.equal(partsUnder(L.lift, 'wash').length, 1);
   assert.equal(partsUnder(L.group, 'wash').length, 0, 'no wash for the post');
+  // the wash lies on the wall behind the eave, and the open carport front gets none
+  const wash = partsUnder(L.lift, 'wash')[0].geometry.attributes.position, [carport, eave] = paths;
+  let onEave = 0;
+  for (let i = 0; i < wash.count; i++) {
+    const [x, z] = [wash.getX(i), wash.getZ(i)];
+    assert.ok(!(x > carport.path[0][0] - 0.1 && x < carport.path[1][0] + 0.1 && z < carport.path[0][2] + 1), `wash at the carport front, ${x}, ${z}`);
+    if (Math.abs(z - eave.path[0][2]) < 0.5) { onEave++; assert.ok(z > eave.path[0][2] + 0.05, `the eave wash is on the wall behind the cable, not at it (${z})`); }
+  }
+  assert.ok(onEave > 0, 'the eave has a wash');
   const roofCount = info.icicles.filter(ic => ic.lift).reduce((n, ic) => n + ic.leds, 0), postCount = info.icicles.filter(ic => !ic.lift).reduce((n, ic) => n + ic.leds, 0);
   assert.equal(roofLeds[0].geometry.attributes.position.count, roofCount);
   assert.equal(groundLeds[0].geometry.attributes.position.count, postCount + info.plants);
