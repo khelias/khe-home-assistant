@@ -2173,10 +2173,13 @@ soojuspump_seaded = {
 # The 3D view: the house3d card (house3d/) fed with every model layer
 # but the standalone viewer's showcase. A panel view, because a sections column stops at 500 px.
 # The merged model, with the family's room names, then lives only in HA's .storage.
+HOUSE3D_PATH = "maja-3d"
+
+
 def house3d_view(h, model):
     return {
         "title": "3D",
-        "path": "maja-3d",
+        "path": HOUSE3D_PATH,
         "icon": "mdi:floor-plan",
         "type": "panel",
         "cards": [{"type": "custom:house3d-card", "model": model, "views": camera_views(h)}],

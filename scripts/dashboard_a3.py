@@ -381,6 +381,7 @@ def build(house, people, model):
                 "views": dc.camera_views(h),
                 "height": HERO_HEIGHT,
                 "stretch": True,
+                "full_view": "/lovelace/" + dc.HOUSE3D_PATH,
                 "grid_options": {"columns": "full"},
             }
         ]
@@ -1436,5 +1437,5 @@ def overview(house, people, model):
         "teler": teler(h),
     }
     views = [a3.get(v["path"], v) for v in config["views"]]
-    config["views"] = sorted(views, key=lambda v: v["path"] == "maja-3d")
+    config["views"] = sorted(views, key=lambda v: v["path"] == dc.HOUSE3D_PATH)
     return config

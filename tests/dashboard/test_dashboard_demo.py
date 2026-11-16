@@ -24,6 +24,7 @@ HERO = {
     "type": "custom:house3d-card",
     "height": a3.HERO_HEIGHT,
     "stretch": True,
+    "full_view": "/lovelace/" + dc.HOUSE3D_PATH,
     "grid_options": {"columns": "full"},
 }
 

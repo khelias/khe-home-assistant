@@ -322,6 +322,10 @@ class Overview(unittest.TestCase):
         self.assertTrue(lovelace)
         self.assertEqual(lovelace - views, set())
 
+    def test_the_heros_expand_button_lands_on_the_3d_view(self):
+        hero = next(c for c in walk(OVERVIEW["views"][0]) if c.get("type") == "custom:house3d-card")
+        self.assertEqual(hero["full_view"], "/lovelace/" + paths(OVERVIEW)[-1])
+
     def test_every_lovelace_url_in_the_packages_lands_on_a_view(self):
         views = set(paths(OVERVIEW))
         found = set()

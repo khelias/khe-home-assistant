@@ -643,9 +643,11 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   kept from the real style shows a Praegu button there too. Escape closes any sheet, and so
   does a tap on empty canvas. Below 600 px of the card's own width (not the
   screen's) the bar moves to the bottom and a sheet opens just above it, so
-  the bar's buttons stay in reach. A hero has one button in its top right
+  the bar's buttons stay in reach. A hero keeps its buttons in its top right
   corner at every width: its sheet, Vaade, holds the roof switch and Lähtesta vaade
-  above the time and the layers.
+  above the time and the layers, and with `full_view` (a path; A3 gives the 3D
+  view's) an expand button beside it, Ava 3D-vaade, navigates there. Not the
+  browser's fullscreen: an iPhone grants that to a video only.
 - **Leaving and coming back:** HA disconnects the card when the view is
   left; the card keeps its camera and roof mode on the element and the next
   mount starts from them. A new model starts from the home view.

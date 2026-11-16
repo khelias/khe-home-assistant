@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 51;
+const HOUSE3D_VERSION = 52;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -41,6 +41,7 @@ export const TEXT = {
     roof: 'Katusega',
     open: 'Katuseta',
     resetView: 'Lähtesta vaade',
+    fullView: 'Ava 3D-vaade',
     layersTitle: 'Kihid',
     loadFailed: '3D-vaate laadimine ebaõnnestus.',
     retry: 'Proovi uuesti',
@@ -82,6 +83,7 @@ export const TEXT = {
     roof: 'Roof on',
     open: 'Roof off',
     resetView: 'Reset view',
+    fullView: 'Open the 3D view',
     layersTitle: 'Layers',
     loadFailed: 'Loading the 3D view failed.',
     retry: 'Try again',
@@ -440,8 +442,9 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .credit { position: absolute; top: 10px; left: 12px; max-width: calc(100% - 24px); font-size: 11px; line-height: 1.3; color: var(--ink); opacity: .85; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); pointer-events: none; }
 /* narrow follows the card's own width: a panel view on a wide screen can still be narrow */
 .narrow .bar { top: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: 50%; transform: translateX(50%); }
-/* a hero keeps its one button in the corner and drops its sheet from it */
+/* a hero keeps its buttons in the corner and drops its sheet from them */
 :host([hero]) .credit { max-width: calc(100% - 76px); }
+:host([hero]) .to-full .credit { max-width: calc(100% - 124px); }
 :host([hero]) .narrow .bar { top: 12px; bottom: auto; right: 12px; transform: none; }
 :host([hero]) .narrow .sheet { top: 60px; bottom: 8px; max-height: none; }
 /* the sheet ends above the bar, so its buttons stay in reach */
@@ -467,7 +470,7 @@ export class House3dCard extends Base {
     if (!config || !config.model || !Array.isArray(config.model.walls)) throw new Error('house3d-card: config.model with walls is required');
     const hero = !!heroSize(config).height;
     const heroChanged = this._config && hero !== this._isHero;
-    const changed = this._config && (heroChanged || this._config.model !== config.model || this._config.language !== config.language);
+    const changed = this._config && (heroChanged || this._config.model !== config.model || this._config.language !== config.language || this._config.full_view !== config.full_view);
     this._config = config;
     this._lang = langOf(config.language);
     this._t = TEXT[this._lang];
@@ -483,7 +486,7 @@ export class House3dCard extends Base {
     this._style = heroMount(hero, heroChanged ? readStyle() : this._style).style;
     this._devices = config.model.devices || [];
     this._car = config.model.car && config.model.car.profile && config.model.car.path ? config.model.car : null;
-    // another model starts from its own home view; another language or a hero redraws the card
+    // another model starts from its own home view; another language, a hero or full_view redraws the card
     if (changed) { this._unmount(); this._states.clear(); this._keep = null; }
     this._render();
     this._queueStretch();
@@ -606,12 +609,16 @@ export class House3dCard extends Base {
   _render() {
     if (!this._config || !this.isConnected || this._view || this._mounting) return;
     const sr = this.shadowRoot, t = this._t;
-    // a hero is the page's picture: one corner button, the view's controls in its sheet
+    // a hero is the page's picture: its corner buttons, the view's controls in its sheet
     // a remount (a new style, a scene) swaps the canvas in place, as it carries the view over
     const fresh = !this._keep, poster = fresh && readPoster(posterKey(this._isHero, this._style));
-    sr.innerHTML = `<style>${STYLE}</style><ha-card class="wrap"><div class="view${fresh && !poster ? ' loading' : ''}"></div>${poster ? `<img class="poster" alt="" src="${esc(poster)}">` : ''}
+    // a hero's expand button opens the dashboard's own 3D view (`full_view`): the browser's
+    // fullscreen is no use, as an iPhone grants it to a video only
+    const full = this._isHero && typeof this._config.full_view === 'string' && this._config.full_view ? this._config.full_view : null;
+    sr.innerHTML = `<style>${STYLE}</style><ha-card class="wrap${full ? ' to-full' : ''}"><div class="view${fresh && !poster ? ' loading' : ''}"></div>${poster ? `<img class="poster" alt="" src="${esc(poster)}">` : ''}
       <div class="bar">${this._isHero ? '' : `${this._modeSeg('roof')}
-        <button type="button" class="icon-btn" data-act="reset" aria-label="${t.resetView}" title="${t.resetView}"></button>`}
+        <button type="button" class="icon-btn" data-act="reset" aria-label="${t.resetView}" title="${t.resetView}"></button>`}${full ? `
+        <button type="button" class="icon-btn" data-act="full" aria-label="${t.fullView}" title="${t.fullView}"></button>` : ''}
         <button type="button" class="icon-btn" data-act="layers" aria-label="${this._isHero ? t.view : t.layersTitle}" title="${this._isHero ? t.view : t.layersTitle}" aria-expanded="false"></button></div>
       <aside class="sheet" hidden aria-live="polite"></aside>${this._credit()}</ha-card>`;
     this._sheet = null;
@@ -636,6 +643,8 @@ export class House3dCard extends Base {
       const start = heroMount(this._isHero, this._style, resolveLayers(this._readLayers(), mod.seasonWindow(now)), { [SEASONAL]: this._season });
       const reset = sr.querySelector('.bar [data-act="reset"]');
       if (reset) reset.innerHTML = mod.icon('reset');
+      const expand = sr.querySelector('.bar [data-act="full"]');
+      if (expand) expand.innerHTML = mod.icon('expand');
       sr.querySelector('[data-act="layers"]').innerHTML = mod.icon('layers');
       this._view = mod.mount(sr.querySelector('.view'), this._config.model, {
         onMarker: id => this._open(id),
@@ -668,6 +677,7 @@ export class House3dCard extends Base {
         const mode = ev.target.closest('[data-mode]');
         if (mode) this._view.setMode(mode.dataset.mode);
         else if (ev.target.closest('[data-act="reset"]')) this._view.reset();
+        else if (ev.target.closest('[data-act="full"]')) this._navigate(full);
       });
       sr.querySelector('[data-act="layers"]').addEventListener('click', () => (this._sheet === 'layers' ? this._closeSheet() : this._openLayers()));
       sr.querySelector('.sheet').addEventListener('click', ev => {
@@ -868,8 +878,12 @@ export class House3dCard extends Base {
   // cameras drawn on top of each other are one tap and one arrow apart
   _open(entityId) {
     const path = (this._config.views || {})[entityId];
-    if (path) this.dispatchEvent(new CustomEvent('hass-action', { detail: { action: 'tap', config: { tap_action: { action: 'navigate', navigation_path: path } } }, bubbles: true, composed: true }));
+    if (path) this._navigate(path);
     else this._moreInfo(entityId);
+  }
+
+  _navigate(path) {
+    this.dispatchEvent(new CustomEvent('hass-action', { detail: { action: 'tap', config: { tap_action: { action: 'navigate', navigation_path: path } } }, bubbles: true, composed: true }));
   }
 
   _moreInfo(entityId) {
