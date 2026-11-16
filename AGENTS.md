@@ -255,14 +255,14 @@ the operator first; an approval covers that task only.
   to the cards bumps `KHE_CARDS_VERSION` and the resource's `?v=`
   ([notes](docs/operational-notes.md#dashboard-cards-cards)).
 - **The house is the House room of the KHE family**
-  ([estate ADR-021](https://github.com/khelias/khe-architecture/blob/main/decisions/021-family-shell-and-design-check.md)):
+  ([estate ADR-035](https://github.com/khelias/khe-architecture/blob/main/decisions/035-family-shell-and-design-check-with-its-exceptions.md)):
   its accent (`house`) and its ground (`house-ground`) are in khe-sites'
   `DESIGN.md`. The house drawing and Home Assistant's dashboard keep their
   own look ([estate
   ADR-025](https://github.com/khelias/khe-architecture/blob/main/decisions/025-the-house-dashboard-keeps-its-own-look.md)):
   the dashboard may use glass, blur, gradients and its own controls, and
   honours reduced transparency and reduced motion. The family shell around
-  the house, the `/ha/` demo's header, follows ADR-021; this repo has no npm
+  the house, the `/ha/` demo's header, follows ADR-035; this repo has no npm
   project and is outside the family's design check (`khe-design-lint`). On
   `/ha/` the header takes the dark family values until the 3D view has a
   light theme.
