@@ -32,7 +32,11 @@ The layout follows HA's column count (ADR-010): one column stacks the hero with 
 Juhtimine and Kliima; from two columns the hero and the title sit on the left, two rows high, and
 the hero stretches to the tallest section beside it. Two columns: Elekter beside the hero,
 Juhtimine and Kliima under them. Three: Elekter and Juhtimine beside it, Kliima under Juhtimine.
-Four: all three beside it. Entity ids, names and confirmation texts come from
+Four: all three beside it. On screens of at least FOUR, which have four columns with or without
+HA's sidebar, the hero covers the left half instead (ADR-018): two columns wide and three rows
+high, stretching down to Kliima's bottom or the screen's, with Elekter and Juhtimine beside it and
+Kliima two columns wide under them. The view carries both layouts, each card under its screen
+condition. Entity ids, names and confirmation texts come from
 dashboard_config (its constants, or Kodu's own first page as dashboard_config.home() builds it);
 nothing here spells one, and nothing here changes what dashboard_config builds.
 
@@ -93,6 +97,12 @@ COLUMNS = 4
 # the wide order can show in one column.
 WIDE = "(min-width: 736px)"
 NARROW = "not all and (min-width: 736px)"
+# Four columns need 1440 px of content (four 320 px columns, three 32 px gaps, 32 px padding each
+# side) and HA's open sidebar takes 256 px, so 1696 px has four columns whatever the sidebar does.
+# HA measures the content without the scrollbar, a media query the viewport with it: 20 px more.
+# From here the hero covers the left half (ADR-018); below it ADR-010's layout stays.
+FOUR = "(min-width: 1716px)"
+BELOW_FOUR = "not all and (min-width: 1716px)"
 
 MEAN = {"source": "statistics", "type": "mean"}
 ONOFF = {"source": "history"}
@@ -353,21 +363,29 @@ def section(cards, span=1, rows=1):
     return s
 
 
+def screen(c, query):
+    """c shown only on screens matching query, on top of any visibility it already has."""
+    return {
+        **c,
+        "visibility": [*c.get("visibility", []), {"condition": "screen", "media_query": query}],
+    }
+
+
+def around(hero, title_chips):
+    """The title over the hero and the chips under it: the chips card drawn in two parts."""
+    return [{**title_chips, "part": "title"}, *hero, {**title_chips, "part": "chips"}]
+
+
+def screened(cards, query):
+    return [screen(c, query) for c in cards]
+
+
 def first(hero, title_chips):
-    """The first section: the title and chips under the hero in one column; from two columns
-    (WIDE, the hero beside the cards) the title over the hero and the chips under it."""
-    if not hero:
-        return [title_chips]
-
-    def shown(c, query, **kw):
-        return {**c, **kw, "visibility": [{"condition": "screen", "media_query": query}]}
-
-    return [
-        shown(title_chips, WIDE, part="title"),
-        *hero,
-        shown(title_chips, WIDE, part="chips"),
-        shown(title_chips, NARROW),
-    ]
+    """The first section below four columns: the title and chips under the hero in one column;
+    from two columns (WIDE, the hero beside the cards) the title over the hero and the chips
+    under it."""
+    title, *middle, chips_part = around(hero, title_chips)
+    return [screen(title, WIDE), *middle, screen(chips_part, WIDE), screen(title_chips, NARROW)]
 
 
 def build(house, people, model):
@@ -426,9 +444,34 @@ def build(house, people, model):
         value(dc.EXTRACT, "Väljatõmme", "extract", "teal", "toast väljuv õhk", MEAN, decimals=1),
         system(h),
     ]
-    # with a hero, the first section and Elekter are two rows high beside the other two; without
-    # one, three columns hold the three sections under the title
-    columns, span, rows = (COLUMNS, 1, 2) if hero else (3, 3, 1)
+    elekter = [heading("Elekter", "/lovelace/energia"), price()]
+    if hero:
+        # Below four columns ADR-010: the first section and Elekter two rows high beside the
+        # other two. From four (ADR-018) the hero's section two columns wide and three rows high,
+        # stretching down to Kliima, with Elekter and Juhtimine beside it and Kliima two columns
+        # wide under them. HA has no span per width, so both are here and the screen picks: a
+        # hidden card leaves the DOM, so only one 3D view runs, and a section of hidden cards
+        # takes no grid cell.
+        title_chips = chips(h)
+        left_half = around([{**c, "stretch": "beside"} for c in hero], title_chips)
+        sections = [
+            section(screened(first(hero, title_chips), BELOW_FOUR), 1, 2),
+            section(screened(left_half, FOUR), 2, 3),
+            section(elekter, rows=2),
+            section(controls),
+            section(screened(climate, BELOW_FOUR)),
+            section(screened(climate, FOUR), 2),
+        ]
+        columns = COLUMNS
+    else:
+        # three columns hold the three sections under the title
+        sections = [
+            section([chips(h)], 3),
+            section(elekter),
+            section(controls),
+            section(climate),
+        ]
+        columns = 3
     view = {
         "title": "Kodu",
         "path": "kodu",
@@ -436,12 +479,7 @@ def build(house, people, model):
         "type": "sections",
         "max_columns": columns,
         "background": BACKGROUND,
-        "sections": [
-            section(first(hero, chips(h)), span, rows),
-            section([heading("Elekter", "/lovelace/energia"), price()], rows=rows),
-            section(controls),
-            section(climate),
-        ],
+        "sections": sections,
     }
     return copy.deepcopy({"title": "Kodu", "views": [view]})
 

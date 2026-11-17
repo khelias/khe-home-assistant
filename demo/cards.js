@@ -232,10 +232,18 @@ const tracked = (entities, fn) => {
   };
 };
 
+// As HA's hui-card: a hidden card leaves the DOM and a comment keeps its place, so a hidden 3D
+// card disconnects and unmounts its view. `node` is what to attach first, by the screen alone,
+// so the hero a screen hides never connects; sync(states) shows or hides it.
 function withVisibility(conf, card) {
   if (!conf.visibility) return card;
-  const inner = card.update;
-  return { el: card.el, update: hass => { card.el.hidden = !visible(conf.visibility, hass.states); inner(hass); } };
+  const anchor = document.createComment(conf.type);
+  const sync = states => {
+    const [from, to] = visible(conf.visibility, states) ? [anchor, card.el] : [card.el, anchor];
+    if (from.parentNode) from.replaceWith(to);
+  };
+  const screen = visible(conf.visibility.filter(c => c.condition === 'screen'), {});
+  return { el: card.el, node: screen ? card.el : anchor, sync, update: hass => { sync(hass.states); card.update(hass); } };
 }
 
 const tappable = (cls, act, label) => (acting(act) ? `<button type="button" class="${cls}" data-tap="${cls}" aria-label="${esc(label)}">` : `<span class="${cls}">`);
@@ -543,36 +551,40 @@ export function renderSections(view, ctx) {
   // HA's structure, which the 3D hero's stretch looks for: .section elements in .content
   const grid = document.createElement('div');
   grid.className = 'content';
+  const syncs = [];
   const secs = (view.sections || []).map(s => {
     const sec = document.createElement('section');
     sec.className = 'section';
     if (s.row_span > 1) sec.style.gridRow = `span ${s.row_span}`;
-    for (const c of s.cards) {
+    const els = s.cards.map(c => {
       const k = card(c, ctx);
       place(k.el, c);
       parts.push(k);
-      sec.append(k.el);
-    }
-    if (s.visibility) parts.push({ update: hass => { sec.hidden = !visible(s.visibility, hass.states); } });
+      if (k.sync) syncs.push(k.sync);
+      sec.append(k.node || k.el);
+      return k.el;
+    });
     grid.append(sec);
-    return [s, sec];
+    return [s, sec, els];
   });
   el.append(grid);
+  // as HA's hui-section: a section with no card shown is hidden and takes no grid cell
+  const hideEmpty = states => {
+    for (const [s, sec] of secs) sec.hidden = !sec.children.length || !visible(s.visibility, states);
+  };
   let last = null;
-  const update = hass => { last = hass; parts.forEach(p => p.update(hass)); };
-  let cols = 0;
+  const update = hass => { last = hass; parts.forEach(p => p.update(hass)); hideEmpty(hass.states); };
   const layout = width => {
     const n = columnsFor(width, view.max_columns);
     el.style.setProperty('--n', String(n));
-    for (const [s, sec] of secs) {
+    for (const [s, sec, els] of secs) {
       const span = Math.min(s.column_span || 1, n);
       sec.style.gridColumn = `span ${span}`;
       sec.style.setProperty('--cols', String(12 * span));
-      for (const c of sec.children) if (c.dataset.span && c.dataset.span !== 'full') c.style.gridColumn = `span ${Math.min(Number(c.dataset.span), 12 * span)}`;
+      for (const c of els) if (c.dataset.span && c.dataset.span !== 'full') c.style.gridColumn = `span ${Math.min(Number(c.dataset.span), 12 * span)}`;
     }
-    // a screen condition answers anew at a new column count, where A3's queries change
-    if (last && n !== cols) update(last);
-    cols = n;
+    // screen conditions answer anew on every resize: A3's queries change within a column count
+    if (last) { syncs.forEach(f => f(last.states)); hideEmpty(last.states); }
   };
   // measured on the view, not on this box, whose width follows the column count
   ctx.resize(el, () => layout((el.parentElement || el).clientWidth - 32));

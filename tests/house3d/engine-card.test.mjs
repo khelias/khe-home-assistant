@@ -152,6 +152,34 @@ test('card: stretchBox keeps a stretching hero in the box its rows gave it', () 
   assert.equal(card.stretchBox({ height: 300 }), null);
   assert.equal(card.stretchBox({ stretch: true }), null);
   assert.equal(card.stretchBox(undefined), null);
+  assert.equal(card.stretchBox({ height: 300, stretch: 'beside' }), 312);
+});
+
+// a hero section two columns wide on a four-column view, sections in page coordinates
+const own = { left: 32, right: 856, top: 80, bottom: 500 };
+const rect = (left, top, bottom) => ({ left, right: left + 400, top, bottom });
+
+test('card: besideBottoms with `true` takes the sections starting on the hero\'s row', () => {
+  const rects = [rect(888, 81, 686), rect(1320, 79, 599), rect(888, 694, 900), rect(1320, 80, 80)];
+  assert.deepEqual(card.besideBottoms(own, rects, true), [686, 599]);
+});
+
+test('card: besideBottoms with \'beside\' takes the sections right of the hero from its top down', () => {
+  const elekter = rect(888, 80, 300), juhtimine = rect(1320, 80, 420), kliima = rect(888, 428, 640);
+  assert.deepEqual(card.besideBottoms(own, [elekter, juhtimine, kliima], 'beside'), [300, 420, 640]);
+  // Kliima in the hero's third row starts below the hero's section until the hero has grown:
+  // measured in the demo at 1720 x 900, the section ending at 618 and Kliima starting at 650
+  const short = { left: 16, right: 844, top: 65, bottom: 618 };
+  assert.deepEqual(card.besideBottoms(short, [rect(876, 65, 618), rect(1306, 65, 581), rect(876, 650, 915)], 'beside'), [618, 581, 915]);
+  // left of the hero, overlapping it, above it, or hidden (0 high): ignored
+  const left = { left: 0, right: 24, top: 80, bottom: 900 };
+  const over = { left: 600, right: 1000, top: 80, bottom: 900 };
+  assert.deepEqual(card.besideBottoms(own, [left, over, rect(888, 40, 900), rect(888, 200, 200)], 'beside'), []);
+});
+
+test('card: stretchHeight floors, so a hero half a pixel short of the sections beside it cannot creep', () => {
+  assert.equal(card.stretchHeight({ min: 312, top: 80, rest: 109, beside: [686.6], bottom: 796 }), 497);
+  assert.equal(card.stretchHeight({ min: 312, top: 80.4, rest: 109, beside: [686], bottom: 796 }), 496);
 });
 
 test('card: stretchHeight follows the tallest section on its row, within the screen and over its minimum', () => {
@@ -166,6 +194,8 @@ test('card: stretchHeight follows the tallest section on its row, within the scr
 test('card: a stretching hero leaves its grid rows at auto', () => {
   const el = Object.create(card.House3dCard.prototype);
   el._config = { height: 300, stretch: true };
+  assert.deepEqual(el.getGridOptions(), { columns: 'full', rows: 'auto' });
+  el._config = { height: 300, stretch: 'beside' };
   assert.deepEqual(el.getGridOptions(), { columns: 'full', rows: 'auto' });
   el._config = { height: 300 };
   assert.deepEqual(el.getGridOptions(), { columns: 'full', rows: 5 });

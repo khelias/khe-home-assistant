@@ -274,12 +274,24 @@ behind every value and device. It replaced the Bubble Card trial of
   HA's sidebar hidden or collapsed, put Elekter and Juhtimine beside it
   with Kliima under Juhtimine and scroll about 240 px at 820 px high; four,
   content at least 1440 px wide, fit without scrolling. With HA's sidebar
-  open the same tablet gets two columns.
+  open the same tablet gets two columns. From 1716 px
+  ([ADR-018](decisions/018-a3-hero-covers-the-left-half-on-four-columns.md)),
+  four columns with or without the sidebar, the hero covers the left half
+  instead: its section two columns wide and three rows high, Elekter and
+  Juhtimine beside it, Kliima two columns wide under them. The view holds
+  both layouts, every card of each under the screen condition
+  (`FOUR`, `BELOW_FOUR` in `dashboard_a3.py`); HA drops a hidden card from
+  the DOM and a section of hidden cards from the grid, so one canvas runs.
+  From 1440 to 1715 px without the sidebar the view keeps ADR-010's four
+  columns.
 - **The hero:** the 3D card's optional `height` (px) sets its height outside
   a panel view and its grid rows; with `stretch` too its grid rows are
   auto and it grows to the tallest section starting on its row, within the
   screen and never under the box its rows gave it (312 px for 300), found
-  through HA's `.section` element in the view's `.content`. With `height`
+  through HA's `.section` element in the view's `.content`. With
+  `stretch: "beside"` (ADR-018) it grows to the lowest section right of it
+  that starts at or below its top, so the left half reaches Kliima's
+  bottom or the screen's; the height is floored so it cannot creep. With `height`
   a vertical swipe on the house scrolls the page, a horizontal drag turns
   the house and the mouse wheel scrolls instead of zooming. A hero is always the real style with the live
   sun; it draws the surroundings with their ETAK credit (ADR-009), its layer
@@ -321,7 +333,10 @@ behind every value and device. It replaced the Bubble Card trial of
   each (one `number.set_value` per settled change).
   On a wide screen check that the hero still stretches beside Elekter: it
   reads `hui-sections-view`'s `.section` and `.content` and relies on
-  `row_span`. On Pergola compare the forecast's hours with a direct
+  `row_span`. From 1716 px check that it reaches past Elekter to Kliima's
+  bottom or the screen's and that the page has one canvas
+  (it relies on `hui-card` dropping a hidden card from the DOM and
+  `hui-section` hiding a section of hidden cards, ADR-018). On Pergola compare the forecast's hours with a direct
   `weather.get_forecasts` call through `ha-ws.py` (`call_service` with
   `return_response`, ADR-014) and point an hour; a blank chart with the
   cells still drawn means the call or its response changed. On Valve
@@ -742,7 +757,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   follow the date (today's and the month's use and cost, last month, the
   prices and the level), so a month total equals its days. The renderer
   imitates what A3 uses of HA's sections view: `row_span`, the `screen`
-  condition, the view background, `.content`/`.section` and window
+  condition, a hidden card leaving the DOM and a section of hidden cards
+  leaving the grid (ADR-018), the view background, `.content`/`.section` and window
   scrolling for the hero's stretch; a link to a page the demo lacks
   (`/energy`) shows a note. With `?lang=en` it is in
   English ([ADR-003](decisions/003-demo-in-english.md)): `demo.js` loads the

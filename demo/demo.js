@@ -132,6 +132,8 @@ const parentOf = pane => panes.find(p => !p.view.subview && linksTo(p.view, pane
 let current = null, cameFrom = null;
 const cards3d = [];
 const shown3d = () => (current && cards3d.find(el => current.el.contains(el))) || null;
+// A3's heroes: one per side of four columns (ADR-018), only one connected at a time
+const heroes = new Set();
 
 const resizers = new Map();
 const ro = new ResizeObserver(entries => entries.forEach(en => { const fn = resizers.get(en.target); if (fn && en.contentRect.width) fn(); }));
@@ -147,6 +149,7 @@ const ctx = {
     el.setAttribute('aria-label', t.house3d);
     el.setConfig({ ...conf, model });
     cards3d.push(el);
+    if (conf.height) heroes.add(el);
     return { el, update: h => { el.hass = h; } };
   },
   // a dashboard card from khe-cards.js, as HA mounts a custom: type
@@ -507,17 +510,19 @@ function startScenario(s) {
   show(pane);
   if (location.hash.slice(1) !== pane.view.path) location.hash = pane.view.path;
   // the scenario's sky is the shown view's 3D card's for the whole story, also while the visitor
-  // looks at another view; every other card returns to its own style and time
+  // looks at another view; every other card returns to its own style and time. A hero's twin
+  // takes it too, so a resize across four columns keeps the story's sky.
   const c3 = s.time ? shown3d() : null;
+  const sky = !c3 ? [] : heroes.has(c3) ? [...heroes] : [c3];
   // play() checks the scenario before anything changes, so one it rejects leaves no bar or scene
   stopScene = play(s, sim, {
     car: carEntity,
     onStep: st => { if (st.caption) beat(s.title, st.automation, st.caption); },
-    onTime: at => { if (c3) c3.setScene({ time: at }); },
+    onTime: at => { for (const el of sky) el.setScene({ time: at }); },
     onEnd: () => sceneDone(true)
   });
-  for (const el of cards3d) if (el !== c3) el.clearScene();
-  if (c3) c3.setScene({ style: 'real', time: s.time });
+  for (const el of cards3d) if (!sky.includes(el)) el.clearScene();
+  for (const el of sky) el.setScene({ style: 'real', time: s.time });
 
   sceneBar.style.minHeight = '';
   beat(s.title, null, s.summary);

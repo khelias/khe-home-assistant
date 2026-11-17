@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 52;
+const HOUSE3D_VERSION = 53;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -336,20 +336,35 @@ export function heroSize(config) {
 
 const viewHeight = () => (window.visualViewport ? window.visualViewport.height : window.innerHeight);
 
-// stretchBox(config) -> px or null: the height of a hero with `stretch`, before it measures its row:
-// the box its rows gave it, so a phone's sections stay where they were with the grid's rows at auto.
+// stretchBox(config) -> px or null: the height of a hero with `stretch` (true or 'beside'), before
+// it measures its row: the box its rows gave it, so a phone's sections stay where they were with the
+// grid's rows at auto.
 export function stretchBox(config) {
   const hero = heroSize(config);
   return config && config.stretch && hero.height ? hero.rows * 64 - 8 : null;
 }
 
+// besideBottoms(own, rects, mode) -> the bottoms of the sections a hero's section stretches to
+// (rects { left, right, top, bottom } in page coordinates, `own` its section's). `true`: those
+// starting on its row (ADR-010). 'beside': those right of it from its top down, as Elekter,
+// Juhtimine and Kliima beside a hero two columns wide and three rows high (ADR-018). Not only
+// those within its rows: a section measures to its content, not to the rows it spans, so the
+// hero's rows cannot be read from its rect, and Kliima starts below it until it has grown.
+// A hidden section measures 0 high and is left out.
+export function besideBottoms(own, rects, mode) {
+  return rects.filter(r => r.bottom > r.top && (mode === 'beside'
+    ? r.left >= own.right - 2 && r.top >= own.top - 2
+    : Math.abs(r.top - own.top) <= 2)).map(r => r.bottom);
+}
+
 // stretchHeight({ min, top, rest, beside, bottom }) -> px: in HA's sections view a hero with
-// `stretch` grows until its section ends where the tallest section starting on its row ends
-// (`beside`, page coordinates), never past `bottom` and never under `min`; `rest` is what its
-// section holds besides it. With nothing beside it, one column, it stays `min`.
+// `stretch` grows until its section ends where the lowest section `beside` it ends (page
+// coordinates), never past `bottom` and never under `min`; `rest` is what its section holds
+// besides it. With nothing beside it, one column, it stays `min`. Floored: a section half a pixel
+// taller than the rows it spans grows them, and the sections beside it with them, so it would creep.
 export function stretchHeight({ min, top, rest, beside, bottom }) {
   if (!beside.length) return min;
-  return Math.max(min, Math.round(Math.min(bottom, Math.max(...beside)) - top - rest));
+  return Math.max(min, Math.floor(Math.min(bottom, Math.max(...beside)) - top - rest));
 }
 
 // heroMount(hero, style, layers, season) -> { style, layers, snowfall }: what the engine mounts
@@ -547,11 +562,12 @@ export class House3dCard extends Base {
         [sec, ...others].forEach(s => this._stretchRo.observe(s));
         this._stretchSec = sec;
       }
-      const y = window.scrollY, own = sec.getBoundingClientRect(), top = own.top + y;
-      const beside = others.map(s => s.getBoundingClientRect())
-        .filter(r => r.height > 0 && Math.abs(r.top + y - top) <= 2).map(r => r.bottom + y);
+      const y = window.scrollY;
+      const page = el => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top + y, bottom: r.bottom + y }; };
+      const own = page(sec);
+      const beside = besideBottoms(own, others.map(page), this._config.stretch);
       // 24 px: the view's own bottom padding
-      h = stretchHeight({ min: this._box, top, rest: own.height - this.getBoundingClientRect().height, beside, bottom: viewHeight() - 24 });
+      h = stretchHeight({ min: this._box, top: own.top, rest: own.bottom - own.top - this.getBoundingClientRect().height, beside, bottom: viewHeight() - 24 });
     }
     if (h !== this._stretched) { this._stretched = h; this.style.setProperty('--house3d-height', `${h}px`); }
   }

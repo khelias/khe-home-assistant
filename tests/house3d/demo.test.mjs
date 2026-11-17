@@ -51,10 +51,34 @@ test("the shipped data: the house's Overview, A3 first and 3D last, on the fixtu
   const [first, last] = [dashboard.views[0], dashboard.views.at(-1)];
   assert.deepEqual([first.path, last.path], ['kodu', 'maja-3d']);
   assert.deepEqual(last.cards, [{ type: 'custom:house3d-card', views: cams }]);
-  assert.equal(typed(first).filter(c => c.type === 'custom:house3d-card').length, 1, 'the hero');
-  assert.ok(first.background && first.sections[0].row_span === 2);
+  assert.equal(typed(first).filter(c => c.type === 'custom:house3d-card').length, 2, 'the hero below and from four columns');
+  assert.ok(first.background && first.sections[0].row_span === 2 && first.sections[1].row_span === 3);
   for (const p of ['energia', 'soojuspump', 'ventilatsioon', 'pergola', 'valve', 'kaamerad', 'teler']) assert.ok(dashboard.views.some(v => v.path === p), p);
   assert.ok(dashboard.views.some(v => v.subview && v.path.startsWith('kaamera-')));
+});
+
+// HA's screen condition at a viewport width, for A3's min-width queries
+function atWidth(width, fn) {
+  const was = globalThis.matchMedia;
+  globalThis.matchMedia = q => {
+    const m = /^(not all and )?\(min-width: (\d+)px\)$/.exec(q);
+    assert.ok(m, q);
+    return { matches: !m[1] === width >= Number(m[2]) };
+  };
+  try { return fn(); } finally { globalThis.matchMedia = was; }
+}
+
+test('A3 shows one 3D hero at every width, the left half from four columns', () => {
+  const kodu = dashboard.views[0];
+  for (const [width, stretch, spans] of [[1720, 'beside', [2, 1, 1, 2]], [1600, true, [1, 1, 1, 1]], [820, true, [1, 1, 1, 1]], [375, true, [1, 1, 1, 1]]]) {
+    atWidth(width, () => {
+      const heroes = typed(kodu).filter(c => c.type === 'custom:house3d-card' && visible(c.visibility, data.states));
+      assert.deepEqual(heroes.map(c => c.stretch), [stretch], `${width} px`);
+      // as HA's hui-section: a section with none of its cards shown takes no cell
+      const shown = kodu.sections.filter(sec => sec.cards.some(c => visible(c.visibility, data.states)));
+      assert.deepEqual(shown.map(sec => sec.column_span || 1), spans, `${width} px`);
+    });
+  }
 });
 
 test('every card type and tile feature in the dashboard has a renderer', () => {

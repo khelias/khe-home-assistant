@@ -1,6 +1,6 @@
 # ADR-010: On wide screens A3's hero sits on the left, beside the cards
 
-- **Status:** Accepted (2026-11-12)
+- **Status:** Accepted (2026-11-12); decision 1 partly superseded by [ADR-018](018-a3-hero-covers-the-left-half-on-four-columns.md) from 1716 px, decision 3 extended by it
 - **Related:** [ADR-005](005-a3-glass-cards-history-sheet.md) (supersedes its decision 4 in part), [ADR-006](006-a3-front-page-live-hero.md), [ADR-007](007-a3-in-the-overview.md)
 
 ## Context

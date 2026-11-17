@@ -39,6 +39,21 @@ ENTITY_ID = re.compile(r"^(?:[a-z_]+\.[a-z0-9_]+|[a-z_]+:[a-z0-9_]+)$")
 walk = a3.walk
 
 
+def screens(c):
+    """The media queries of c's screen conditions, in order."""
+    return [v["media_query"] for v in c.get("visibility", []) if v["condition"] == "screen"]
+
+
+def unscreened(c):
+    """c without its screen conditions, any other visibility kept."""
+    return {**c, "visibility": [v for v in c.get("visibility", []) if v["condition"] != "screen"]}
+
+
+def narrow_matches(query):
+    """Whether a phone (under 736 px) matches one of A3's media queries."""
+    return {a3.WIDE: False, a3.NARROW: True, a3.FOUR: False, a3.BELOW_FOUR: True}[query]
+
+
 def kodu_entities(node):
     return {d["entity"] for d in walk(node) if isinstance(d.get("entity"), str)}
 
@@ -204,41 +219,93 @@ class Build(unittest.TestCase):
     def test_without_inputs_it_builds_without_the_hero(self):
         config = a3.build({}, [], None)
         (view,) = config["views"]
+        self.assertEqual(len(view["sections"]), 4)
         types = [c["type"] for s in view["sections"] for c in s["cards"]]
         self.assertNotIn("custom:house3d-card", types)
         self.assertIn("custom:khe-chips-card", types)
         self.assertEqual(view["sections"][0]["column_span"], view["max_columns"])
         self.assertTrue(all("row_span" not in sec for sec in view["sections"]))
+        self.assertEqual(
+            [sec["column_span"] for sec in view["sections"][1:]], [1, 1, 1], "no span of two"
+        )
+        queries = {q for s in view["sections"] for c in s["cards"] for q in screens(c)}
+        self.assertFalse(queries & {a3.FOUR, a3.BELOW_FOUR})
 
-    def test_the_hero_sits_left_two_rows_high_beside_elekter(self):
-        first, elekter, controls, climate = VIEW["sections"]
+    def test_the_six_sections_and_their_spans(self):
         self.assertEqual(VIEW["max_columns"], 4)
-        self.assertEqual((first["column_span"], first["row_span"]), (1, 2))
-        _title, hero, _chips, _narrow = first["cards"]
-        self.assertEqual(hero["type"], "custom:house3d-card")
-        self.assertTrue(hero["stretch"])
-        self.assertEqual(hero["height"], a3.HERO_HEIGHT)
-        self.assertEqual(hero["model"], MODEL)
-        self.assertEqual(elekter["row_span"], 2)
-        self.assertEqual(elekter["cards"][0]["heading"], "Elekter")
-        self.assertNotIn("row_span", controls)
-        self.assertNotIn("row_span", climate)
+        spans = [(s["column_span"], s.get("row_span", 1)) for s in VIEW["sections"]]
+        self.assertEqual(spans, [(1, 2), (2, 3), (1, 2), (1, 1), (1, 1), (2, 1)])
+        self.assertEqual(VIEW["sections"][2]["cards"][0]["heading"], "Elekter")
+        self.assertEqual(VIEW["sections"][3]["cards"][0]["heading"], "Juhtimine")
+        for n in (4, 5):
+            self.assertEqual(VIEW["sections"][n]["cards"][0]["heading"], "Kliima")
         self.assertIn("var(--primary-background-color)", VIEW["background"])
 
-    def test_wide_puts_the_title_over_the_hero_and_narrow_keeps_it_under(self):
+    def test_each_doubled_section_is_all_below_four_or_all_four(self):
+        below, half, _elekter, _controls, climate, climate_four = VIEW["sections"]
+        for sec, query in (
+            (below, a3.BELOW_FOUR),
+            (climate, a3.BELOW_FOUR),
+            (half, a3.FOUR),
+            (climate_four, a3.FOUR),
+        ):
+            for c in sec["cards"]:
+                self.assertIn(query, screens(c), c["type"])
+        for sec in VIEW["sections"][2:4]:
+            for c in sec["cards"]:
+                self.assertFalse({a3.FOUR, a3.BELOW_FOUR} & set(screens(c)), c["type"])
+        self.assertEqual(
+            [unscreened(c) for c in climate["cards"]], [unscreened(c) for c in climate_four["cards"]]
+        )
+
+    def test_one_3d_card_on_each_side_of_four_columns(self):
+        heroes = [c for c in walk(VIEW) if c.get("type") == "custom:house3d-card"]
+        self.assertEqual(len(heroes), 2)
+        below, four = heroes
+        self.assertEqual(screens(below), [a3.BELOW_FOUR])
+        self.assertEqual(screens(four), [a3.FOUR])
+        self.assertIs(below["stretch"], True)
+        self.assertEqual(four["stretch"], "beside")
+        self.assertEqual(below["height"], a3.HERO_HEIGHT)
+        self.assertEqual(below["model"], MODEL)
+        self.assertEqual(
+            {k: v for k, v in below.items() if k not in ("stretch", "visibility")},
+            {k: v for k, v in four.items() if k not in ("stretch", "visibility")},
+        )
+
+    def test_below_four_the_first_section_puts_the_title_over_the_hero_on_wide_screens(self):
         title, hero, chips, narrow = VIEW["sections"][0]["cards"]
-        screen = lambda c: [
-            v["media_query"] for v in c.get("visibility", []) if v["condition"] == "screen"
-        ]
         self.assertEqual((title["part"], chips["part"]), ("title", "chips"))
         self.assertNotIn("part", narrow)
-        self.assertEqual(screen(title), [a3.WIDE])
-        self.assertEqual(screen(chips), [a3.WIDE])
-        self.assertEqual(screen(narrow), [a3.NARROW])
-        self.assertEqual(screen(hero), [])
+        self.assertEqual(screens(title), [a3.WIDE, a3.BELOW_FOUR])
+        self.assertEqual(screens(chips), [a3.WIDE, a3.BELOW_FOUR])
+        self.assertEqual(screens(narrow), [a3.NARROW, a3.BELOW_FOUR])
+        self.assertEqual(screens(hero), [a3.BELOW_FOUR])
         strip = lambda c: {k: v for k, v in c.items() if k not in ("part", "visibility")}
         self.assertEqual(strip(title), strip(narrow))
         self.assertEqual(strip(chips), strip(narrow))
+
+    def test_from_four_the_left_half_holds_the_title_the_hero_and_the_chips(self):
+        title, hero, chips = VIEW["sections"][1]["cards"]
+        self.assertEqual(
+            (title["part"], hero["type"], chips["part"]), ("title", "custom:house3d-card", "chips")
+        )
+        for c in (title, hero, chips):
+            self.assertEqual(screens(c), [a3.FOUR])
+
+    def test_the_phone_sees_the_same_sections_and_cards_as_before(self):
+        def phone(c):
+            return all(narrow_matches(q) for q in screens(c))
+
+        shown = [[unscreened(c) for c in s["cards"] if phone(c)] for s in VIEW["sections"]]
+        shown = [cards for cards in shown if cards]
+        # the hero, then the title with its chips; Elekter, Juhtimine and Kliima as without a hero
+        hero, narrow = shown[0]
+        self.assertEqual(hero["type"], "custom:house3d-card")
+        self.assertEqual(narrow["type"], "custom:khe-chips-card")
+        self.assertNotIn("part", narrow)
+        plain = a3.build(HOUSE, PEOPLE, None)["views"][0]["sections"]
+        self.assertEqual(shown[1:], [[unscreened(c) for c in s["cards"]] for s in plain[1:]])
 
     def test_a_fresh_copy_every_call(self):
         first = a3.build(HOUSE, PEOPLE, MODEL)

@@ -29,6 +29,10 @@ HERO = {
 }
 
 
+# ADR-010's hero below four columns, ADR-018's from four
+HEROES = [a3.screen(HERO, a3.BELOW_FOUR), a3.screen({**HERO, "stretch": "beside"}, a3.FOUR)]
+
+
 def fixture_model():
     layers = house3d_model.read_layers(FIXTURE)
     return house3d_model.with_room_names(house3d_model.merge(layers, house3d_model.CARD))
@@ -104,7 +108,10 @@ class DemoConfig(unittest.TestCase):
         house3d = [c for c in cards(CONFIG) if c["type"] == "custom:house3d-card"]
         self.assertEqual(
             house3d,
-            [{**HERO, "views": DEMO_CAMERAS}, {"type": "custom:house3d-card", "views": DEMO_CAMERAS}],
+            [
+                *({**c, "views": DEMO_CAMERAS} for c in HEROES),
+                {"type": "custom:house3d-card", "views": DEMO_CAMERAS},
+            ],
         )
 
     def test_every_id_the_generator_emits_is_catalogued(self):
@@ -241,7 +248,7 @@ class DemoEnglish(unittest.TestCase):
         self.assertEqual(
             house3d,
             [
-                {**HERO, "views": DEMO_CAMERAS, "language": "en"},
+                *({**c, "views": DEMO_CAMERAS, "language": "en"} for c in HEROES),
                 {"type": "custom:house3d-card", "views": DEMO_CAMERAS, "language": "en"},
             ],
         )
