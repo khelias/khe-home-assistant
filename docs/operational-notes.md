@@ -510,9 +510,9 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   doors and frames white, exterior ones anthracite, a door with
   `"finish": "cladding"` on its opening in the walls' colour, and a glass
   door under 1.2 m wide in one leaf, without the centre mullion; inside,
-  an architectural model: oak planks and the wet rooms' wood-look tile on
-  the floors, near-black section caps on the walls' cut tops, white skirting
-  and a soft shade on the floor along the walls, and the furniture shaped by
+  an architectural model: oak planks along the plan's z and the wet rooms'
+  wood-look tile on the floors, near-black section caps on the walls' cut
+  tops, oak skirting and a soft shade on the floor along the walls, and the furniture shaped by
   its `kind`), chosen per browser in the Kihid sheet and kept in `localStorage` under
   `house3d-style`. Switching remounts the engine with the roof mode, camera
   and fog kept. The real style has no bloom; its shadow map is 2048 px, 1024
@@ -522,6 +522,16 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   layer that casts animates (the car and the gate; a layer says so with
   `shades`) or is switched, the style mounts or a resize replaces the map,
   never for a camera move.
+- **Contact shadows** darken what stands close together in the real style,
+  from 720 px width with the roof fully off. They stay off in the hero
+  (`heroMount` passes `ao: false`) and in the simple style. three's `GTAOPass`,
+  vendored with its shaders, loads by dynamic `import()` the first time they
+  are wanted; a failed load logs once and the plain draw goes on. The scene
+  still draws straight to the canvas and the pass's result multiplies over it,
+  because a composer's `OutputPass` would tone-map the sky and the sun's glow.
+  Sprites and transparent objects stay out of the pass's normals, so glass and
+  sheers leave no halo. The shadows fade over 0.3 s as the roof opens and
+  closes, and the render loop runs only during that fade.
 - **The sun** in the real style comes from HA's own location
   (`hass.config.latitude`/`longitude`, read at runtime, never stored in the
   card config) and the model's `georef.x_axis_bearing_deg`, the plan's
@@ -695,7 +705,14 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   `[x0, z0, x1, z1]` or a `circle` `[x, z, r]`, its `y` `[y0, y1]` and an
   optional `kind`, one of `FURNITURE_KINDS` in `scripts/house3d_model.py`
   (bed, headboard, wardrobe, sofa, table, desk, counter, cabinet, bath,
-  bench, appliance). The real style draws an item by its kind inside its
+  bench, appliance, base_units, wall_units, tall_units, hood, shelf,
+  splashback, tv, rug, curtain). `base_units`, `wall_units` and `tall_units`
+  also need `along`, `"x"` or `"z"`, and `fronts`, a list of `[type, width]`
+  from that axis's low end (types `door`, `drawers`, `oven`, `glass`,
+  `blank`) whose widths sum to the item's size on `along` within 1 cm; no
+  other kind takes either field. A `sofa` may name the rect's edges that carry
+  a `back` and an `arm` (`x0`, `x1`, `z0`, `z1`), so two items join into a
+  corner sofa. The real style draws an item by its kind inside its
   footprint and heights (a table's or desk's legs alone reach down to the
   floor), turning it to the nearest wall face and a bed's head to its
   headboard; an item without a kind is a plain warm grey block. The simple

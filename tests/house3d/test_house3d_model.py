@@ -279,6 +279,88 @@ def _furniture_kind(L):
     L["geometry"]["furniture"][0]["kind"] = "sink"
 
 
+def _units(L):
+    """The first furniture item as a valid 1.2 m run of base units along x."""
+    f = L["geometry"]["furniture"][0]
+    f.pop("circle", None)
+    f.update(
+        kind="base_units",
+        rect=[1, 1, 2.2, 1.6],
+        y=[0, 0.9],
+        along="x",
+        fronts=[["door", 0.6], ["drawers", 0.6]],
+    )
+    return f
+
+
+def _front_type(L):
+    _units(L)["fronts"][0][0] = "hatch"
+
+
+def _front_width(L):
+    _units(L)["fronts"][1][1] = 0
+
+
+def _front_shape(L):
+    _units(L)["fronts"][0] = "door"
+
+
+def _no_along(L):
+    del _units(L)["along"]
+
+
+def _bad_along(L):
+    _units(L)["along"] = "y"
+
+
+def _no_fronts(L):
+    del _units(L)["fronts"]
+
+
+def _fronts_sum(L):
+    _units(L)["fronts"][1][1] = 0.65
+
+
+def _fronts_sum_on_z(L):
+    _units(L)["along"] = "z"
+
+
+def _fronts_on_table(L):
+    f = _units(L)
+    f["kind"] = "table"
+    del f["along"]
+
+
+def _along_on_table(L):
+    f = _units(L)
+    f["kind"] = "table"
+    del f["fronts"]
+
+
+def _units_circle(L):
+    f = _units(L)
+    del f["rect"]
+    f["circle"] = [1, 1, 0.5]
+
+
+def _sofa_edge(L):
+    f = L["geometry"]["furniture"][0]
+    f["kind"] = "sofa"
+    f["back"] = ["north"]
+
+
+def _back_on_table(L):
+    f = L["geometry"]["furniture"][0]
+    f["kind"] = "table"
+    f["arm"] = ["x0"]
+
+
+def _back_on_circle(L):
+    f = L["geometry"]["furniture"][0]
+    f.pop("rect", None)
+    f.update(kind="sofa", circle=[1, 1, 0.5], back=["x0"])
+
+
 MUTATIONS = [
     ("window without sill", _no_sill, "a window needs a sill"),
     ("unknown opening kind", _bad_kind, "is not window, door or glassdoor"),
@@ -329,6 +411,20 @@ MUTATIONS = [
     ("as_of not ISO", _future_as_of, "future: as_of '15.01.2026' is not a date YYYY-MM-DD"),
     ("future name empty", _future_name, "future item tub: name missing"),
     ("unknown furniture kind", _furniture_kind, "furniture[0]: kind 'sink' is not one of bed, headboard"),
+    ("unknown front type", _front_type, "furniture[0].fronts[0]: type 'hatch' is not one of door, drawers"),
+    ("front of no width", _front_width, "furniture[0].fronts[1]: width 0 is not a positive number"),
+    ("front not a pair", _front_shape, "furniture[0].fronts[0]: must be [type, width]"),
+    ("units without along", _no_along, "furniture[0]: along None is not x or z"),
+    ("units along y", _bad_along, "furniture[0]: along 'y' is not x or z"),
+    ("units without fronts", _no_fronts, "furniture[0]: fronts must be a list of [type, width]"),
+    ("fronts that miss the width", _fronts_sum, "furniture[0]: fronts sum to 1.250 m, the item is 1.200 m on x"),
+    ("fronts measured on along", _fronts_sum_on_z, "furniture[0]: fronts sum to 1.200 m, the item is 0.600 m on z"),
+    ("fronts on a table", _fronts_on_table, "furniture[0]: fronts is only for base_units"),
+    ("along on a table", _along_on_table, "furniture[0]: along is only for base_units"),
+    ("units on a circle", _units_circle, "furniture[0]: a run of units needs a rect"),
+    ("sofa back on an unknown edge", _sofa_edge, "furniture[0]: back must be a list of x0, x1, z0, z1"),
+    ("arm on a table", _back_on_table, "furniture[0]: arm is only for sofa"),
+    ("sofa back on a circle", _back_on_circle, "furniture[0]: back needs a rect"),
 ]
 
 
@@ -360,6 +456,13 @@ class FurnitureKind(unittest.TestCase):
         L = layers()
         for f in L["geometry"]["furniture"]:
             f.pop("kind", None)
+        self.assertEqual(hm.validate(L), [])
+
+    def test_fronts_fill_the_run_within_a_centimetre(self):
+        L = layers()
+        f = _units(L)
+        self.assertEqual(hm.validate(L), [])
+        f["fronts"][1][1] = 0.609
         self.assertEqual(hm.validate(L), [])
 
 

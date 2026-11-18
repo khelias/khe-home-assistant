@@ -204,13 +204,13 @@ test('card: a stretching hero leaves its grid rows at auto', () => {
 test('card: heroMount puts a hero in the real style with its layers as given, and leaves any other card as stored', () => {
   const stored = { surroundings: true, garden: false };
   assert.deepEqual(card.heroMount(true, 'simple', stored),
-    { style: 'real', layers: { future: false, surroundings: true, garden: false }, snowfall: false });
+    { style: 'real', layers: { future: false, surroundings: true, garden: false }, snowfall: false, ao: false });
   assert.deepEqual(card.heroMount(false, 'simple', stored),
-    { style: 'simple', layers: { future: false, surroundings: true, garden: false }, snowfall: true });
-  assert.deepEqual(card.heroMount(false, 'real', undefined), { style: 'real', layers: { future: false }, snowfall: true });
+    { style: 'simple', layers: { future: false, surroundings: true, garden: false }, snowfall: true, ao: true });
+  assert.deepEqual(card.heroMount(false, 'real', undefined), { style: 'real', layers: { future: false }, snowfall: true, ao: true });
   assert.deepEqual(stored, { surroundings: true, garden: false });
   // the season's defaults sit under the switches
-  assert.deepEqual(card.heroMount(true, 'simple', {}, { winter: true }), { style: 'real', layers: { future: false, winter: true }, snowfall: false });
+  assert.deepEqual(card.heroMount(true, 'simple', {}, { winter: true }), { style: 'real', layers: { future: false, winter: true }, snowfall: false, ao: false });
   assert.deepEqual(card.heroMount(true, 'simple', { winter: false }, { winter: true }).layers.winter, false);
 });
 
@@ -254,7 +254,7 @@ test('card: the hero mounts with the season\'s default and no snowfall, keeping 
   const el = Object.create(card.House3dCard.prototype);
   Object.assign(el, { _heroLayers: {}, _isHero: true, _mod: mod, _view: { setLayer() {} }, _renderLayers() {} });
   const start = card.heroMount(true, 'simple', card.resolveLayers(el._readLayers(), seasonWindow(now)), { winter: mod.seasonOn(now) });
-  assert.deepEqual(start, { style: 'real', layers: { future: false, winter: true }, snowfall: false });
+  assert.deepEqual(start, { style: 'real', layers: { future: false, winter: true }, snowfall: false, ao: false });
   el._switchLayer('winter', false);
   assert.deepEqual(card.resolveLayers(el._heroLayers, seasonWindow(new Date())), { winter: false });
 });

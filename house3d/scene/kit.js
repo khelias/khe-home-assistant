@@ -17,9 +17,12 @@ const COLORS = {
 // pergola one anthracite, about RAL 7016 (the drawings' RR25 yellow frames were not built).
 // Inside, the walls are light grey, the doors and their frames white, the living floors oak planks
 // (planks()) and the wet rooms a dark wood-look tile (tiles()). The interior is drawn as an
-// architectural model: the walls' cut tops near black (cut), white skirting, and the furniture in
+// architectural model: the walls' cut tops near black (cut), oak skirting, and the furniture in
 // white linen, a blue-grey fabric, light oak, a dark worktop and white-grey cabinets; an item of no
-// known kind is a warm grey block (furniture), apart from the walls. The deck is dark composite,
+// known kind is a warm grey block (furniture), apart from the walls. Fitted kitchens are blue-grey
+// fronts (kitchen) under a brown worktop (kitchenTop) with dark handles, steel and black glass, the
+// wall behind them light tiles (splashTiles()); a TV's screen, a rug and sheer curtains have their
+// own surfaces, a sofa a near-black plum velvet. The deck is dark composite,
 // the paving light grey-beige concrete pavers with sandy joints (their stones come from pavers()),
 // the entrance step dark grey, the outdoor units white.
 // The bar fence and the gates are black bars (bars()), the other fences a dark wire mesh
@@ -34,14 +37,16 @@ const REAL = {
   fence: '#4a4d50', car: '#2f3336', neighbour: '#b9b6ae', road: '#6b6b68',
   timber: '#8a6a4c', sand: '#d6c6a0', slide: '#9ed8c2', nest: '#3d4a5c', pad: '#3f8a4b', mat: '#202325',
   net: '#151719', mesh: '#2c2f31', stone: '#56595b',
-  cut: '#2a2d30', skirting: '#efeeea', linen: '#ecebe6', fabric: '#7d8792', oak: '#d6c2a2', worktop: '#3b3b3b',
+  cut: '#2a2d30', skirting: '#c9a67c', linen: '#ecebe6', fabric: '#7d8792', oak: '#d6c2a2', worktop: '#3b3b3b',
   cabinet: '#e6e5e0', furniture: '#a59f95',
+  kitchen: '#c3c9cf', kitchenTop: '#5f4a3e', handle: '#2b2c2e', steel: '#a4a7aa', blackGlass: '#0e0f11', screen: '#07080a',
+  rug: '#b9b1a3', sheer: '#f4f2ec', sofa: '#2e2230',
   snow: '#f1f4f7'
 };
 // the cladding's boards: about 12 cm wide, rising to the right at 45 degrees, only their grooves
 // drawn, on a 2 m tile of the walls' metre UVs
 const BOARD_TILE = 2, BOARDS = 12, BOARD_PX = 512, GROOVE = 0.045;
-const GLASS_OPACITY = 0.35;
+const GLASS_OPACITY = 0.35, SHEER_OPACITY = 0.55;
 // the paving's stones: running-bond rows ROW deep of stones STONE long, the long joints waving
 // WAVE either way, on a PAVER_TILE m tile that holds whole rows and stones
 const PAVER_TILE = 0.9, STONE = 0.225, ROW = 0.1125, WAVE = 0.012, JOINT = 0.005, PAVER_PX = 512;
@@ -49,12 +54,14 @@ const PAVER_TILE = 0.9, STONE = 0.225, ROW = 0.1125, WAVE = 0.012, JOINT = 0.005
 // tile; a faint veil between them so the mipmapped fence still reads from far off
 const MESH_TILE = 0.2, MESH_X = 0.05, WIRE = 0.004, MESH_PX = 256, MESH_VEIL = 26;
 const BAR_STEP = 0.12, BAR = 0.02, RAIL = 0.04;
-// the oak floor: rows of planks about PLANK wide along world x, each row of planks one of
+// the oak floor: rows of planks about PLANK wide along world z, each row of planks one of
 // PLANK_LENS long from a staggered start, all dividing the FLOOR_TILE m tile; a plank's shade
 // varies PLANK_VAR either way, the joint between them darker
 const FLOOR_TILE = 2.4, PLANK = 0.18, PLANK_LENS = [0.8, 1.2, 2.4], PLANK_VAR = 0.06, PLANK_PX = 1024, PLANK_JOINT = 0.003;
 // the wet rooms' wood-look tile: TILE_W by TILE_L, half-bond, a lighter grout joint
 const TILE_W = 0.2, TILE_L = 1.2, GROUT = 0.004, TILE_PX = 512;
+// the kitchen wall's tiles: SPLASH_W wide and SPLASH_H high in a straight stack, a soft grey joint
+const SPLASH_TILE = 1.2, SPLASH_W = 0.6, SPLASH_H = 0.3, SPLASH_JOINT = 0.003, SPLASH_PX = 512;
 
 export function createKit(THREE, style = 'simple') {
   const C = Object.fromEntries(Object.entries(COLORS).map(([k, v]) => [k, new THREE.Color(v)]));
@@ -63,13 +70,20 @@ export function createKit(THREE, style = 'simple') {
   // real style only: a new lit material on every call, so a floor tints alone and a fade on
   // one group never reaches another's surfaces; o overrides, e.g. { transparent: true } for
   // what fades (the lift, the car)
+  // what differs from a matt surface: the standing seam and whatever is polished take the sky's
+  // sheen, the sofa's fabric none, and the sheer lets the window through
+  const FINISH = {
+    glass: { transparent: true, opacity: GLASS_OPACITY, roughness: 0.15, side: THREE.DoubleSide },
+    roof: { roughness: 0.7, metalness: 0.1 },
+    kitchenTop: { roughness: 0.32 },
+    sofa: { roughness: 1 },
+    blackGlass: { roughness: 0.12 },
+    screen: { roughness: 0.12 },
+    steel: { roughness: 0.38, metalness: 0.65 },
+    sheer: { transparent: true, opacity: SHEER_OPACITY, side: THREE.DoubleSide, depthWrite: false, forceSinglePass: true }
+  };
   const surface = style === 'real'
-    ? (name, o = {}) => keep(new THREE.MeshStandardMaterial({
-      color: new THREE.Color(REAL[name]), roughness: 0.85, metalness: 0,
-      ...(name === 'glass' ? { transparent: true, opacity: GLASS_OPACITY, roughness: 0.15, side: THREE.DoubleSide } : {}),
-      // the standing seam takes a soft sheen of the sky
-      ...(name === 'roof' ? { roughness: 0.7, metalness: 0.1 } : {}), ...o
-    }))
+    ? (name, o = {}) => keep(new THREE.MeshStandardMaterial({ color: new THREE.Color(REAL[name]), roughness: 0.85, metalness: 0, ...FINISH[name], ...o }))
     : undefined;
   const basic = o => keep(new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, ...o }));
   const lineMat = o => keep(new THREE.LineBasicMaterial({ transparent: true, ...o }));
@@ -185,7 +199,8 @@ export function createKit(THREE, style = 'simple') {
     const lens = Array.from({ length: rows }, (_, r) => PLANK_LENS[Math.floor(hash(r, 1) * PLANK_LENS.length)]);
     const starts = lens.map((len, r) => hash(r, 2) * len);
     plankTex = tileTexture(S, FLOOR_TILE, (i, j) => {
-      const u = (i + 0.5) * m, v = (j + 0.5) * m, r = Math.floor(v / w), len = lens[r];
+      // u runs along the planks: the texture's v, which the floors lay on world z
+      const u = (j + 0.5) * m, v = (i + 0.5) * m, r = Math.floor(v / w), len = lens[r];
       const ou = (u + starts[r]) % FLOOR_TILE, c = Math.floor(ou / len);
       if (inJoint(v, w, PLANK_JOINT) || inJoint(ou, len, PLANK_JOINT)) return [178, 178, 178, 255];
       const g = Math.round(0.93 * (1 + 2 * PLANK_VAR * (hash(r, c + 3) - 0.5)) * 255);
@@ -207,6 +222,20 @@ export function createKit(THREE, style = 'simple') {
       return [g, g, g, 255];
     });
     return wetTex;
+  }
+
+  // real style: the kitchen wall's tiles, one texture per mount, to multiply a light surface
+  let splashTex;
+  function splashTiles() {
+    if (splashTex) return splashTex;
+    const S = SPLASH_PX, m = SPLASH_TILE / S;
+    splashTex = tileTexture(S, SPLASH_TILE, (i, j) => {
+      const u = (i + 0.5) * m, v = (j + 0.5) * m;
+      if (inJoint(u, SPLASH_W, SPLASH_JOINT) || inJoint(v, SPLASH_H, SPLASH_JOINT)) return [196, 195, 191, 255];
+      const g = Math.round(0.97 * (1 + 0.025 * (hash(Math.floor(v / SPLASH_H), Math.floor(u / SPLASH_W) + 11) - 0.5)) * 255);
+      return [g, g, g, 255];
+    });
+    return splashTex;
   }
 
   // real style: the mesh fence's wires, white where a wire is, alpha MESH_VEIL between
@@ -292,5 +321,5 @@ export function createKit(THREE, style = 'simple') {
     return out;
   }
 
-  return { C, style, REAL, disposables, keep, basic, lineMat, mats, edges, box, prism, canvasTexture, applyFade, nightTint, near, spans, surface, solid, flatShape, boards, pavers, planks, tiles, wireMesh, bars };
+  return { C, style, REAL, disposables, keep, basic, lineMat, mats, edges, box, prism, canvasTexture, applyFade, nightTint, near, spans, surface, solid, flatShape, boards, pavers, planks, tiles, splashTiles, wireMesh, bars };
 }

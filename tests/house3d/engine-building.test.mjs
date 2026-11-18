@@ -351,6 +351,20 @@ test('interior: skirting along the room side of every face, broken at doors, and
   assert.deepEqual([shade.castShadow, shade.receiveShadow], [false, false]);
 });
 
+// one item of each fitted kind, in the galerii, past what the test above places
+const FITTED = [
+  { what: 'base units', kind: 'base_units', rect: [31.3, 14.4, 33.1, 15.0], y: [0, 0.9], along: 'x', fronts: [['drawers', 0.6], ['oven', 0.6], ['door', 0.6]] },
+  { what: 'wall units', kind: 'wall_units', rect: [31.3, 15.2, 32.5, 15.55], y: [1.45, 2.2], along: 'x', fronts: [['glass', 0.6], ['blank', 0.6]] },
+  { what: 'tall units', kind: 'tall_units', rect: [33.2, 14.4, 33.8, 15.0], y: [0, 2.2], along: 'z', fronts: [['door', 0.6]] },
+  { what: 'hood', kind: 'hood', rect: [31.3, 15.7, 31.9, 16.2], y: [1.4, 2.5] },
+  { what: 'shelf', kind: 'shelf', rect: [32.1, 15.7, 32.9, 15.95], y: [1.5, 1.62] },
+  { what: 'splashback', kind: 'splashback', rect: [31.3, 16.3, 33.1, 16.315], y: [0.9, 1.45] },
+  { what: 'tv', kind: 'tv', rect: [31.3, 16.5, 32.4, 16.68], y: [0.5, 1.2] },
+  { what: 'rug', kind: 'rug', rect: [32.5, 16.5, 34, 17.5], y: [0.02, 0.04] },
+  { what: 'curtain', kind: 'curtain', rect: [31.3, 17.6, 33.1, 17.7], y: [0.02, 2.4] }
+];
+const OWN_MESH = ['splashback', 'curtain'];
+
 // every furniture part: [item index, world box, surface name]
 function furnitureOf(L, kit) {
   const names = new Map(Object.keys(kit.REAL).map(n => [hexOf(kit, n), n]));
@@ -368,7 +382,8 @@ test('interior: furniture by kind, every part inside its item, fewer meshes than
     { what: 'appliance', kind: 'appliance', rect: [32.5, 10.2, 33.0, 10.8], y: [0, 1.7] },
     { what: 'tank', kind: 'appliance', circle: [32.7, 11.4, 0.3], y: [0, 1.8] },
     { what: 'headboard', kind: 'headboard', rect: [31.3, 12.0, 31.4, 13.0], y: [0, 1] },
-    { what: 'floating table', kind: 'table', rect: [31.4, 13.2, 32.4, 14.2], y: [0.72, 0.78] }
+    { what: 'floating table', kind: 'table', rect: [31.4, 13.2, 32.4, 14.2], y: [0.72, 0.78] },
+    ...FITTED
   );
   [model, extra].forEach(m => {
     const { ctx, L } = interiorOf(m);
@@ -383,14 +398,79 @@ test('interior: furniture by kind, every part inside its item, fewer meshes than
         assert.ok(b.min.y >= floor - 0.005 && b.max.y <= f.y[1] + 0.005, `${f.what}: inside its height`);
       });
       if (!f.kind) assert.deepEqual(mine.map(p => p[2]), ['furniture'], `${f.what}: one plain block`);
-      else assert.ok(mine.length >= (['headboard', 'appliance'].includes(f.kind) ? 1 : 2), `${f.what}: shaped`);
+      // a splashback and a curtain are meshes of their own, tested below
+      else if (!OWN_MESH.includes(f.kind)) assert.ok(mine.length >= (['headboard', 'appliance'].includes(f.kind) ? 1 : 2), `${f.what}: shaped`);
     });
     const meshes = partsOf(L, 'furniture');
     assert.ok(meshes.length < parts.length);
     meshes.forEach(o => assert.deepEqual([o.castShadow, o.receiveShadow], [true, true]));
   });
   const kinds = new Set(extra.furniture.map(f => f.kind).filter(Boolean));
-  assert.equal(kinds.size, 11, 'every kind drawn');
+  assert.equal(kinds.size, 20, 'every kind drawn');
+});
+
+test('interior: a splashback and a curtain are one mesh each inside their footprint, the curtain casting no shadow', () => {
+  const m = structuredClone(model);
+  m.furniture.push(...FITTED);
+  const { L } = interiorOf(m);
+  OWN_MESH.forEach(kind => {
+    const i = m.furniture.findIndex(f => f.kind === kind), [x0, z0, x1, z1] = m.furniture[i].rect, [y0, y1] = m.furniture[i].y;
+    const meshes = partsOf(L, kind);
+    assert.equal(meshes.length, 1, `${kind}: one mesh`);
+    assert.deepEqual(meshes[0].userData.items, [i]);
+    const [b] = boxesOf(meshes[0]);
+    assert.ok(b.min.x >= x0 - 0.005 && b.max.x <= x1 + 0.005 && b.min.z >= z0 - 0.005 && b.max.z <= z1 + 0.005, `${kind}: inside its footprint`);
+    assert.ok(b.min.y >= y0 - 0.005 && b.max.y <= y1 + 0.005, `${kind}: inside its height`);
+  });
+  assert.equal(partsOf(L, 'curtain')[0].castShadow, false);
+});
+
+test('interior: a run of units draws its fronts in order from the low end of along', () => {
+  const fronts = [['door', 0.5], ['oven', 0.6], ['drawers', 0.7]];
+  [['x', [31.2, 8.2, 33.0, 8.8]], ['z', [31.2, 8.2, 31.8, 10.0]]].forEach(([along, rect]) => {
+    const m = structuredClone(model), i = m.furniture.push({ what: 'run', kind: 'base_units', rect, y: [0, 0.9], along, fronts }) - 1;
+    const { ctx, L } = interiorOf(m), mine = furnitureOf(L, ctx.kit).filter(p => p[0] === i);
+    const low = along === 'x' ? rect[0] : rect[1], at = b => centre(b)[along] - low;
+    const inSpan = (name, a, b) => mine.filter(p => p[2] === name).map(p => at(p[1])).filter(v => v > a && v < b).length;
+    assert.equal(inSpan('handle', 0, 0.5), 1, 'a door first, its one handle');
+    assert.ok(inSpan('blackGlass', 0.5, 1.1) >= 1, 'the oven second');
+    assert.equal(inSpan('blackGlass', 0, 0.5) + inSpan('blackGlass', 1.1, 1.8), 0, 'black glass only on the oven');
+    assert.equal(inSpan('handle', 1.1, 1.8), 3, 'three drawers last');
+  });
+});
+
+test('interior: along turns a square unit\'s fronts, whichever side is longer', () => {
+  ['x', 'z'].forEach(along => {
+    const m = structuredClone(model), rect = [31.2, 8.2, 31.8, 8.8];
+    const i = m.furniture.push({ what: 'tall', kind: 'tall_units', rect, y: [0, 2.2], along, fronts: [['door', 0.3], ['door', 0.3]] }) - 1;
+    const { ctx, L } = interiorOf(m), handles = furnitureOf(L, ctx.kit).filter(p => p[0] === i && p[2] === 'handle');
+    assert.equal(handles.length, 4, 'two doors, each split in two');
+    handles.forEach(([, b]) => assert.ok(size(b)[along] > 0.1, `the handle runs along ${along}`));
+  });
+});
+
+test('interior: a hood too shallow to lean stays inside its footprint', () => {
+  const rect = [31.3, 8.2, 31.9, 8.4], m = structuredClone(model), i = m.furniture.push({ what: 'hood', kind: 'hood', rect, y: [1.4, 2.5] }) - 1;
+  const { ctx, L } = interiorOf(m);
+  furnitureOf(L, ctx.kit).filter(p => p[0] === i).forEach(([, b]) => assert.ok(b.min.z >= 8.195 && b.max.z <= 8.405 && b.min.y >= 1.395 && b.max.y <= 2.505));
+});
+
+test('interior: a tall unit divides its doors but draws one oven', () => {
+  const m = structuredClone(model), i = m.furniture.push({ what: 'tall', kind: 'tall_units', rect: [31.2, 8.2, 31.8, 8.8], y: [0, 2.2], along: 'x', fronts: [['oven', 0.6]] }) - 1;
+  const { ctx, L } = interiorOf(m), glass = furnitureOf(L, ctx.kit).filter(p => p[0] === i && p[2] === 'blackGlass');
+  assert.equal(glass.length, 1);
+});
+
+test('interior: a sofa carries its back and arms on the edges it names, none on the others', () => {
+  const rect = [31.2, 8.2, 33.2, 9.2], y = [0, 0.8];
+  const m = structuredClone(model), i = m.furniture.push({ what: 'sofa', kind: 'sofa', rect, y, back: ['z1'], arm: ['x1'] }) - 1;
+  const { ctx, L } = interiorOf(m), tall = furnitureOf(L, ctx.kit).filter(p => p[0] === i && p[2] === 'sofa' && p[1].max.y > 0.5);
+  assert.ok(tall.some(([, b]) => b.max.z > 9.19 && size(b).x > 1.9), 'the back runs along the z1 edge');
+  assert.ok(tall.some(([, b]) => b.max.x > 33.19 && size(b).z > 0.9), 'an arm on the x1 edge');
+  tall.forEach(([, b]) => {
+    if (b.max.x < 33.0) assert.ok(b.min.z > 8.2 + 0.1, 'only the arm reaches the open z0 edge');
+    if (b.min.x < 31.3) assert.ok(b.min.z >= 8.9, 'on the open x0 edge only the back reaches the end');
+  });
 });
 
 // a bed's pillows: its linen parts shorter than half a metre along the bed

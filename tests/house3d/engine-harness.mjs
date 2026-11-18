@@ -23,7 +23,7 @@ globalThis.document = {
 export const THREE = await import(new URL('vendor/three-0.186.1/build/three.module.js', E));
 export const { createKit } = await import(new URL('scene/kit.js', E));
 export const BUILDERS = await Promise.all(LAYERS.map(id => import(new URL(`scene/layers/${id}.js`, E))));
-export const { modelFrame, seasonOn, seasonWindow, buildLayer, guardLayer, syncCamera, toScreen, releaseVelocity, coast, homeBox, homeDir, homeView, pvNow, roofNormal, roofTop, tapAction } = await import(new URL('house3d.js', E));
+export const { modelFrame, seasonOn, seasonWindow, buildLayer, guardLayer, syncCamera, toScreen, releaseVelocity, coast, homeBox, homeDir, homeView, pvNow, roofNormal, roofTop, tapAction, aoWanted } = await import(new URL('house3d.js', E));
 export const { collide, inChip, hitRect } = await import(new URL('scene/overlay.js', E));
 export const card = await import(new URL('house3d-card.js', E));
 export const { OrbitControls } = await import(new URL('vendor/three-0.186.1/examples/jsm/controls/OrbitControls.js', E));

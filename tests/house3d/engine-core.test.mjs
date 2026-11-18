@@ -11,8 +11,28 @@ import {
   E, SNAPSHOT, LAYERS, THREE, createKit, BUILDERS, seasonOn, seasonWindow, buildLayer, guardLayer,
   syncCamera, toScreen, releaseVelocity, coast, homeBox, homeDir, homeView, pvNow, roofNormal,
   roofTop, OrbitControls, sunPosition, gridBearing, sunDirection, sunGlow, realLight, model,
-  options, makeCtx, buildAll, describeLayer, hexOf
+  options, makeCtx, buildAll, describeLayer, hexOf, aoWanted
 } from './engine-harness.mjs';
+
+test('aoWanted: the real style, not switched off, wide enough and the roof fully off', () => {
+  const on = { real: true, ao: undefined, width: 720, roofFade: 0 };
+  assert.equal(aoWanted(on), true);
+  assert.equal(aoWanted({ ...on, ao: true }), true);
+  assert.equal(aoWanted({ ...on, roofFade: 0.01 }), true, 'the fade counts as off from 0.01');
+  assert.equal(aoWanted({ ...on, real: false }), false, 'the simple style');
+  assert.equal(aoWanted({ ...on, ao: false }), false, 'switched off');
+  assert.equal(aoWanted({ ...on, width: 719 }), false, 'too narrow');
+  assert.equal(aoWanted({ ...on, roofFade: 0.02 }), false, 'the roof is coming on');
+});
+
+test('the vendored contact shadow pass is whole and still has the method the engine wraps', () => {
+  const jsm = new URL('vendor/three-0.186.1/examples/jsm/', E);
+  ['postprocessing/GTAOPass.js', 'postprocessing/Pass.js', 'shaders/GTAOShader.js', 'shaders/PoissonDenoiseShader.js', 'shaders/CopyShader.js', 'math/SimplexNoise.js']
+    .forEach(f => assert.ok(existsSync(new URL(f, jsm)), f));
+  const src = readFileSync(new URL('postprocessing/GTAOPass.js', jsm), 'utf-8');
+  assert.match(src, /_overrideVisibility\(\) \{/);
+  assert.match(src, /_visibilityCache/);
+});
 
 test('every layer builds and returns id and group', () => {
   // the interior is the real style's alone

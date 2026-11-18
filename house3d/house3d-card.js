@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 53;
+const HOUSE3D_VERSION = 54;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -367,15 +367,15 @@ export function stretchHeight({ min, top, rest, beside, bottom }) {
   return Math.max(min, Math.floor(Math.min(bottom, Math.max(...beside)) - top - rest));
 }
 
-// heroMount(hero, style, layers, season) -> { style, layers, snowfall }: what the engine mounts
+// heroMount(hero, style, layers, season) -> { style, layers, snowfall, ao }: what the engine mounts
 // with. A hero (a card with `height`, a dashboard's top) is always the real style with the live
 // sun; it keeps its layer switches to itself, not in the stored ones of the full 3D view (ADR-006,
 // ADR-009). Any other card is as the visitor left it. season holds the seasonal layers' defaults
-// for today ({ winter: seasonOn(now) }), under the switches; snow falls in the full view only,
-// since it keeps the render loop running and the hero sits on an always-on dashboard.
+// for today ({ winter: seasonOn(now) }), under the switches; snow falls and the contact shadows
+// show in the full view only, since the hero sits on an always-on dashboard.
 export function heroMount(hero, style, layers, season) {
   const all = { ...LAYERS_OFF, ...(season || {}), ...(layers || {}) };
-  return { style: hero ? 'real' : style, layers: all, snowfall: !hero };
+  return { style: hero ? 'real' : style, layers: all, snowfall: !hero, ao: !hero };
 }
 
 // The seasonal layer's switch holds only for the season window, or the gap between windows, it
@@ -678,6 +678,7 @@ export class House3dCard extends Base {
         onIdle: () => this._savePoster(),
         layers: start.layers,
         snowfall: start.snowfall,
+        ao: start.ao,
         style: this._style,
         mode: keep.mode,
         view: keep.view,

@@ -2,7 +2,8 @@
 // and draws generic markers over it. The HA card and the standalone viewer are thin shells
 // around mount(); neither the engine nor this directory carries any house data.
 //
-// This file is the core: renderer and bloom, the real style's sun, sky and shadows, camera,
+// This file is the core: renderer and bloom, the real style's sun, sky, shadows and contact
+// shadows, camera,
 // controls and framing, roof mode, taps and hover, the frame loop, resize and dispose, and the
 // layer registry. It builds no scene geometry. scene/kit.js makes each mount's colours, materials
 // and geometry helpers for its style; scene/sun.js holds the sun's position and direction as pure
@@ -62,6 +63,7 @@ import { EffectComposer } from './vendor/three-0.186.1/examples/jsm/postprocessi
 import { RenderPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/OutputPass.js';
+import { FullScreenQuad } from './vendor/three-0.186.1/examples/jsm/postprocessing/Pass.js';
 
 const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'interior', 'lights', 'winter', 'car', 'future', 'fans'];
 const QUERY = new URL(import.meta.url).search;
@@ -81,6 +83,9 @@ const BUILDERS = LOADED.map((r, i) => {
 const D2R = Math.PI / 180;
 const ROOF_GAP = 0.06; // walls stop just under the roof so the two outlines do not z-fight
 const BLOOM_MIN_WIDTH = 720;
+// the contact shadows: how far a surface darkens what is near it, in metres, the fade in and out in
+// seconds, and the roof's fade below which it counts as off
+const AO_RADIUS = 0.45, AO_SCALE = 1.15, AO_SAMPLES = 12, AO_RAMP = 0.3, AO_ROOF_OFF = 0.01;
 const FOCUS_SPAN = 7; // metres: the least a focused room's framing spans
 // the real style's sky texture, SKY_PX rows from the horizon, below SKY_HORIZON of the view's
 // height, to the zenith at its top
@@ -388,6 +393,14 @@ export function coast(v, dt, tau = 0.35) {
 }
 
 /**
+ * aoWanted({ real, ao, width, roofFade }) -> true when the contact shadows should show: the real
+ * style, not switched off by options.ao, at least BLOOM_MIN_WIDTH wide and the roof fully off.
+ */
+export function aoWanted({ real, ao, width, roofFade }) {
+  return !!real && ao !== false && width >= BLOOM_MIN_WIDTH && roofFade <= AO_ROOF_OFF;
+}
+
+/**
  * mount(element, model, options) -> { setMarkers, setRoomChips, focusRoom, setMode, setSelection, setCar,
  *                                     setLayer, setSun, setTime, reset, resize, dispose, mode, carState,
  *                                     carScreen, layers, time, view, sun }
@@ -417,6 +430,8 @@ export function coast(v, dt, tau = 0.35) {
  *   onFirstFrame()   the first frame is on the canvas
  *   onIdle()         the frame loop has stopped: nothing moves until the next change
  *   bloom            default true; always off below 720 px width and in the real style
+ *   ao               default true; false keeps the real style's contact shadows off, which are
+ *                    otherwise on from 720 px width with the roof fully off
  *   mode             the starting mode, 'roof' (default) or 'open'
  *   style            'simple' (default) or 'real'; another style is another mount
  *   view             { position, target } as the view getter gives it: the first framing puts
@@ -611,6 +626,60 @@ export function mount(element, model, options = {}) {
     return composer;
   }
   const bloomOn = () => !real && options.bloom !== false && width >= BLOOM_MIN_WIDTH;
+
+  /* ---------- the real style's contact shadows, loaded on first use ---------- */
+  // Not a composer pass: OutputPass would tone-map the sky and the sun's glow, which the plain draw
+  // leaves untouched. The scene draws to the canvas as ever and the shadows multiply over it.
+  let ao = null, aoLoading = false, aoLevel = 0;
+  function loadAO() {
+    aoLoading = true;
+    import('./vendor/three-0.186.1/examples/jsm/postprocessing/GTAOPass.js').then(({ GTAOPass }) => {
+      if (disposed) return;
+      const pass = new GTAOPass(scene, camera, width, height);
+      pass.output = GTAOPass.OUTPUT.Denoise;
+      pass.updateGtaoMaterial({ radius: AO_RADIUS, scale: AO_SCALE, samples: AO_SAMPLES });
+      // glass, sheers, the floor shade and the sun's glow have no surface to shade: drawn into the
+      // normals they would leave a dark halo round what is behind them
+      const seeThrough = m => (Array.isArray(m) ? m.some(x => x.transparent) : !!m && m.transparent);
+      pass._overrideVisibility = () => scene.traverseVisible(o => {
+        if (!(o.isPoints || o.isLine || o.isLine2 || o.isSprite || seeThrough(o.material))) return;
+        o.visible = false;
+        pass._visibilityCache.push(o);
+      });
+      const target = new THREE.WebGLRenderTarget(width, height, { depthBuffer: false });
+      const quad = new FullScreenQuad(new THREE.ShaderMaterial({
+        uniforms: { tAO: { value: target.texture }, level: { value: 0 } },
+        vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+        fragmentShader: 'uniform sampler2D tAO; uniform float level; varying vec2 vUv;'
+          + ' void main() { gl_FragColor = vec4(mix(vec3(1.0), texture2D(tAO, vUv).rgb, level), 1.0); }',
+        blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
+        blendSrc: THREE.DstColorFactor, blendDst: THREE.ZeroFactor,
+        blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
+        depthTest: false, depthWrite: false
+      }));
+      ao = { pass, target, quad };
+      invalidate();
+    }).catch(e => console.error('house3d: contact shadows failed to load', e));
+  }
+  // one step of the fade towards what is wanted now; true while it still moves
+  function stepAO(dt) {
+    const wanted = aoWanted({ real, ao: options.ao, width, roofFade: fade.cur });
+    if (wanted && !aoLoading) loadAO();
+    const to = wanted && ao ? 1 : 0;
+    if (aoLevel === to) return false;
+    const step = reduceMotion ? 1 : dt / AO_RAMP;
+    aoLevel = to > aoLevel ? Math.min(to, aoLevel + step) : Math.max(to, aoLevel - step);
+    return true;
+  }
+  function drawAO() {
+    ao.pass.render(renderer, ao.target, null);
+    renderer.setRenderTarget(null);
+    const clears = renderer.autoClear;
+    renderer.autoClear = false;
+    ao.quad.material.uniforms.level.value = aoLevel;
+    ao.quad.render(renderer);
+    renderer.autoClear = clears;
+  }
 
   /* ---------- the real style's sun, sky and shadows ---------- */
   // sun is the one shadow-casting light: the sun while it is up, the moon below the horizon
@@ -963,6 +1032,7 @@ export function mount(element, model, options = {}) {
     camera.updateProjectionMatrix();
     renderer.setSize(w, h, false);
     if (composer) composer.setSize(w, h);
+    if (ao) { ao.pass.setSize(w, h); ao.target.setSize(w, h); }
     overlay.resized(w < BLOOM_MIN_WIDTH);
     root.classList.toggle('h3d-narrow', w < BLOOM_MIN_WIDTH);
     if (sun) {
@@ -1046,6 +1116,7 @@ export function mount(element, model, options = {}) {
       });
     }
     layers.forEach(({ L }) => { if (L.update && L.update(dt, k)) { moving = true; if (L.shades) shadowsDirty(); } });
+    if (stepAO(dt)) moving = true;
     if (!moving && !dirty) { raf = 0; if (options.onIdle) options.onIdle(); return; }
     dirty = false;
     raf = requestAnimationFrame(frame);
@@ -1060,7 +1131,11 @@ export function mount(element, model, options = {}) {
     if (onFirstFrame) { onFirstFrame(); onFirstFrame = null; }
   }
   let onFirstFrame = options.onFirstFrame;
-  const draw = () => (bloomOn() ? getComposer().render() : renderer.render(scene, camera));
+  function draw() {
+    if (bloomOn()) return getComposer().render();
+    renderer.render(scene, camera);
+    if (ao && aoLevel > 0 && !renderer.getContext().isContextLost()) drawAO();
+  }
   // draws a frame first, since the canvas keeps no drawing buffer between frames
   function snapshot(maxWidth) {
     if (!framed || renderer.getContext().isContextLost()) return null;
@@ -1105,6 +1180,14 @@ export function mount(element, model, options = {}) {
     scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && !Array.isArray(o.material)) o.material.dispose(); });
     kit.disposables.forEach(d => d.dispose());
     if (composer) composer.dispose();
+    if (ao) {
+      ao.pass.dispose();
+      ao.pass.gtaoMaterial.dispose();
+      ao.pass.blendMaterial.dispose();
+      ao.target.dispose();
+      ao.quad.material.dispose();
+      ao.quad.dispose();
+    }
     renderer.dispose();
     renderer.forceContextLoss();
     root.remove();

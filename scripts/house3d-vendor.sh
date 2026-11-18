@@ -29,6 +29,7 @@ ADDONS=(
   postprocessing/MaskPass.js
   postprocessing/Pass.js
   postprocessing/UnrealBloomPass.js
+  postprocessing/GTAOPass.js
   postprocessing/OutputPass.js
   shaders/CopyShader.js
   shaders/LuminosityHighPassShader.js

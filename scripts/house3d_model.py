@@ -62,7 +62,21 @@ FURNITURE_KINDS = (
     "bath",
     "bench",
     "appliance",
+    "base_units",
+    "wall_units",
+    "tall_units",
+    "hood",
+    "shelf",
+    "splashback",
+    "tv",
+    "rug",
+    "curtain",
 )
+# a run of units: along is the axis its fronts run on, fronts [type, width] from that axis's low end
+FRONTED_KINDS = ("base_units", "wall_units", "tall_units")
+FRONT_TYPES = ("door", "drawers", "oven", "glass", "blank")
+FRONTS_SUM = 0.01  # how far the fronts' widths may miss the item's size on along
+SOFA_EDGES = ("x0", "x1", "z0", "z1")  # a sofa's back and arm: the rect's edges that carry one
 FUTURE_ROT = (0, 90, 180, 270)
 PANEL = (1.72, 1.13)  # a PV panel's long and short side; the engine lays them out the same way
 PANEL_GAP = 0.02
@@ -330,6 +344,8 @@ def validate(layers):
             bad(f"{where}: y must be [y0, y1] with y0 < y1")
         if "kind" in f and f["kind"] not in FURNITURE_KINDS:
             bad(f"{where}: kind {f['kind']!r} is not one of {', '.join(FURNITURE_KINDS)}")
+        _validate_fronts(where, f, bad)
+        _validate_sofa_edges(where, f, bad)
 
     site = model.get("site", {})
     lot = _lot(model)
@@ -513,6 +529,54 @@ def validate(layers):
         if not _point(f.get("pos"), 3):
             bad(f"showcase feature {f.get('id')}: pos must be [x, y, z]")
     return problems
+
+
+def _validate_fronts(where, f, bad):
+    """A run of units needs along and fronts that fill its size on that axis; no other item has
+    either."""
+    if f.get("kind") not in FRONTED_KINDS:
+        for key in ("along", "fronts"):
+            if key in f:
+                bad(f"{where}: {key} is only for {', '.join(FRONTED_KINDS)}")
+        return
+    along = f.get("along")
+    if along not in ("x", "z"):
+        bad(f"{where}: along {along!r} is not x or z")
+    if "rect" not in f:
+        bad(f"{where}: a run of units needs a rect")
+    fronts = f.get("fronts")
+    if not (isinstance(fronts, list) and fronts):
+        return bad(f"{where}: fronts must be a list of [type, width]")
+    whole = True
+    for j, front in enumerate(fronts):
+        if not (isinstance(front, list) and len(front) == 2):
+            bad(f"{where}.fronts[{j}]: must be [type, width]")
+            whole = False
+            continue
+        if front[0] not in FRONT_TYPES:
+            bad(f"{where}.fronts[{j}]: type {front[0]!r} is not one of {', '.join(FRONT_TYPES)}")
+        if not (_num(front[1]) and front[1] > 0):
+            bad(f"{where}.fronts[{j}]: width {front[1]!r} is not a positive number")
+            whole = False
+    if whole and along in ("x", "z") and _rect(f.get("rect")):
+        axis = "xz".index(along)
+        size = f["rect"][axis + 2] - f["rect"][axis]
+        total = sum(front[1] for front in fronts)
+        if abs(total - size) > FRONTS_SUM + 1e-9:
+            bad(f"{where}: fronts sum to {total:.3f} m, the item is {size:.3f} m on {along}")
+
+
+def _validate_sofa_edges(where, f, bad):
+    """A sofa may name the rect's edges that carry a back and an arm; no other item has either."""
+    for key in ("back", "arm"):
+        if key not in f:
+            continue
+        if f.get("kind") != "sofa":
+            bad(f"{where}: {key} is only for sofa")
+        elif "rect" not in f:
+            bad(f"{where}: {key} needs a rect")
+        elif not (isinstance(f[key], list) and all(e in SOFA_EDGES for e in f[key])):
+            bad(f"{where}: {key} must be a list of {', '.join(SOFA_EDGES)}")
 
 
 def _validate_festive(festive, lot, bad):

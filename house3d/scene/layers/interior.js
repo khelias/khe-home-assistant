@@ -1,12 +1,14 @@
 // The real style's interior, drawn as an architectural model: a near-black section cap on every
-// wall's flat cut top, white skirting and a soft shade on the floor along every wall face that
+// wall's flat cut top, oak skirting and a soft shade on the floor along every wall face that
 // has a house room in front of it, and the furniture shaped by its kind (scripts/house3d_model.py
 // FURNITURE_KINDS; an item without one is a warm grey block). It reads the building layer's
 // inRoom and cutOf through its api, so it builds after it, and builds nothing in the
 // simple style or without the building. Caps, skirting and shade are one InstancedMesh each, the
 // furniture one per material, so the interior costs a handful of draw calls; every mesh carries
 // userData.part, the furniture userData.items (the item index of each instance) and the caps
-// userData.walls (the wall index of each). With the roof fully on, the cut walls' caps are
+// userData.walls (the wall index of each). A run of fitted units draws its fronts in order from
+// the low end of its along axis. A splashback and a curtain are each one mesh of their own, part
+// 'splashback' or 'curtain'. With the roof fully on, the cut walls' caps are
 // hidden: the lifted wall above sits on them.
 const CAP_H = 0.01, CAP_LIFT = 0.002, CAP_INSET = 0.005; // inset from each face and a free end
 const SKIRT_H = 0.07, SKIRT_D = 0.012, FLOOR_Y = 0.02;
@@ -15,12 +17,20 @@ const SHADE_W = 0.3, SHADE_Y = 0.024, SHADE_OPACITY = 0.18, SHADE_PX = 32;
 const ROOF_ON = 0.99;
 // each kind's main surface; a circle item is a cylinder in it, except a table
 const MAIN = {
-  bed: 'oak', headboard: 'fabric', wardrobe: 'cabinet', sofa: 'fabric', table: 'oak', desk: 'oak',
-  counter: 'cabinet', cabinet: 'oak', bath: 'cabinet', bench: 'oak', appliance: 'unit'
+  bed: 'oak', headboard: 'fabric', wardrobe: 'cabinet', sofa: 'sofa', table: 'oak', desk: 'oak',
+  counter: 'cabinet', cabinet: 'oak', bath: 'cabinet', bench: 'oak', appliance: 'unit', rug: 'rug'
 };
 const TOP = 0.04, LEG = 0.05, LEG_IN = 0.03, PANEL = 0.03; // tables and desks
 const PILLOW_PER = 0.9, PILLOW_L = 0.38, GROOVE = 0.01, DOOR_W = 0.55;
 const SLAT = 0.09, SLAT_GAP = 0.02, SLAT_T = 0.03, SUPPORT = 0.05;
+// fitted units: the plinth and its setback, the worktop, the fronts' faces and the height where a
+// tall unit's fronts divide
+const PLINTH = 0.1, PLINTH_BACK = 0.06, WORKTOP = 0.04, OVERHANG = 0.02, FRONT_T = 0.02, RECESS = 0.008, TALL_SPLIT = 0.9;
+const FRONT_GAP = 0.003, STILE = 0.06, DRAWER_STILE = 0.04, DRAWERS = 3, HANDLE_L = 0.14, HANDLE_H = 0.012, HANDLE_T = 0.014;
+const FRONT_D = FRONT_T + HANDLE_T; // from the carcass to the outermost face of a front's handle
+const OVEN_H = 0.6, OVEN_STRIP = 0.09, HOOD_T = 0.04;
+const PLEAT = 0.12, PLEAT_DEPTH = 0.02, PLEAT_SEGMENTS = 8, PLEAT_SHADE = 0.3; // a curtain's folds, and how much of their slope the light sees
+const SEAT_W = 0.8, CUSHION_GAP = 0.012; // a sofa's cushions
 
 export default function build({ THREE, kit, model, roof, state, style, layer }) {
   if (style !== 'real') return null;
@@ -146,10 +156,39 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
     return Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t);
   }));
   const items = model.furniture || [];
+  const mats = new Map();
+  const mat = (name, make = () => kit.surface(name)) => mats.get(name) || mats.set(name, make()).get(name);
+  // a splashback: a thin slab on its rect, its UVs in metres along the wall and up it
+  function splashback(f, i) {
+    const [x0, z0, x1, z1] = f.rect, alongX = x1 - x0 >= z1 - z0;
+    const m = kit.solid(group, mat('splash', () => kit.surface('linen', { map: kit.splashTiles(), roughness: 0.42 })), f.rect, f.y);
+    const pos = m.geometry.attributes.position, uv = m.geometry.attributes.uv;
+    for (let k = 0; k < pos.count; k++) uv.setXY(k, alongX ? pos.getX(k) + m.position.x : pos.getZ(k) + m.position.z, pos.getY(k) + m.position.y);
+    m.userData = { part: 'splashback', items: [i] };
+    m.receiveShadow = true;
+  }
+  // a curtain: one sheet waved in pleats across the rect's short side, hung along its long side
+  function curtain(f, i) {
+    const [x0, z0, x1, z1] = f.rect, [y0, y1] = f.y, alongX = x1 - x0 >= z1 - z0;
+    const len = alongX ? x1 - x0 : z1 - z0, deep = alongX ? z1 - z0 : x1 - x0, amp = Math.min(PLEAT_DEPTH, Math.max(0, deep / 2 - 0.002));
+    const pleats = Math.max(1, Math.round(len / PLEAT)), segs = pleats * PLEAT_SEGMENTS;
+    const geo = new THREE.PlaneGeometry(len, y1 - y0, segs, 1), pos = geo.attributes.position;
+    for (let k = 0; k < pos.count; k++) pos.setZ(k, amp * Math.sin(((pos.getX(k) / len + 0.5) * pleats * 2 * Math.PI)));
+    geo.computeVertexNormals();
+    // a sheer scatters the light, so its folds shade softly
+    const nor = geo.attributes.normal;
+    for (let k = 0; k < nor.count; k++) nor.setXYZ(k, nor.getX(k) * PLEAT_SHADE, nor.getY(k) * PLEAT_SHADE, nor.getZ(k));
+    geo.normalizeNormals();
+    if (!alongX) geo.rotateY(Math.PI / 2);
+    const m = new THREE.Mesh(geo, mat('sheer'));
+    m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+    m.userData = { part: 'curtain', items: [i] };
+    group.add(m);
+  }
   // item f's own frame: s along its long side from the head end, d across from the back side;
   // box() turns a part given in it into a world rect
   function frameOf(f) {
-    const [x0, z0, x1, z1] = f.rect, alongX = x1 - x0 >= z1 - z0;
+    const [x0, z0, x1, z1] = f.rect, alongX = f.along ? f.along === 'x' : x1 - x0 >= z1 - z0;
     const [l0, l1, c0, c1] = alongX ? [x0, x1, z0, z1] : [z0, z1, x0, x1];
     const pt = (l, c) => (alongX ? [l, c] : [c, l]);
     const backLo = faceDist(pt((l0 + l1) / 2, c0)) <= faceDist(pt((l0 + l1) / 2, c1));
@@ -168,14 +207,28 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
       const [ca, cb] = backLo ? [c0 + d0, c0 + d1] : [c1 - d1, c1 - d0];
       return alongX ? [la, ca, lb, cb] : [ca, la, cb, lb];
     };
-    return { L: l1 - l0, D: c1 - c0, box };
+    return { L: l1 - l0, D: c1 - c0, box, alongX, frontSign: backLo ? 1 : -1 };
   }
 
-  const parts = new Map(); // surface name -> [{ i, rect, y }]
+  const parts = new Map(); // surface name -> [{ i, matrix }]
+  const push = (name, i, matrix) => {
+    if (!parts.has(name)) parts.set(name, []);
+    parts.get(name).push({ i, matrix });
+  };
   const add = (name, i, rect, y0, y1) => {
     if (rect[2] - rect[0] < 0.005 || rect[3] - rect[1] < 0.005 || y1 - y0 < 0.002) return;
-    if (!parts.has(name)) parts.set(name, []);
-    parts.get(name).push({ i, rect, y: [y0, y1] });
+    push(name, i, new THREE.Matrix4().compose(p.set((rect[0] + rect[2]) / 2, (y0 + y1) / 2, (rect[1] + rect[3]) / 2), q.identity(), sc.set(rect[2] - rect[0], y1 - y0, rect[3] - rect[1])));
+  };
+  // a slab t thick across the item, its high edge at depth d0 and height y1, its low edge at depth
+  // d1 and height y0, kept inside that box
+  const leaning = (name, i, { box, alongX, frontSign }, s0, s1, d0, d1, y0, y1, t) => {
+    const [x0, z0, x1, z1] = box(s0, s1, d0, d1), run = d1 - d0, rise = y1 - y0, angle = Math.atan2(rise, run);
+    // too shallow or too low to lean inside its box: an upright slab
+    if (run <= t || rise <= t) return add(name, i, [x0, z0, x1, z1], y0, y1);
+    const len = Math.min((run - t * Math.sin(angle)) / Math.cos(angle), (rise - t * Math.cos(angle)) / Math.sin(angle));
+    const axis = alongX ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1), turn = (alongX ? frontSign : -frontSign) * angle;
+    push(name, i, new THREE.Matrix4().compose(p.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), q.setFromAxisAngle(axis, turn),
+      alongX ? sc.set(x1 - x0, t, len) : sc.set(len, t, z1 - z0)));
   };
   const cylinders = [];
   const cylinder = (name, i, x, z, r, y0, y1) => cylinders.push({ name, i, x, z, r, y: [y0, y1] });
@@ -200,11 +253,33 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
       const n = Math.max(1, Math.round(L / DOOR_W));
       for (let k = 1; k < n; k++) part('worktop', (k * L) / n - GROOVE / 2, (k * L) / n + GROOVE / 2, D - 0.006, D, y0 + plinth + 0.02, y1 - 0.02);
     },
-    sofa({ part, L, D, y0, h }) {
-      part('fabric', 0, L, 0, D, y0, y0 + 0.55 * h);
-      part('fabric', 0, L, 0, Math.min(0.2, D / 2), y0, y0 + h);
-      part('fabric', 0, Math.min(0.15, L / 4), 0, D, y0, y0 + 0.75 * h);
-      part('fabric', L - Math.min(0.15, L / 4), L, 0, D, y0, y0 + 0.75 * h);
+    sofa({ world, item, frame: { alongX, frontSign }, y0, h }) {
+      // back and arm name the rect's edges that carry one, so two items can join into a corner
+      // sofa; without them the back is on the side nearer a wall and an arm on each end
+      const rect = item.rect, short = Math.min(rect[2] - rect[0], rect[3] - rect[1]);
+      const backs = item.back || [alongX ? (frontSign > 0 ? 'z0' : 'z1') : (frontSign > 0 ? 'x0' : 'x1')];
+      const arms = item.arm || (alongX ? ['x0', 'x1'] : ['z0', 'z1']);
+      const armW = Math.min(0.22, short / 4), backW = Math.min(0.14, short / 3), cushion = Math.min(0.14, short / 4), foot = 0.04, inset = 0.03;
+      const under = y0 + 0.12 * h, base = y0 + 0.34 * h, seat = y0 + 0.55 * h, armTop = y0 + 0.72 * h, top = y0 + h;
+      const shrink = (r, edges, w) => [r[0] + (edges.includes('x0') ? w : 0), r[1] + (edges.includes('z0') ? w : 0), r[2] - (edges.includes('x1') ? w : 0), r[3] - (edges.includes('z1') ? w : 0)];
+      const band = (r, edge, w) => ({ x0: [r[0], r[1], r[0] + w, r[3]], x1: [r[2] - w, r[1], r[2], r[3]], z0: [r[0], r[1], r[2], r[1] + w], z1: [r[0], r[3] - w, r[2], r[3]] }[edge]);
+      // cushions side by side along the rect's longer side, a small gap between them
+      const cushions = (r, a, b) => {
+        const onX = r[2] - r[0] >= r[3] - r[1], lo = onX ? r[0] : r[1], len = (onX ? r[2] : r[3]) - lo, n = Math.max(1, Math.round(len / SEAT_W));
+        for (let k = 0; k < n; k++) {
+          const c0 = lo + (k * len) / n + CUSHION_GAP / 2, c1 = lo + ((k + 1) * len) / n - CUSHION_GAP / 2;
+          world('sofa', onX ? [c0, r[1], c1, r[3]] : [r[0], c0, r[2], c1], a, b);
+        }
+      };
+      [[rect[0] + inset, rect[1] + inset], [rect[2] - inset - foot, rect[1] + inset], [rect[0] + inset, rect[3] - inset - foot], [rect[2] - inset - foot, rect[3] - inset - foot]]
+        .forEach(([x, z]) => world('handle', [x, z, x + foot, z + foot], y0, under));
+      world('sofa', rect, under, base);
+      backs.forEach(e => world('sofa', band(rect, e, backW), base, y0 + 0.86 * h));
+      arms.forEach(e => world('sofa', band(rect, e, armW), base, armTop));
+      const inner = shrink(shrink(rect, arms, armW), backs, backW), seats = shrink(inner, backs, cushion);
+      cushions(seats, base, seat);
+      // the back cushions along z take the corner, those along x stop at them
+      backs.forEach(e => cushions(band(e[0] === 'z' ? inner : [inner[0], seats[1], inner[2], seats[3]], e, cushion), base, top));
     },
     table(o) { legs(o, false); },
     desk(o) { legs(o, true); },
@@ -234,8 +309,113 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
       part('oak', 0, SUPPORT, 0, D, y0, y1 - SLAT_T);
       part('oak', L - SUPPORT, L, 0, D, y0, y1 - SLAT_T);
     },
-    appliance({ part, L, D, y0, y1 }) { part('unit', 0, L, 0, D, y0, y1); }
+    appliance({ part, L, D, y0, y1 }) { part('unit', 0, L, 0, D, y0, y1); },
+    base_units(o) {
+      const { part, L, D, y0, y1 } = o, top = y1 - WORKTOP, face = D - OVERHANG;
+      part('kitchen', 0, L, 0, face - PLINTH_BACK, y0, y0 + PLINTH);
+      part('kitchen', 0, L, 0, face - FRONT_D, y0 + PLINTH, top);
+      part('kitchenTop', 0, L, 0, D, top, y1);
+      frontsOf(o, (type, a, b) => front(part, type, a, b, face, y0 + PLINTH, top, 'top'));
+    },
+    wall_units(o) {
+      const { part, L, D, y0, y1 } = o;
+      part('kitchen', 0, L, 0, D - FRONT_D, y0, y1);
+      frontsOf(o, (type, a, b) => front(part, type, a, b, D, y0, y1, 'bottom'));
+    },
+    tall_units(o) {
+      const { part, L, D, y0, y1 } = o, split = Math.min(y1, y0 + TALL_SPLIT);
+      part('kitchen', 0, L, 0, D - PLINTH_BACK, y0, y0 + PLINTH);
+      part('kitchen', 0, L, 0, D - FRONT_D, y0 + PLINTH, y1);
+      frontsOf(o, (type, a, b) => {
+        // doors divide at the split; an oven or a stack of drawers is one front
+        if (type !== 'door' && type !== 'glass') return front(part, type, a, b, D, y0 + PLINTH, y1, 'top');
+        front(part, type, a, b, D, y0 + PLINTH, split, 'top');
+        if (y1 > split) front(part, type, a, b, D, split, y1, 'bottom');
+      });
+    },
+    hood({ part, lean, L, D, y0, y1 }) {
+      // the glass leans out from the wall as it falls, its low edge at the front
+      const slab = y0 + Math.min(0.42, 0.5 * (y1 - y0)), chimney = Math.min(0.28, L / 2), deep = Math.min(0.26, D);
+      lean('blackGlass', 0, L, deep, D, y0, slab, HOOD_T);
+      part('steel', (L - chimney) / 2, (L + chimney) / 2, 0, deep, y0 + 0.5 * (slab - y0), y1);
+    },
+    shelf({ part, L, D, y0, y1 }) {
+      const board = Math.min(0.04, y1 - y0), bracket = 0.02, inset = Math.min(0.12, L / 5);
+      part('oak', 0, L, 0, D, y1 - board, y1);
+      [inset, L - inset - bracket].forEach(s => part('handle', s, s + bracket, 0, D * 0.75, y0, y1 - board));
+    },
+    tv({ part, L, D, y0, y1 }) {
+      const foot = Math.min(0.05, (y1 - y0) / 6), panel = Math.min(0.05, D / 2), at = (D - panel) / 2;
+      part('handle', L * 0.3, L * 0.7, 0, D, y0, y0 + 0.012);
+      part('handle', L * 0.46, L * 0.54, at, at + panel, y0 + 0.012, y0 + foot);
+      part('blackGlass', 0, L, at, at + panel * 0.7, y0 + foot, y1);
+      part('screen', 0.008, L - 0.008, at + panel * 0.7, at + panel, y0 + foot + 0.008, y1 - 0.008);
+    },
+    rug({ part, L, D, y0, y1 }) {
+      const edge = Math.min(0.03, Math.min(L, D) / 4);
+      part('rug', 0, L, 0, D, y0, y0 + 0.6 * (y1 - y0));
+      part('rug', edge, L - edge, edge, D - edge, y0, y1);
+    }
   };
+  // calls draw(type, s0, s1) for each front, from the run's low end, scaled to fill its length
+  function frontsOf({ item, L }, draw) {
+    const total = item.fronts.reduce((a, [, w]) => a + w, 0);
+    let at = 0;
+    item.fronts.forEach(([type, w]) => {
+      const len = (w * L) / total;
+      draw(type, at + FRONT_GAP / 2, at + len - FRONT_GAP / 2);
+      at += len;
+    });
+  }
+  // a framed leaf between s0 and s1, y0 and y1, its face at depth d: a raised frame round a
+  // recessed panel, the panel given by inner(s0, s1, y0, y1) or a plain recess
+  function leaf(part, s0, s1, y0, y1, d, stile, inner) {
+    const st = Math.min(stile, (s1 - s0) / 3, (y1 - y0) / 3);
+    part('kitchen', s0, s0 + st, d - FRONT_T, d, y0, y1);
+    part('kitchen', s1 - st, s1, d - FRONT_T, d, y0, y1);
+    part('kitchen', s0 + st, s1 - st, d - FRONT_T, d, y0, y0 + st);
+    part('kitchen', s0 + st, s1 - st, d - FRONT_T, d, y1 - st, y1);
+    if (inner) inner(s0 + st, s1 - st, y0 + st, y1 - st);
+    else part('kitchen', s0 + st, s1 - st, d - FRONT_T, d - RECESS, y0 + st, y1 - st);
+  }
+  // a handle across the leaf's middle, level with y, standing proud of face d
+  const handleAt = (part, s0, s1, y, d, name = 'handle', len = HANDLE_L) => {
+    const l = Math.min(len, (s1 - s0) * 0.8), c = (s0 + s1) / 2;
+    part(name, c - l / 2, c + l / 2, d, d + HANDLE_T, y - HANDLE_H / 2, y + HANDLE_H / 2);
+  };
+  // one front of a run, its handles reaching depth d: where says on which edge of a door the
+  // handle sits
+  function front(part, type, s0, s1, d, y0, y1, where) {
+    const h = y1 - y0, a = y0 + FRONT_GAP / 2, b = y1 - FRONT_GAP / 2, proud = d - HANDLE_T;
+    if (type === 'blank') return part('kitchen', s0, s1, proud - FRONT_T, proud, a, b);
+    if (type === 'drawers') {
+      for (let k = 0; k < DRAWERS; k++) {
+        const lo = a + (k * (b - a)) / DRAWERS + FRONT_GAP / 2, hi = a + ((k + 1) * (b - a)) / DRAWERS - FRONT_GAP / 2;
+        leaf(part, s0, s1, lo, hi, proud, DRAWER_STILE);
+        handleAt(part, s0, s1, hi - Math.min(0.05, (hi - lo) / 3), proud);
+      }
+      return;
+    }
+    if (type === 'oven') {
+      const top = Math.max(a, b - Math.min(OVEN_H, h)), strip = Math.min(OVEN_STRIP, (b - top) / 4);
+      if (top - a > 0.04) {
+        leaf(part, s0, s1, a, top - FRONT_GAP, proud, DRAWER_STILE);
+        handleAt(part, s0, s1, top - FRONT_GAP - 0.04, proud);
+      }
+      part('blackGlass', s0, s1, proud - FRONT_T, proud, top, b - strip);
+      part('steel', s0, s1, proud - FRONT_T, proud, b - strip, b);
+      handleAt(part, s0, s1, b - strip - 0.05, proud, 'steel', s1 - s0);
+      return;
+    }
+    const y = where === 'top' ? b - 0.06 : a + 0.06;
+    if (type === 'glass') {
+      leaf(part, s0, s1, a, b, proud, STILE, (p0, p1, q0, q1) => {
+        part('linen', p0, p1, proud - FRONT_T, proud - FRONT_T + 0.004, q0, q1);
+        part('glass', p0, p1, proud - 0.012, proud - 0.006, q0, q1);
+      });
+    } else leaf(part, s0, s1, a, b, proud, STILE);
+    handleAt(part, s0, s1, y, proud);
+  }
   // a table's or desk's top: the item's own slab when it floats (y0 > 0), else TOP at y1
   const underTop = (y0, y1) => (y0 > 0 ? y0 : y1 - TOP);
   // a table's or desk's top on four legs or, for a desk, two side panels down to the floor
@@ -261,16 +441,20 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
       cylinder('oak', i, x, z, Math.min(0.06, r / 3), 0, under);
       return;
     }
+    if (f.kind === 'splashback') return splashback(f, i);
+    if (f.kind === 'curtain') return curtain(f, i);
     if (!shape) return add('furniture', i, f.rect, y0, y1);
-    const { L, D, box } = frameOf(f);
-    shape({ part: (name, s0, s1, d0, d1, a, b) => add(name, i, box(s0, s1, d0, d1), a, b), L, D, y0, y1, h: y1 - y0 });
+    const fr = frameOf(f), { L, D, box } = fr;
+    shape({
+      part: (name, s0, s1, d0, d1, a, b) => add(name, i, box(s0, s1, d0, d1), a, b),
+      world: (name, rect, a, b) => add(name, i, rect, a, b),
+      lean: (name, s0, s1, d0, d1, a, b, t) => leaning(name, i, fr, s0, s1, d0, d1, a, b, t),
+      L, D, y0, y1, h: y1 - y0, item: f, frame: fr
+    });
   });
 
-  const mats = new Map();
-  const mat = name => mats.get(name) || mats.set(name, kit.surface(name)).get(name);
   parts.forEach((list, name) => {
-    const im = instanced(unitBox, mat(name), list.map(({ rect: [x0, z0, x1, z1], y: [a, b] }) =>
-      new THREE.Matrix4().compose(p.set((x0 + x1) / 2, (a + b) / 2, (z0 + z1) / 2), q.identity(), sc.set(x1 - x0, b - a, z1 - z0))), 'furniture');
+    const im = instanced(unitBox, mat(name), list.map(x => x.matrix), 'furniture');
     im.userData.items = list.map(x => x.i);
     im.castShadow = im.receiveShadow = true;
   });
