@@ -717,9 +717,9 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   default: blue-grey fronts under a brown worktop), `anthracite` (with steel
   handles) or `white`, which colours the carcass, the fronts and a worktop
   alike; no other kind takes `basins` or `finish`. A `stove` (a sauna
-  heater) needs a rect. A `sofa` may name the rect's edges that carry a
-  `back` and an `arm` (`x0`, `x1`, `z0`, `z1`), so two items join into a
-  corner sofa. The real style draws an item by its kind inside its footprint
+  heater) needs a rect and a `mirror` a `y0` above 0. A `sofa` may name the
+  rect's edges that carry a `back` and an `arm` (`x0`, `x1`, `z0`, `z1`), so
+  two items join into a corner sofa. The real style draws an item by its kind inside its footprint
   and heights (a table's or desk's legs alone reach down to the floor),
   turning it to the nearest wall face and a bed's head to its headboard; a
   toilet's head and a washer's back go on whichever edge of the rect is

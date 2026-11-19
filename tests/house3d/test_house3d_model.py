@@ -398,6 +398,11 @@ def _stove_circle(L):
     f.update(kind="stove", circle=[1, 1, 0.3])
 
 
+def _mirror_on_floor(L):
+    f = L["geometry"]["furniture"][0]
+    f.update(kind="mirror", y=[0, 1.8])
+
+
 MUTATIONS = [
     ("window without sill", _no_sill, "a window needs a sill"),
     ("unknown opening kind", _bad_kind, "is not window, door or glassdoor"),
@@ -468,6 +473,7 @@ MUTATIONS = [
     ("unknown finish", _unknown_finish, "furniture[0]: finish 'oak' is not one of kitchen, anthracite, white"),
     ("finish on a bed", _finish_on_bed, "furniture[0]: finish is only for base_units"),
     ("stove on a circle", _stove_circle, "furniture[0]: a stove needs a rect"),
+    ("mirror on the floor", _mirror_on_floor, "furniture[0]: a mirror hangs on the wall, its y0 above 0"),
 ]
 
 

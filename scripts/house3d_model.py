@@ -580,8 +580,8 @@ def _validate_fronts(where, f, bad):
 
 
 def _validate_fitted(where, f, bad):
-    """A vanity counts its basins, a fitted item or a bookcase may name its finish, and a stove is
-    a rect; no other item takes basins or finish."""
+    """A vanity counts its basins, a fitted item or a bookcase may name its finish, a stove is a
+    rect and a mirror hangs above the floor; no other item takes basins or finish."""
     kind = f.get("kind")
     if kind == "vanity":
         if not (type(f.get("basins")) is int and f["basins"] in (1, 2)):
@@ -595,6 +595,8 @@ def _validate_fitted(where, f, bad):
         bad(f"{where}: finish is only for {', '.join(FINISHED_KINDS)}")
     if kind == "stove" and "rect" not in f:
         bad(f"{where}: a stove needs a rect")
+    if kind == "mirror" and _point(f.get("y")) and f["y"][0] <= 0:
+        bad(f"{where}: a mirror hangs on the wall, its y0 above 0")
 
 
 def _validate_sofa_edges(where, f, bad):
