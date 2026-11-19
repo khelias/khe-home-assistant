@@ -22,7 +22,10 @@ const COLORS = {
 // known kind is a warm grey block (furniture), apart from the walls. Fitted kitchens are blue-grey
 // fronts (kitchen) under a brown worktop (kitchenTop) with dark handles, steel and black glass, the
 // wall behind them light tiles (splashTiles()); a TV's screen, a rug and sheer curtains have their
-// own surfaces, a sofa a dark charcoal velvet. The deck is dark composite,
+// own surfaces, a sofa a dark charcoal velvet. Fitted units, a vanity and a bookcase may instead be
+// anthracite or a painted white, carcass, fronts and top alike; toilets, basins and the bath are
+// glazed porcelain (sanitary), a mirror a light polished slab, a sauna stove's stones dark grey.
+// The deck is dark composite,
 // the paving light grey-beige concrete pavers with sandy joints (their stones come from pavers()),
 // the entrance step dark grey, the outdoor units white.
 // The bar fence and the gates are black bars (bars()), the other fences a dark wire mesh
@@ -41,6 +44,7 @@ const REAL = {
   cabinet: '#e6e5e0', furniture: '#a59f95',
   kitchen: '#c3c9cf', kitchenTop: '#5f4a3e', handle: '#2b2c2e', steel: '#a4a7aa', blackGlass: '#0e0f11', screen: '#07080a',
   rug: '#b9b1a3', sheer: '#f4f2ec', sofa: '#4a4c51',
+  anthracite: '#3b3d40', white: '#eeeeeb', sanitary: '#f7f7f4', mirror: '#d3dade', stones: '#46484a',
   snow: '#f1f4f7'
 };
 // the cladding's boards: about 12 cm wide, rising to the right at 45 degrees, only their grooves
@@ -80,6 +84,8 @@ export function createKit(THREE, style = 'simple') {
     blackGlass: { roughness: 0.12 },
     screen: { roughness: 0.12 },
     steel: { roughness: 0.38, metalness: 0.65 },
+    sanitary: { roughness: 0.18 },
+    mirror: { roughness: 0.08, metalness: 0.2 },
     sheer: { transparent: true, opacity: SHEER_OPACITY, side: THREE.DoubleSide, depthWrite: false, forceSinglePass: true }
   };
   const surface = style === 'real'

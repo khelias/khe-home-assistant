@@ -71,9 +71,21 @@ FURNITURE_KINDS = (
     "tv",
     "rug",
     "curtain",
+    "toilet",
+    "vanity",
+    "mirror",
+    "washer",
+    "stove",
+    "bookcase",
 )
 # a run of units: along is the axis its fronts run on, fronts [type, width] from that axis's low end
-FRONTED_KINDS = ("base_units", "wall_units", "tall_units")
+FRONTED_KINDS = ("base_units", "wall_units", "tall_units", "vanity")
+FINISHES = (
+    "kitchen",
+    "anthracite",
+    "white",
+)  # a fitted item's carcass and fronts; kitchen without one
+FINISHED_KINDS = (*FRONTED_KINDS, "bookcase")
 FRONT_TYPES = ("door", "drawers", "oven", "glass", "blank")
 FRONTS_SUM = 0.01  # how far the fronts' widths may miss the item's size on along
 SOFA_EDGES = ("x0", "x1", "z0", "z1")  # a sofa's back and arm: the rect's edges that carry one
@@ -346,6 +358,7 @@ def validate(layers):
             bad(f"{where}: kind {f['kind']!r} is not one of {', '.join(FURNITURE_KINDS)}")
         _validate_fronts(where, f, bad)
         _validate_sofa_edges(where, f, bad)
+        _validate_fitted(where, f, bad)
 
     site = model.get("site", {})
     lot = _lot(model)
@@ -564,6 +577,24 @@ def _validate_fronts(where, f, bad):
         total = sum(front[1] for front in fronts)
         if abs(total - size) > FRONTS_SUM + 1e-9:
             bad(f"{where}: fronts sum to {total:.3f} m, the item is {size:.3f} m on {along}")
+
+
+def _validate_fitted(where, f, bad):
+    """A vanity counts its basins, a fitted item or a bookcase may name its finish, and a stove is
+    a rect; no other item takes basins or finish."""
+    kind = f.get("kind")
+    if kind == "vanity":
+        if not (type(f.get("basins")) is int and f["basins"] in (1, 2)):
+            bad(f"{where}: basins {f.get('basins')!r} is not 1 or 2")
+    elif "basins" in f:
+        bad(f"{where}: basins is only for vanity")
+    if kind in FINISHED_KINDS:
+        if "finish" in f and f["finish"] not in FINISHES:
+            bad(f"{where}: finish {f['finish']!r} is not one of {', '.join(FINISHES)}")
+    elif "finish" in f:
+        bad(f"{where}: finish is only for {', '.join(FINISHED_KINDS)}")
+    if kind == "stove" and "rect" not in f:
+        bad(f"{where}: a stove needs a rect")
 
 
 def _validate_sofa_edges(where, f, bad):

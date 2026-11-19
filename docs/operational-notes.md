@@ -706,18 +706,27 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   optional `kind`, one of `FURNITURE_KINDS` in `scripts/house3d_model.py`
   (bed, headboard, wardrobe, sofa, table, desk, counter, cabinet, bath,
   bench, appliance, base_units, wall_units, tall_units, hood, shelf,
-  splashback, tv, rug, curtain). `base_units`, `wall_units` and `tall_units`
-  also need `along`, `"x"` or `"z"`, and `fronts`, a list of `[type, width]`
-  from that axis's low end (types `door`, `drawers`, `oven`, `glass`,
-  `blank`) whose widths sum to the item's size on `along` within 1 cm; no
-  other kind takes either field. A `sofa` may name the rect's edges that carry
-  a `back` and an `arm` (`x0`, `x1`, `z0`, `z1`), so two items join into a
-  corner sofa. The real style draws an item by its kind inside its
-  footprint and heights (a table's or desk's legs alone reach down to the
-  floor), turning it to the nearest wall face and a bed's head to its
-  headboard; an item without a kind is a plain warm grey block. The simple
-  style draws every item as its outlined see-through box, kind or not. The
-  validator rejects any other kind.
+  splashback, tv, rug, curtain, toilet, vanity, mirror, washer, stove,
+  bookcase). `base_units`, `wall_units`, `tall_units` and `vanity` also need
+  `along`, `"x"` or `"z"`, and `fronts`, a list of `[type, width]` from that
+  axis's low end (types `door`, `drawers`, `oven`, `glass`, `blank`) whose
+  widths sum to the item's size on `along` within 1 cm; no other kind takes
+  either field. A `vanity` also needs `basins`, 1 or 2, evenly along its
+  porcelain top; a basin with no cabinet is a vanity with one `blank` front.
+  Those four kinds and `bookcase` may take a `finish`: `kitchen` (the
+  default: blue-grey fronts under a brown worktop), `anthracite` (with steel
+  handles) or `white`, which colours the carcass, the fronts and a worktop
+  alike; no other kind takes `basins` or `finish`. A `stove` (a sauna
+  heater) needs a rect. A `sofa` may name the rect's edges that carry a
+  `back` and an `arm` (`x0`, `x1`, `z0`, `z1`), so two items join into a
+  corner sofa. The real style draws an item by its kind inside its footprint
+  and heights (a table's or desk's legs alone reach down to the floor),
+  turning it to the nearest wall face and a bed's head to its headboard; a
+  toilet's head and a washer's back go on whichever edge of the rect is
+  nearest a wall, a vanity's taps reach its `y1`, and a stack of drawers has
+  one drawer per about 25 cm, three at most. An item without a kind is a
+  plain warm grey block. The simple style draws every item as its outlined
+  see-through box, kind or not. The validator rejects any other kind.
 - **The future (Tulevik):** the optional `future` block of the private layer
   holds things the house does not have yet: rooftop PV, an EV charger, a home
   battery, a greenhouse and a hot tub (`kind`), each with a centre `pos`, a

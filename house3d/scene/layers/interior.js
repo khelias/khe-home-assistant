@@ -7,9 +7,10 @@
 // furniture one per material, so the interior costs a handful of draw calls; every mesh carries
 // userData.part, the furniture userData.items (the item index of each instance) and the caps
 // userData.walls (the wall index of each). A run of fitted units draws its fronts in order from
-// the low end of its along axis. A splashback and a curtain are each one mesh of their own, part
-// 'splashback' or 'curtain'. With the roof fully on, the cut walls' caps are
-// hidden: the lifted wall above sits on them.
+// the low end of its along axis, in the item's finish (the kitchen's blue-grey under a brown worktop
+// without one), a stack of drawers about DRAWER_H a drawer. A splashback and a curtain are each
+// one mesh of their own, part 'splashback' or 'curtain'. With the roof fully on, the cut walls'
+// caps are hidden: the lifted wall above sits on them.
 const CAP_H = 0.01, CAP_LIFT = 0.002, CAP_INSET = 0.005; // inset from each face and a free end
 const SKIRT_H = 0.07, SKIRT_D = 0.012, FLOOR_Y = 0.02;
 const PROBE = 0.25, PROBE_OUT = 0.3; // how often and how far out a face is probed for a room
@@ -18,19 +19,35 @@ const ROOF_ON = 0.99;
 // each kind's main surface; a circle item is a cylinder in it, except a table
 const MAIN = {
   bed: 'oak', headboard: 'fabric', wardrobe: 'cabinet', sofa: 'sofa', table: 'oak', desk: 'oak',
-  counter: 'cabinet', cabinet: 'oak', bath: 'cabinet', bench: 'oak', appliance: 'unit', rug: 'rug'
+  counter: 'cabinet', cabinet: 'oak', bath: 'sanitary', bench: 'oak', appliance: 'unit', rug: 'rug',
+  toilet: 'sanitary', mirror: 'mirror', washer: 'white', bookcase: 'kitchen'
 };
+// an item's finish other than the kitchen's: the surfaces its kitchen and kitchenTop parts and
+// its handles take; scripts/house3d_model.py FINISHES lists the same names
+const FINISHES = {
+  anthracite: { kitchen: 'anthracite', kitchenTop: 'anthracite', handle: 'steel' },
+  white: { kitchen: 'white', kitchenTop: 'white' }
+};
+// the kinds whose rect edge nearest a wall carries their head (the toilet, drawn from the wall
+// out) or their back (the washer, its door facing the room)
+const WALL_SIDE = { toilet: 'head', washer: 'back' };
 const TOP = 0.04, LEG = 0.05, LEG_IN = 0.03, PANEL = 0.03; // tables and desks
 const PILLOW_PER = 0.9, PILLOW_L = 0.38, GROOVE = 0.01, DOOR_W = 0.55;
 const SLAT = 0.09, SLAT_GAP = 0.02, SLAT_T = 0.03, SUPPORT = 0.05;
 // fitted units: the plinth and its setback, the worktop, the fronts' faces and the height where a
 // tall unit's fronts divide
 const PLINTH = 0.1, PLINTH_BACK = 0.06, WORKTOP = 0.04, OVERHANG = 0.02, FRONT_T = 0.02, RECESS = 0.008, TALL_SPLIT = 0.9;
-const FRONT_GAP = 0.003, STILE = 0.06, DRAWER_STILE = 0.04, DRAWERS = 3, HANDLE_L = 0.14, HANDLE_H = 0.012, HANDLE_T = 0.014;
+const FRONT_GAP = 0.003, STILE = 0.06, DRAWER_STILE = 0.04, DRAWERS = 3, DRAWER_H = 0.25, HANDLE_L = 0.14, HANDLE_H = 0.012, HANDLE_T = 0.014;
 const FRONT_D = FRONT_T + HANDLE_T; // from the carcass to the outermost face of a front's handle
 const OVEN_H = 0.6, OVEN_STRIP = 0.09, HOOD_T = 0.04;
 const PLEAT = 0.12, PLEAT_DEPTH = 0.02, PLEAT_SEGMENTS = 8, PLEAT_SHADE = 0.3; // a curtain's folds, and how much of their slope the light sees
 const SEAT_W = 0.8, CUSHION_GAP = 0.012; // a sofa's cushions
+// a vanity's top and its basins, whose taps reach the item's y1; a toilet's bowl and flush plate
+const BASIN_TOP = 0.08, TAP_H = 0.14, TAP = 0.025, SPOUT = 0.1, BASIN_W = 0.42, BASIN_D = 0.3, BASIN_RIM = 0.05;
+const BOWL_H = 0.22, SEAT_T = 0.02, FLUSH_W = 0.22, FLUSH_H = 0.15, FLUSH_T = 0.012;
+const MIRROR_EDGE = 0.02, BOOK_T = 0.02, BOOK_STEP = 0.35;
+// a washer's door and control strip; a stove's cage bars, their spacing and the stones' lumps
+const DOOR_R = 0.33, STRIP_H = 0.07, BAR_T = 0.012, BAR_STEP = 0.1, LUMPS = 3;
 
 export default function build({ THREE, kit, model, roof, state, style, layer }) {
   if (style !== 'real') return null;
@@ -188,12 +205,23 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
   // item f's own frame: s along its long side from the head end, d across from the back side;
   // box() turns a part given in it into a world rect
   function frameOf(f) {
-    const [x0, z0, x1, z1] = f.rect, alongX = f.along ? f.along === 'x' : x1 - x0 >= z1 - z0;
+    const [x0, z0, x1, z1] = f.rect;
+    let alongX = f.along ? f.along === 'x' : x1 - x0 >= z1 - z0, wallLo = true;
+    const side = WALL_SIDE[f.kind];
+    if (side) {
+      // the edge nearest a wall: x0, x1, z0 or z1; a head on an x edge runs the item along x,
+      // a back on one runs it along z
+      const mids = [[x0, (z0 + z1) / 2], [x1, (z0 + z1) / 2], [(x0 + x1) / 2, z0], [(x0 + x1) / 2, z1]].map(faceDist);
+      const edge = mids.indexOf(Math.min(...mids));
+      alongX = (edge < 2) === (side === 'head');
+      wallLo = edge % 2 === 0;
+    }
     const [l0, l1, c0, c1] = alongX ? [x0, x1, z0, z1] : [z0, z1, x0, x1];
     const pt = (l, c) => (alongX ? [l, c] : [c, l]);
     const backLo = faceDist(pt((l0 + l1) / 2, c0)) <= faceDist(pt((l0 + l1) / 2, c1));
     let headLo = true;
-    if (f.kind === 'bed') {
+    if (side === 'head') headLo = wallLo;
+    else if (f.kind === 'bed') {
       // a headboard touching a short end, else the end nearer a wall face, the lower on a tie
       const touches = l => items.some(h => h.kind === 'headboard' && h.rect && (() => {
         const [hl0, hl1, hc0, hc1] = alongX ? [h.rect[0], h.rect[2], h.rect[1], h.rect[3]] : [h.rect[1], h.rect[3], h.rect[0], h.rect[2]];
@@ -296,11 +324,8 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
     },
     bath({ part, L, D, y0, y1 }) {
       const rim = 0.08, low = 0.04;
-      part('cabinet', 0, L, 0, D, y0, y1 - low);
-      part('cabinet', 0, L, 0, rim, y1 - low, y1);
-      part('cabinet', 0, L, D - rim, D, y1 - low, y1);
-      part('cabinet', 0, rim, rim, D - rim, y1 - low, y1);
-      part('cabinet', L - rim, L, rim, D - rim, y1 - low, y1);
+      part('sanitary', 0, L, 0, D, y0, y1 - low);
+      ring(part, 'sanitary', 0, L, 0, D, rim, y1 - low, y1);
       part('interior', rim, L - rim, rim, D - rim, y1 - low, y1 - low + 0.005);
     },
     bench({ part, L, D, y0, y1 }) {
@@ -332,6 +357,108 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
         front(part, type, a, b, D, y0 + PLINTH, split, 'top');
         if (y1 > split) front(part, type, a, b, D, split, y1, 'bottom');
       });
+    },
+    vanity(o) {
+      // hung on the wall: the carcass and fronts with no plinth, a porcelain top with its basins
+      // sunk in it, evenly along, and a tap behind each
+      const { part, item, L, D, y0, y1 } = o, face = D - OVERHANG, n = item.basins;
+      const sink = y1 - Math.min(TAP_H, (y1 - y0) / 3), top = sink - Math.min(BASIN_TOP, (sink - y0) / 3);
+      part('kitchen', 0, L, 0, face - FRONT_D, y0, top);
+      frontsOf(o, (type, a, b) => front(part, type, a, b, face, y0, top, 'top'));
+      // a basin keeps a rim round it, however small the vanity, and stays over the carcass
+      const bw = Math.min(BASIN_W, Math.max(L / n - 2 * BASIN_RIM, 0.6 * L / n));
+      const bd = Math.min(BASIN_D, Math.max(D - 3 * BASIN_RIM, 0.5 * D));
+      const d0 = Math.min(Math.max(2 * BASIN_RIM, (D - bd) / 2 + BASIN_RIM / 2), D / 4), d1 = Math.min(d0 + bd, face - FRONT_D);
+      // the top around the basins: strips behind and in front of them, and the rims between
+      part('sanitary', 0, L, 0, d0, top, sink);
+      part('sanitary', 0, L, d1, D, top, sink);
+      let at = 0;
+      for (let k = 0; k < n; k++) {
+        const c = ((k + 0.5) * L) / n, s0 = c - bw / 2, s1 = c + bw / 2;
+        part('sanitary', at, s0, d0, d1, top, sink);
+        at = s1;
+        // the bowl's floor on the carcass top, and its drain
+        part('sanitary', s0, s1, d0, d1, top, top + 0.004);
+        part('steel', c - 0.02, c + 0.02, (d0 + d1) / 2 - 0.02, (d0 + d1) / 2 + 0.02, top + 0.004, top + 0.007);
+        // the tap: a post on the top behind the basin and a spout reaching over it
+        const tb = Math.max(0, d0 - BASIN_RIM - TAP / 2);
+        part('steel', c - TAP / 2, c + TAP / 2, tb, tb + TAP, sink, y1);
+        part('steel', c - TAP / 2, c + TAP / 2, tb + TAP, Math.min(d1, tb + TAP + SPOUT), y1 - TAP, y1);
+      }
+      part('sanitary', at, L, d0, d1, top, sink);
+    },
+    toilet({ part, L, D, y0, y1 }) {
+      // hung on the wall: a bowl tapering from the wall to its front, a seat ring and, higher up
+      // the wall, the flush plate; s runs from the wall
+      const bowl = Math.min(y1, y0 + BOWL_H), seat = bowl - SEAT_T, back = Math.min(0.16, L / 3);
+      part('sanitary', 0, back, 0, D, y0, seat);
+      part('sanitary', back, L - 0.06, 0.05 * D, 0.95 * D, y0 + 0.04, seat);
+      part('sanitary', L - 0.06, L - 0.01, 0.2 * D, 0.8 * D, y0 + 0.08, seat);
+      // the seat: a ring round the opening, the bowl's inside a little below it
+      const r = Math.min(0.06, D / 5), s0 = Math.max(0, back - 0.04), s1 = L;
+      ring(part, 'sanitary', s0, s1, 0, D, r, seat, bowl);
+      part('interior', s0 + r, s1 - r, r, D - r, seat - 0.03, seat - 0.026);
+      if (y1 - bowl > FLUSH_H + 0.1) {
+        const w = Math.min(FLUSH_W, D * 0.8);
+        part('sanitary', 0, FLUSH_T, (D - w) / 2, (D + w) / 2, y1 - FLUSH_H, y1);
+        part('steel', FLUSH_T, FLUSH_T + 0.004, D / 2 - w / 4, D / 2 + w / 4, y1 - FLUSH_H * 0.7, y1 - FLUSH_H * 0.3);
+      }
+    },
+    mirror({ part, L, D, y0, y1 }) {
+      // the glass in a lit edge, flush with it
+      const e = Math.min(MIRROR_EDGE, L / 4, (y1 - y0) / 4);
+      part('mirror', e, L - e, 0, D, y0 + e, y1 - e);
+      part('sanitary', 0, L, 0, D, y0, y0 + e);
+      part('sanitary', 0, L, 0, D, y1 - e, y1);
+      part('sanitary', 0, e, 0, D, y0 + e, y1 - e);
+      part('sanitary', L - e, L, 0, D, y0 + e, y1 - e);
+    },
+    washer({ part, L, D, y0, y1 }) {
+      // a white box, the control strip along its top front and a dark round door below it, the
+      // door's round drawn as two crossed slabs inside a steel ring
+      const h = y1 - y0, face = D - 0.01, r = DOOR_R * Math.min(L, h), cy = y0 + 0.45 * h, c = L / 2;
+      part('white', 0, L, 0, face, y0, y1);
+      part('handle', 0.04, L - 0.04, face, D, y1 - STRIP_H - 0.02, y1 - 0.02);
+      part('steel', c - r, c + r, face, D - 0.004, cy - 0.7 * r, cy + 0.7 * r);
+      part('steel', c - 0.7 * r, c + 0.7 * r, face, D - 0.004, cy - r, cy + r);
+      part('blackGlass', c - 0.85 * r, c + 0.85 * r, face, D, cy - 0.55 * r, cy + 0.55 * r);
+      part('blackGlass', c - 0.55 * r, c + 0.55 * r, face, D, cy - 0.85 * r, cy + 0.85 * r);
+    },
+    stove({ part, L, D, y0, y1 }) {
+      // a dark steel cage on a base, filled with stones heaped a little at the top
+      const base = y0 + Math.min(0.12, (y1 - y0) / 5), heap = Math.max(base, y1 - 0.06), t = BAR_T;
+      part('handle', 0, L, 0, D, y0, base);
+      part('stones', t, L - t, t, D - t, base, heap);
+      for (let a = 0; a < LUMPS; a++) for (let b = 0; b < LUMPS; b++) {
+        const s0 = t + (a * (L - 2 * t)) / LUMPS, d0 = t + (b * (D - 2 * t)) / LUMPS;
+        const rise = 0.02 + 0.04 * (((a * 7 + b * 3) % 5) / 4);
+        part('stones', s0 + 0.01, s0 + (L - 2 * t) / LUMPS - 0.01, d0 + 0.01, d0 + (D - 2 * t) / LUMPS - 0.01, heap, Math.min(y1, heap + rise));
+      }
+      // upright bars round all four sides, about BAR_STEP apart, the corners' bars on the s sides
+      const bars = len => {
+        const n = Math.max(1, Math.round((len - t) / BAR_STEP));
+        return Array.from({ length: n + 1 }, (_, k) => (k * (len - t)) / n);
+      };
+      bars(L).forEach(s => {
+        part('handle', s, s + t, 0, t, base, y1);
+        part('handle', s, s + t, D - t, D, base, y1);
+      });
+      bars(D).slice(1, -1).forEach(d => {
+        part('handle', 0, t, d, d + t, base, y1);
+        part('handle', L - t, L, d, d + t, base, y1);
+      });
+    },
+    bookcase({ part, L, D, y0, y1 }) {
+      // open shelves: a back, two sides and a shelf every BOOK_STEP from the bottom board to the top
+      const t = Math.min(BOOK_T, L / 6);
+      part('kitchen', 0, L, 0, t, y0, y1);
+      part('kitchen', 0, t, t, D, y0, y1);
+      part('kitchen', L - t, L, t, D, y0, y1);
+      const n = Math.max(1, Math.round((y1 - y0 - t) / BOOK_STEP));
+      for (let k = 0; k <= n; k++) {
+        const y = y0 + (k * (y1 - y0 - t)) / n;
+        part('kitchen', t, L - t, t, D, y, y + t);
+      }
     },
     hood({ part, lean, L, D, y0, y1 }) {
       // the glass leans out from the wall as it falls, its low edge at the front
@@ -378,6 +505,13 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
     if (inner) inner(s0 + st, s1 - st, y0 + st, y1 - st);
     else part('kitchen', s0 + st, s1 - st, d - FRONT_T, d - RECESS, y0 + st, y1 - st);
   }
+  // a flat frame w wide round the opening inside s0..s1, d0..d1, from y0 to y1
+  function ring(part, name, s0, s1, d0, d1, w, y0, y1) {
+    part(name, s0, s1, d0, d0 + w, y0, y1);
+    part(name, s0, s1, d1 - w, d1, y0, y1);
+    part(name, s0, s0 + w, d0 + w, d1 - w, y0, y1);
+    part(name, s1 - w, s1, d0 + w, d1 - w, y0, y1);
+  }
   // a handle across the leaf's middle, level with y, standing proud of face d
   const handleAt = (part, s0, s1, y, d, name = 'handle', len = HANDLE_L) => {
     const l = Math.min(len, (s1 - s0) * 0.8), c = (s0 + s1) / 2;
@@ -389,8 +523,10 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
     const h = y1 - y0, a = y0 + FRONT_GAP / 2, b = y1 - FRONT_GAP / 2, proud = d - HANDLE_T;
     if (type === 'blank') return part('kitchen', s0, s1, proud - FRONT_T, proud, a, b);
     if (type === 'drawers') {
-      for (let k = 0; k < DRAWERS; k++) {
-        const lo = a + (k * (b - a)) / DRAWERS + FRONT_GAP / 2, hi = a + ((k + 1) * (b - a)) / DRAWERS - FRONT_GAP / 2;
+      // a stack of up to DRAWERS, each about DRAWER_H high
+      const n = Math.max(1, Math.min(DRAWERS, Math.round(h / DRAWER_H)));
+      for (let k = 0; k < n; k++) {
+        const lo = a + (k * (b - a)) / n + FRONT_GAP / 2, hi = a + ((k + 1) * (b - a)) / n - FRONT_GAP / 2;
         leaf(part, s0, s1, lo, hi, proud, DRAWER_STILE);
         handleAt(part, s0, s1, hi - Math.min(0.05, (hi - lo) / 3), proud);
       }
@@ -433,9 +569,11 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
 
   items.forEach((f, i) => {
     const [y0, y1] = f.y, shape = f.kind && SHAPES[f.kind];
+    // a finish recolours the kitchen's surfaces the shapes draw in
+    const surf = name => (FINISHES[f.finish] || {})[name] || name;
     if (f.circle) {
       const [x, z, r] = f.circle;
-      if (f.kind !== 'table') return cylinder(MAIN[f.kind] || 'furniture', i, x, z, r, y0, y1);
+      if (f.kind !== 'table') return cylinder(surf(MAIN[f.kind] || 'furniture'), i, x, z, r, y0, y1);
       const under = underTop(y0, y1);
       cylinder('oak', i, x, z, r, under, y1);
       cylinder('oak', i, x, z, Math.min(0.06, r / 3), 0, under);
@@ -446,9 +584,9 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
     if (!shape) return add('furniture', i, f.rect, y0, y1);
     const fr = frameOf(f), { L, D, box } = fr;
     shape({
-      part: (name, s0, s1, d0, d1, a, b) => add(name, i, box(s0, s1, d0, d1), a, b),
-      world: (name, rect, a, b) => add(name, i, rect, a, b),
-      lean: (name, s0, s1, d0, d1, a, b, t) => leaning(name, i, fr, s0, s1, d0, d1, a, b, t),
+      part: (name, s0, s1, d0, d1, a, b) => add(surf(name), i, box(s0, s1, d0, d1), a, b),
+      world: (name, rect, a, b) => add(surf(name), i, rect, a, b),
+      lean: (name, s0, s1, d0, d1, a, b, t) => leaning(surf(name), i, fr, s0, s1, d0, d1, a, b, t),
       L, D, y0, y1, h: y1 - y0, item: f, frame: fr
     });
   });

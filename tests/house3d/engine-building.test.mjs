@@ -364,6 +364,15 @@ const FITTED = [
   { what: 'curtain', kind: 'curtain', rect: [31.3, 17.6, 33.1, 17.7], y: [0.02, 2.4] }
 ];
 const OWN_MESH = ['splashback', 'curtain'];
+// one item of each wet-room and utility kind, further along the galerii
+const WET = [
+  { what: 'toilet', kind: 'toilet', rect: [31.3, 17.9, 31.84, 18.26], y: [0.2, 1.15] },
+  { what: 'vanity', kind: 'vanity', rect: [32.0, 17.9, 33.2, 18.36], y: [0.45, 1.0], along: 'x', fronts: [['drawers', 0.6], ['drawers', 0.6]], basins: 2, finish: 'anthracite' },
+  { what: 'mirror', kind: 'mirror', rect: [32.0, 18.4, 33.2, 18.43], y: [1.1, 1.9] },
+  { what: 'washer', kind: 'washer', rect: [33.3, 17.9, 33.9, 18.5], y: [0, 0.85] },
+  { what: 'stove', kind: 'stove', rect: [31.3, 18.6, 31.75, 19.05], y: [0, 0.8] },
+  { what: 'bookcase', kind: 'bookcase', rect: [32.0, 18.6, 32.8, 18.95], y: [0, 1.9], finish: 'white' }
+];
 
 // every furniture part: [item index, world box, surface name]
 function furnitureOf(L, kit) {
@@ -383,7 +392,8 @@ test('interior: furniture by kind, every part inside its item, fewer meshes than
     { what: 'tank', kind: 'appliance', circle: [32.7, 11.4, 0.3], y: [0, 1.8] },
     { what: 'headboard', kind: 'headboard', rect: [31.3, 12.0, 31.4, 13.0], y: [0, 1] },
     { what: 'floating table', kind: 'table', rect: [31.4, 13.2, 32.4, 14.2], y: [0.72, 0.78] },
-    ...FITTED
+    ...FITTED,
+    ...WET
   );
   [model, extra].forEach(m => {
     const { ctx, L } = interiorOf(m);
@@ -406,7 +416,45 @@ test('interior: furniture by kind, every part inside its item, fewer meshes than
     meshes.forEach(o => assert.deepEqual([o.castShadow, o.receiveShadow], [true, true]));
   });
   const kinds = new Set(extra.furniture.map(f => f.kind).filter(Boolean));
-  assert.equal(kinds.size, 20, 'every kind drawn');
+  assert.equal(kinds.size, 26, 'every kind drawn');
+});
+
+test('interior: a finish draws a run of units and a bookcase in that surface, the kitchen\'s without one', () => {
+  const run = { what: 'run', kind: 'base_units', y: [0, 0.9], along: 'x', fronts: [['door', 0.6], ['drawers', 0.6]] };
+  const shelves = { what: 'shelves', kind: 'bookcase', y: [0, 1.9] };
+  const m = structuredClone(model), first = m.furniture.length;
+  m.furniture.push(
+    { ...run, rect: [31.3, 8.2, 32.5, 8.8] },
+    { ...run, rect: [31.3, 9.0, 32.5, 9.6], finish: 'anthracite' },
+    { ...shelves, rect: [31.3, 9.8, 32.1, 10.15] },
+    { ...shelves, rect: [31.3, 10.4, 32.1, 10.75], finish: 'white' }
+  );
+  const { ctx, L } = interiorOf(m), parts = furnitureOf(L, ctx.kit);
+  const real = Object.keys(ctx.kit.REAL).map(n => hexOf(ctx.kit, n));
+  assert.equal(new Set(real).size, real.length, 'every real surface its own colour');
+  const own = ['handle', 'steel', 'blackGlass', 'glass', 'linen'];
+  const surfaces = k => [...new Set(parts.filter(p => p[0] === first + k && !own.includes(p[2])).map(p => p[2]))].sort();
+  assert.deepEqual(surfaces(0), ['kitchen', 'kitchenTop']);
+  assert.deepEqual(surfaces(1), ['anthracite'], 'carcass, fronts and top');
+  assert.deepEqual(surfaces(2), ['kitchen']);
+  assert.deepEqual(surfaces(3), ['white']);
+});
+
+test('interior: a toilet\'s flush plate is on the wall it hangs on, a washer\'s door faces away from its wall', () => {
+  // the galerii's west wall face is x 31.2, its east wall face x 33.125; the washer is longer on x,
+  // so only its wall turns it
+  const m = structuredClone(model), first = m.furniture.length;
+  m.furniture.push(
+    { what: 'toilet', kind: 'toilet', rect: [31.2, 9.0, 31.74, 9.36], y: [0.2, 1.15] },
+    { what: 'washer', kind: 'washer', rect: [32.5, 10.0, 33.125, 10.6], y: [0, 0.85] }
+  );
+  const { ctx, L } = interiorOf(m), parts = furnitureOf(L, ctx.kit);
+  const plate = parts.filter(p => p[0] === first && p[1].max.y > 1.14);
+  assert.ok(plate.length >= 1);
+  plate.forEach(([, b]) => assert.ok(b.max.x < 31.23, 'the flush plate against the west wall'));
+  const door = parts.filter(p => p[0] === first + 1 && p[2] === 'blackGlass');
+  assert.ok(door.length >= 1);
+  door.forEach(([, b]) => assert.ok(b.max.x < 32.52, 'the door on the side away from the east wall'));
 });
 
 test('interior: a splashback and a curtain are one mesh each inside their footprint, the curtain casting no shadow', () => {

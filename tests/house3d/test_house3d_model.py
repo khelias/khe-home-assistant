@@ -361,6 +361,43 @@ def _back_on_circle(L):
     f.update(kind="sofa", circle=[1, 1, 0.5], back=["x0"])
 
 
+def _vanity(L):
+    """The first furniture item as a valid wall-hung vanity of two basins."""
+    f = _units(L)
+    f.update(kind="vanity", y=[0.45, 0.85], basins=2, finish="anthracite")
+    return f
+
+
+def _vanity_no_basins(L):
+    del _vanity(L)["basins"]
+
+
+def _vanity_three_basins(L):
+    _vanity(L)["basins"] = 3
+
+
+def _basins_on_table(L):
+    f = L["geometry"]["furniture"][0]
+    f["kind"] = "table"
+    f["basins"] = 1
+
+
+def _unknown_finish(L):
+    _vanity(L)["finish"] = "oak"
+
+
+def _finish_on_bed(L):
+    f = L["geometry"]["furniture"][0]
+    f["kind"] = "bed"
+    f["finish"] = "white"
+
+
+def _stove_circle(L):
+    f = L["geometry"]["furniture"][0]
+    f.pop("rect", None)
+    f.update(kind="stove", circle=[1, 1, 0.3])
+
+
 MUTATIONS = [
     ("window without sill", _no_sill, "a window needs a sill"),
     ("unknown opening kind", _bad_kind, "is not window, door or glassdoor"),
@@ -425,6 +462,12 @@ MUTATIONS = [
     ("sofa back on an unknown edge", _sofa_edge, "furniture[0]: back must be a list of x0, x1, z0, z1"),
     ("arm on a table", _back_on_table, "furniture[0]: arm is only for sofa"),
     ("sofa back on a circle", _back_on_circle, "furniture[0]: back needs a rect"),
+    ("vanity without basins", _vanity_no_basins, "furniture[0]: basins None is not 1 or 2"),
+    ("vanity of three basins", _vanity_three_basins, "furniture[0]: basins 3 is not 1 or 2"),
+    ("basins on a table", _basins_on_table, "furniture[0]: basins is only for vanity"),
+    ("unknown finish", _unknown_finish, "furniture[0]: finish 'oak' is not one of kitchen, anthracite, white"),
+    ("finish on a bed", _finish_on_bed, "furniture[0]: finish is only for base_units"),
+    ("stove on a circle", _stove_circle, "furniture[0]: a stove needs a rect"),
 ]
 
 
@@ -463,6 +506,16 @@ class FurnitureKind(unittest.TestCase):
         f = _units(L)
         self.assertEqual(hm.validate(L), [])
         f["fronts"][1][1] = 0.609
+        self.assertEqual(hm.validate(L), [])
+
+    def test_a_vanity_and_a_finished_bookcase_pass(self):
+        L = layers()
+        _vanity(L)
+        self.assertEqual(hm.validate(L), [])
+        f = L["geometry"]["furniture"][0]
+        for key in ("along", "fronts", "basins"):
+            del f[key]
+        f.update(kind="bookcase", finish="white")
         self.assertEqual(hm.validate(L), [])
 
 
