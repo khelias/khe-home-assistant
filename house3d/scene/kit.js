@@ -22,7 +22,7 @@ const COLORS = {
 // known kind is a warm grey block (furniture), apart from the walls. Fitted kitchens are blue-grey
 // fronts (kitchen) under a brown worktop (kitchenTop) with dark handles, steel and black glass, the
 // wall behind them light tiles (splashTiles()); a TV's screen, a rug and sheer curtains have their
-// own surfaces, a sofa a near-black plum velvet. The deck is dark composite,
+// own surfaces, a sofa a dark charcoal velvet. The deck is dark composite,
 // the paving light grey-beige concrete pavers with sandy joints (their stones come from pavers()),
 // the entrance step dark grey, the outdoor units white.
 // The bar fence and the gates are black bars (bars()), the other fences a dark wire mesh
@@ -40,7 +40,7 @@ const REAL = {
   cut: '#2a2d30', skirting: '#c9a67c', linen: '#ecebe6', fabric: '#7d8792', oak: '#d6c2a2', worktop: '#3b3b3b',
   cabinet: '#e6e5e0', furniture: '#a59f95',
   kitchen: '#c3c9cf', kitchenTop: '#5f4a3e', handle: '#2b2c2e', steel: '#a4a7aa', blackGlass: '#0e0f11', screen: '#07080a',
-  rug: '#b9b1a3', sheer: '#f4f2ec', sofa: '#2e2230',
+  rug: '#b9b1a3', sheer: '#f4f2ec', sofa: '#4a4c51',
   snow: '#f1f4f7'
 };
 // the cladding's boards: about 12 cm wide, rising to the right at 45 degrees, only their grooves
