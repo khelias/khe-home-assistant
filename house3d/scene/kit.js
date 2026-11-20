@@ -44,7 +44,8 @@ const REAL = {
   cabinet: '#e6e5e0', furniture: '#a59f95',
   kitchen: '#c3c9cf', kitchenTop: '#5f4a3e', handle: '#2b2c2e', steel: '#a4a7aa', blackGlass: '#0e0f11', screen: '#07080a',
   rug: '#b9b1a3', sheer: '#f4f2ec', sofa: '#4a4c51',
-  anthracite: '#3b3d40', white: '#eeeeeb', sanitary: '#f7f7f4', mirror: '#d3dade', stones: '#46484a',
+  anthracite: '#3b3d40', white: '#eeeeeb', sanitary: '#f7f7f4', mirror: '#d3dade', stones: '#46484a', darkOak: '#7f6145', mediumOak: '#b08a62', shell: '#1c1d1f',
+  pot: '#d4cec4', leaf: '#4b7343', bloom: '#d98aa0', canvas: '#efe9de', artA: '#c4744e', artB: '#8da488', artC: '#d8b05c', artD: '#3e5a6f',
   snow: '#f1f4f7'
 };
 // the cladding's boards: about 12 cm wide, rising to the right at 45 degrees, only their grooves

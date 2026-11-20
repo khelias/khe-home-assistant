@@ -6,7 +6,8 @@
 // roofs, which rises and fades with the roof mode. The floors are the room tap targets and warm
 // with a room's markers in state 'on'. The real style draws them as lit surfaces: exterior walls
 // boarded outside and plain inside, interior walls plain with white doors and frames, framed
-// openings (a door with finish 'cladding' gets a leaf of plain cladding), floors in the room's
+// openings (a door with finish 'cladding' gets a leaf of plain cladding, one with glass a
+// vertical glass strip, one with a hinge stands open), floors in the room's
 // finish (oak planks, the wet rooms' tiles, the carport's paving stones, all on world (x, z)) that
 // tint from their own colour, a house room's floor reaching the faces of the walls it runs along,
 // and the lift on materials of its own, so its fade never reaches the lower walls. Its exterior
@@ -24,6 +25,9 @@ const TRIM = 0.1, CORNER = 0.12, PROUD = 0.025, REVEAL = 0.015;
 const FLASH_T = 0.03, FLASH_OUT = 0.06, FLASH_PAST = 0.03;
 // a glass door narrower than this is one leaf, without the centre mullion
 const MULLION_MIN = 1.2;
+// a door with glass: how far its glass strip stops short of the leaf's foot and top
+const DOOR_STRIP_END = 0.25;
+const LEAF_T = 0.05;
 // real style: the farthest a house room's floor edge moves out to meet the wall face it runs along
 const SNAP = 0.2;
 // real style at night: the warm glow of a lit room's floor and windows, and how opaque a lit pane gets
@@ -143,15 +147,44 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     };
     const trims = !!(m.boarded && side);
     const face = side * (w.t / 2), proud = side * (w.t / 2 + PROUD);
+    // a pane of glass w wide centred at c, tagged with the room it looks into
+    const pane = (c, pw, y0, ph) => {
+      const room = paneRoom(w, L, c, side), p = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), glassFor(room));
+      p.position.set(c, y0 + ph / 2, 0);
+      p.userData.pane = room;
+      g.add(p);
+      return p;
+    };
     ops.forEach(o => {
       const x0 = o.c - o.w / 2, x1 = o.c + o.w / 2, y0 = o.sill || 0, y1 = y0 + o.h;
-      if (o.kind === 'door') bar(x0 + FRAME, x1 - FRAME, 0, y1 - FRAME, 0.05, o.finish === 'cladding' ? cladLeaf : m.frame).userData.leaf = true;
-      else {
-        const room = paneRoom(w, L, o.c, side);
-        const p = new THREE.Mesh(new THREE.PlaneGeometry(o.w, o.h), glassFor(room));
-        p.position.set(o.c, y0 + o.h / 2, 0);
-        p.userData.pane = room;
-        g.add(p);
+      if (o.kind === 'door') {
+        const leafMat = o.finish === 'cladding' ? cladLeaf : m.frame, top = y1 - FRAME;
+        const leaf = (a, b, lo, hi) => { bar(a, b, lo, hi, LEAF_T, leafMat).userData.leaf = true; };
+        if (o.hinge) {
+          // turned open by o.open degrees (flat against the wall by default) about the hinge
+          // jamb's face on the swing's side; local +z is (-uz, ux) on the plan
+          const ux = (w.b[0] - w.a[0]) / L, uz = (w.b[1] - w.a[1]) / L;
+          const s = Math.sign(o.swing[0] * -uz + o.swing[1] * ux), lw = o.w - 2 * FRAME;
+          const e = o.hinge === 'a' ? 1 : -1, hx = o.c - e * (o.w / 2 - FRAME);
+          const t = ((o.open ?? 180) * Math.PI) / 180, dx = e * Math.cos(t), dz = s * Math.sin(t);
+          const b = bar(0, lw, 0, top, LEAF_T, leafMat);
+          b.position.set(hx + (dx * lw) / 2, top / 2, s * (w.t / 2 + LEAF_T / 2) + (dz * lw) / 2);
+          b.rotation.y = Math.atan2(-dz, dx);
+          b.userData.leaf = true;
+        } else if (!o.glass) leaf(x0 + FRAME, x1 - FRAME, 0, top);
+        else {
+          // a vertical glass strip down the leaf at glass_c (its middle by default), with leaf
+          // above and below it
+          const gc = o.glass_c ?? o.c;
+          const g0 = gc - o.glass / 2, g1 = gc + o.glass / 2, s0 = DOOR_STRIP_END, s1 = top - DOOR_STRIP_END;
+          leaf(x0 + FRAME, g0, 0, top);
+          leaf(g1, x1 - FRAME, 0, top);
+          leaf(g0, g1, 0, s0);
+          leaf(g0, g1, s1, top);
+          pane(gc, o.glass, s0, s1 - s0).userData.strip = true;
+        }
+      } else {
+        pane(o.c, o.w, y0, o.h);
         bar(x0 + FRAME, x1 - FRAME, y0, y0 + FRAME);
       }
       bar(x0, x0 + FRAME, y0, y1);

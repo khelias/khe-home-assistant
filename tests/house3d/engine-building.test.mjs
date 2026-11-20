@@ -96,6 +96,49 @@ test('real style: interior doors and frames white, the clad door\'s leaf claddin
   assert.ok(frames(front).every(o => name(o.material) === 'frame'), 'an exterior wall\'s frames stay anthracite');
 });
 
+// the test house's interior wall, built in the real style from model m
+const realInner = m => wallGroup(buildLayer(BUILDERS[LAYERS.indexOf('building')], 'building', makeCtx({ ...options, style: 'real' }, m).ctx).group, m.walls[INNER]);
+
+test('real style: a door with glass has a glass strip down its middle, its leaf round it', () => {
+  const m = structuredClone(model);
+  m.walls[INNER].openings = [{ kind: 'door', c: 1.6, w: 1.0, h: 2.1, glass: 0.2 }];
+  const g = realInner(m);
+  const strip = g.children.filter(o => o.userData.strip);
+  assert.equal(strip.length, 1);
+  assert.ok(Math.abs(strip[0].position.x - 1.6) < 1e-9 && Math.abs(strip[0].geometry.parameters.width - 0.2) < 1e-9);
+  assert.equal(g.children.filter(o => o.userData.leaf).length, 4, 'two sides, below and above the strip');
+});
+
+test('real style: a hinged door stands open on the swing\'s side, flat on its wall by default', () => {
+  const w = model.walls[INNER], L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]);
+  const plus = [-(w.b[1] - w.a[1]) / L, (w.b[0] - w.a[0]) / L]; // the wall's local +z on the plan
+  const leafOf = o => {
+    const m = structuredClone(model);
+    m.walls[INNER].openings = [{ kind: 'door', c: 1.6, w: 0.9, h: 2.1, ...o }];
+    const g = realInner(m);
+    const leaves = g.children.filter(c => c.userData.leaf);
+    assert.equal(leaves.length, 1);
+    return leaves[0];
+  };
+  const lw = 0.9 - 0.12;
+  // flat: past the hinge jamb, outside the opening, just off the wall's face on the swing's side
+  const flatA = leafOf({ hinge: 'a', swing: plus });
+  assert.ok(Math.abs(flatA.position.x - (1.6 - 0.45 + 0.06 - lw / 2)) < 1e-9, 'beyond the a jamb');
+  assert.ok(flatA.position.z > 0 && flatA.position.z < w.t / 2 + 0.05, 'against the face');
+  const flatB = leafOf({ hinge: 'b', swing: plus.map(v => -v) });
+  assert.ok(flatB.position.x > 1.6 + 0.45 && flatB.position.z < 0, 'beyond the b jamb, on the other side');
+  // square: across the swing's side from the hinge jamb
+  const square = leafOf({ hinge: 'a', swing: plus, open: 90 });
+  assert.ok(Math.abs(square.position.x - (1.6 - 0.45 + 0.06)) < 1e-9 && square.position.z > lw / 2, 'square to the wall');
+});
+
+test('real style: a door\'s glass strip sits at glass_c', () => {
+  const m = structuredClone(model);
+  m.walls[INNER].openings = [{ kind: 'door', c: 1.6, w: 1.2, h: 2.1, glass: 0.2, glass_c: 1.35 }];
+  const g = realInner(m);
+  assert.deepEqual(g.children.filter(o => o.userData.strip).map(o => o.position.x), [1.35]);
+});
+
 test('a glass door narrower than 1.2 m has no centre mullion, in both styles', () => {
   const m = structuredClone(model);
   m.walls[INNER].openings = [{ kind: 'glassdoor', c: 1.6, w: 0.6, h: 2.1 }, { kind: 'glassdoor', c: 4.5, w: 1.4, h: 2.1 }];
@@ -371,7 +414,12 @@ const WET = [
   { what: 'mirror', kind: 'mirror', rect: [32.0, 18.4, 33.2, 18.43], y: [1.1, 1.9] },
   { what: 'washer', kind: 'washer', rect: [33.3, 17.9, 33.9, 18.5], y: [0, 0.85] },
   { what: 'stove', kind: 'stove', rect: [31.3, 18.6, 31.75, 19.05], y: [0, 0.8] },
-  { what: 'bookcase', kind: 'bookcase', rect: [32.0, 18.6, 32.8, 18.95], y: [0, 1.9], finish: 'white' }
+  { what: 'bookcase', kind: 'bookcase', rect: [32.0, 18.6, 32.8, 18.95], y: [0, 1.9], finish: 'white' },
+  { what: 'chair', kind: 'chair', rect: [33.0, 18.6, 33.45, 19.05], y: [0, 0.9], back: ['z1'] },
+  { what: 'office chair', kind: 'office_chair', rect: [32.9, 19.2, 33.55, 19.85], y: [0, 1.3], back: ['x0'] },
+  { what: 'plant', kind: 'plant', rect: [31.3, 19.2, 31.7, 19.6], y: [0, 1.4] },
+  { what: 'vase', kind: 'plant', rect: [31.8, 19.2, 32.0, 19.4], y: [0.75, 1.05], bloom: true },
+  { what: 'picture', kind: 'picture', rect: [31.2, 18.5, 31.23, 19.1], y: [1.2, 1.8] }
 ];
 
 // every furniture part: [item index, world box, surface name]
@@ -416,7 +464,7 @@ test('interior: furniture by kind, every part inside its item, fewer meshes than
     meshes.forEach(o => assert.deepEqual([o.castShadow, o.receiveShadow], [true, true]));
   });
   const kinds = new Set(extra.furniture.map(f => f.kind).filter(Boolean));
-  assert.equal(kinds.size, 26, 'every kind drawn');
+  assert.equal(kinds.size, 30, 'every kind drawn');
 });
 
 test('interior: a finish draws a run of units and a bookcase in that surface, the kitchen\'s without one', () => {
@@ -427,7 +475,9 @@ test('interior: a finish draws a run of units and a bookcase in that surface, th
     { ...run, rect: [31.3, 8.2, 32.5, 8.8] },
     { ...run, rect: [31.3, 9.0, 32.5, 9.6], finish: 'anthracite' },
     { ...shelves, rect: [31.3, 9.8, 32.1, 10.15] },
-    { ...shelves, rect: [31.3, 10.4, 32.1, 10.75], finish: 'white' }
+    { ...shelves, rect: [31.3, 10.4, 32.1, 10.75], finish: 'white' },
+    { what: 'desk', kind: 'desk', rect: [31.3, 11.0, 32.9, 11.8], y: [0, 0.75], finish: 'dark_oak' },
+    { what: 'table', kind: 'table', rect: [31.3, 12.0, 32.9, 12.8], y: [0, 0.75], finish: 'medium_oak' }
   );
   const { ctx, L } = interiorOf(m), parts = furnitureOf(L, ctx.kit);
   const real = Object.keys(ctx.kit.REAL).map(n => hexOf(ctx.kit, n));
@@ -438,6 +488,21 @@ test('interior: a finish draws a run of units and a bookcase in that surface, th
   assert.deepEqual(surfaces(1), ['anthracite'], 'carcass, fronts and top');
   assert.deepEqual(surfaces(2), ['kitchen']);
   assert.deepEqual(surfaces(3), ['white']);
+  assert.deepEqual(surfaces(4), ['darkOak'], 'a desk\'s wood');
+  assert.deepEqual(surfaces(5), ['mediumOak'], 'a table\'s wood');
+});
+
+test('interior: a chair\'s and an office chair\'s back stand on the edge they name', () => {
+  const { ctx, L } = interiorOf({ ...structuredClone(model), furniture: [...structuredClone(model).furniture, ...WET] });
+  const parts = furnitureOf(L, ctx.kit), n = model.furniture.length + WET.length;
+  const top = i => parts.filter(p => p[0] === i).reduce((a, p) => (p[1].max.y > a[1].max.y ? p : a));
+  const chair = top(n - 5)[1], office = top(n - 4)[1];
+  assert.ok(chair.min.z > 19.0 && Math.abs(chair.max.y - 0.9) < 1e-6, 'the chair\'s back on z1, up to y1');
+  assert.deepEqual([...new Set(parts.filter(p => p[0] === n - 5).map(p => p[2]))].sort(), ['oak', 'shell', 'steel'], 'a shell on wooden legs and a steel cross');
+  // a picture's colour fields stand off the wall, in front of its frame
+  const pic = parts.filter(p => p[0] === n - 1), frame = pic.find(p => p[2] === 'handle')[1];
+  assert.ok(pic.some(p => p[2].startsWith('art') && p[1].min.x >= frame.max.x - 1e-9), 'the art in front of the frame');
+  assert.ok(office.max.x < 32.9 + 0.2 && Math.abs(office.max.y - 1.3) < 1e-6, 'the office chair\'s back on x0');
 });
 
 test('interior: a toilet\'s flush plate is on the wall it hangs on, a washer\'s door faces away from its wall', () => {

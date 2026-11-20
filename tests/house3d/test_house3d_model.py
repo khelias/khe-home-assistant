@@ -154,6 +154,62 @@ def _opening_finish(L):
     _walls(L)[0]["openings"][2]["finish"] = "frame"
 
 
+def _glass_on_window(L):
+    _walls(L)[0]["openings"][0]["glass"] = 0.2
+
+
+def _glass_too_wide(L):
+    _walls(L)[0]["openings"][2]["glass"] = 0.7
+
+
+def _glass_c_outside(L):
+    o = _walls(L)[0]["openings"][2]
+    o.update(glass=0.2, glass_c=o["c"] + o["w"] / 2 - 0.1)
+
+
+def _hinge_on_window(L):
+    _walls(L)[0]["openings"][0].update(hinge="a", swing=[0, 1])
+
+
+def _swing_along_wall(L):
+    w = _walls(L)[0]
+    w["openings"][2].update(hinge="b", swing=[w["b"][0] - w["a"][0], w["b"][1] - w["a"][1]])
+
+
+def _hinge_without_swing(L):
+    _walls(L)[0]["openings"][2]["hinge"] = "a"
+
+
+def _open_too_far(L):
+    w = _walls(L)[0]
+    w["openings"][2].update(hinge="a", swing=[-(w["b"][1] - w["a"][1]), w["b"][0] - w["a"][0]], open=200)
+
+
+def _chair_two_backs(L):
+    L["geometry"]["furniture"][0].update(kind="chair", back=["x0", "z0"])
+
+
+def _bloom_on_table(L):
+    L["geometry"]["furniture"][0].update(kind="table", bloom=True)
+
+
+def _picture_on_floor(L):
+    f = L["geometry"]["furniture"][0]
+    f.update(kind="picture", y=[0, 1])
+
+
+def _art_too_high(L):
+    L["geometry"]["furniture"][0].update(kind="picture", y=[1, 1.5], art=3)
+
+
+def _open_without_hinge(L):
+    _walls(L)[0]["openings"][2]["open"] = 90
+
+
+def _kitchen_finish_on_desk(L):
+    L["geometry"]["furniture"][0].update(kind="desk", finish="anthracite")
+
+
 def _light_kind(L):
     _site(L)["lights"][0]["kind"] = "spot"
 
@@ -424,6 +480,13 @@ MUTATIONS = [
     ("planter y reversed", _planter_y, "site.planters[0]: y must be [y0, y1]"),
     ("unknown plant", _planter_plant, "site.planters[0]: plant 'palm' is not one of thuja, low"),
     ("unknown opening finish", _opening_finish, "walls[0].openings[2]: finish 'frame' is not one of cladding"),
+    ("glass on a window", _glass_on_window, "walls[0].openings[0]: glass is a door's strip"),
+    ("a glass strip too wide for its door", _glass_too_wide, "walls[0].openings[2]: glass is a door's strip"),
+    ("a glass strip off its leaf", _glass_c_outside, "walls[0].openings[2]: glass is a door's strip"),
+    ("a hinge on a window", _hinge_on_window, "walls[0].openings[0]: an open door has hinge a or b"),
+    ("a swing along the wall", _swing_along_wall, "walls[0].openings[2]: an open door has hinge a or b"),
+    ("a hinge without a swing", _hinge_without_swing, "walls[0].openings[2]: an open door has hinge a or b"),
+    ("a door opened past 180", _open_too_far, "walls[0].openings[2]: an open door has hinge a or b"),
     ("unknown light kind", _light_kind, "site.lights[0]: kind 'spot' is not one of ceiling, wall"),
     ("wall light without face", _light_face, "site.lights[1]: a wall light needs face [dx, dz], its outward direction"),
     ("light off the lot", _light_off_lot, "site.lights[0]: pos is outside the lot"),
@@ -466,6 +529,7 @@ MUTATIONS = [
     ("units on a circle", _units_circle, "furniture[0]: a run of units needs a rect"),
     ("sofa back on an unknown edge", _sofa_edge, "furniture[0]: back must be a list of x0, x1, z0, z1"),
     ("arm on a table", _back_on_table, "furniture[0]: arm is only for sofa"),
+    ("a chair with two backs", _chair_two_backs, "furniture[0]: a chair's back is 1 edge"),
     ("sofa back on a circle", _back_on_circle, "furniture[0]: back needs a rect"),
     ("vanity without basins", _vanity_no_basins, "furniture[0]: basins None is not 1 or 2"),
     ("vanity of three basins", _vanity_three_basins, "furniture[0]: basins 3 is not 1 or 2"),
@@ -474,6 +538,11 @@ MUTATIONS = [
     ("finish on a bed", _finish_on_bed, "furniture[0]: finish is only for base_units"),
     ("stove on a circle", _stove_circle, "furniture[0]: a stove needs a rect"),
     ("mirror on the floor", _mirror_on_floor, "furniture[0]: a mirror hangs on the wall, its y0 above 0"),
+    ("picture on the floor", _picture_on_floor, "furniture[0]: a picture hangs on the wall, its y0 above 0"),
+    ("bloom on a table", _bloom_on_table, "furniture[0]: bloom is true or false on a plant"),
+    ("art past the palettes", _art_too_high, "furniture[0]: art is 0 to 2 on a picture"),
+    ("open without a hinge", _open_without_hinge, "walls[0].openings[2]: an open door has hinge a or b"),
+    ("a kitchen finish on a desk", _kitchen_finish_on_desk, "furniture[0]: finish 'anthracite' is not one of dark_oak, medium_oak"),
 ]
 
 

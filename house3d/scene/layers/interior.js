@@ -1,7 +1,8 @@
 // The real style's interior, drawn as an architectural model: a near-black section cap on every
 // wall's flat cut top, oak skirting and a soft shade on the floor along every wall face that
 // has a house room in front of it, and the furniture shaped by its kind (scripts/house3d_model.py
-// FURNITURE_KINDS; an item without one is a warm grey block). It reads the building layer's
+// FURNITURE_KINDS; an item without one is a warm grey block; a chair's or sofa's back is on the
+// edge it names, else the side nearer a wall). It reads the building layer's
 // inRoom and cutOf through its api, so it builds after it, and builds nothing in the
 // simple style or without the building. Caps, skirting and shade are one InstancedMesh each, the
 // furniture one per material, so the interior costs a handful of draw calls; every mesh carries
@@ -16,17 +17,21 @@ const SKIRT_H = 0.07, SKIRT_D = 0.012, FLOOR_Y = 0.02;
 const PROBE = 0.25, PROBE_OUT = 0.3; // how often and how far out a face is probed for a room
 const SHADE_W = 0.3, SHADE_Y = 0.024, SHADE_OPACITY = 0.18, SHADE_PX = 32;
 const ROOF_ON = 0.99;
+const CYLINDER_SEGMENTS = 16;
 // each kind's main surface; a circle item is a cylinder in it, except a table
 const MAIN = {
   bed: 'oak', headboard: 'fabric', wardrobe: 'cabinet', sofa: 'sofa', table: 'oak', desk: 'oak',
   counter: 'cabinet', cabinet: 'oak', bath: 'sanitary', bench: 'oak', appliance: 'unit', rug: 'rug',
-  toilet: 'sanitary', mirror: 'mirror', washer: 'white', bookcase: 'kitchen'
+  toilet: 'sanitary', mirror: 'mirror', washer: 'white', bookcase: 'kitchen', chair: 'shell', office_chair: 'sofa',
+  plant: 'leaf', picture: 'canvas'
 };
 // an item's finish other than the kitchen's: the surfaces its kitchen and kitchenTop parts and
 // its handles take; scripts/house3d_model.py FINISHES lists the same names
 const FINISHES = {
   anthracite: { kitchen: 'anthracite', kitchenTop: 'anthracite', handle: 'steel' },
-  white: { kitchen: 'white', kitchenTop: 'white' }
+  white: { kitchen: 'white', kitchenTop: 'white' },
+  dark_oak: { oak: 'darkOak', kitchen: 'darkOak', kitchenTop: 'darkOak' },
+  medium_oak: { oak: 'mediumOak', kitchen: 'mediumOak', kitchenTop: 'mediumOak' }
 };
 // the kinds whose rect edge nearest a wall carries their head (the toilet, drawn from the wall
 // out) or their back (the washer, its door facing the room)
@@ -46,6 +51,13 @@ const SEAT_W = 0.8, CUSHION_GAP = 0.012; // a sofa's cushions
 const BASIN_TOP = 0.08, TAP_H = 0.14, TAP = 0.025, SPOUT = 0.1, BASIN_W = 0.42, BASIN_D = 0.3, BASIN_RIM = 0.05;
 const BOWL_H = 0.22, SEAT_T = 0.02, FLUSH_W = 0.22, FLUSH_H = 0.15, FLUSH_T = 0.012;
 const MIRROR_EDGE = 0.02, BOOK_T = 0.02, BOOK_STEP = 0.35;
+// a chair's seat and back, legs and an office chair's arms
+const CHAIR_SEAT = 0.46, CHAIR_SEAT_T = 0.04, CHAIR_LEG = 0.035, CHAIR_BACK = 0.03, CHAIR_BRACE = 0.012, CHAIR_BRACE_Y = 0.25;
+const OFFICE_SEAT = 0.5, OFFICE_CUSHION = 0.09, OFFICE_BACK = 0.12, OFFICE_INSET = 0.05, OFFICE_ARM = 0.05, OFFICE_BASE = 0.05;
+// a plant's pot as a fraction of its height, a vase's taller; a picture's frame
+const POT_H = 0.3, VASE_H = 0.5, PICTURE_FRAME = 0.03;
+// a picture's three colour fields, by its art (scripts/house3d_model.py PICTURE_ARTS)
+const ART = [['artA', 'artB', 'artC'], ['artD', 'artC', 'artA'], ['artB', 'artD', 'bloom']];
 // a washer's door and control strip; a stove's cage bars, their spacing and the stones' lumps
 const DOOR_R = 0.33, STRIP_H = 0.07, BAR_T = 0.012, BAR_STEP = 0.1, LUMPS = 3;
 
@@ -258,8 +270,25 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
     push(name, i, new THREE.Matrix4().compose(p.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), q.setFromAxisAngle(axis, turn),
       alongX ? sc.set(x1 - x0, t, len) : sc.set(len, t, z1 - z0)));
   };
-  const cylinders = [];
-  const cylinder = (name, i, x, z, r, y0, y1) => cylinders.push({ name, i, x, z, r, y: [y0, y1] });
+  const cylinders = new Map(); // surface name -> [{ i, matrix }], on one unit cylinder
+  const cylinder = (name, i, x, z, r, y0, y1) => {
+    if (!cylinders.has(name)) cylinders.set(name, []);
+    cylinders.get(name).push({ i, matrix: new THREE.Matrix4().compose(p.set(x, (y0 + y1) / 2, z), q.identity(), sc.set(r, y1 - y0, r)) });
+  };
+
+  // the strip w wide along a rect's edge x0, x1, z0 or z1
+  const band = (r, edge, w) => ({ x0: [r[0], r[1], r[0] + w, r[3]], x1: [r[2] - w, r[1], r[2], r[3]], z0: [r[0], r[1], r[2], r[1] + w], z1: [r[0], r[3] - w, r[2], r[3]] }[edge]);
+  // a sofa's or chair's back edge without one named: the side nearer a wall
+  const backOf = (item, { alongX, frontSign }) => (item.back || [alongX ? (frontSign > 0 ? 'z0' : 'z1') : (frontSign > 0 ? 'x0' : 'x1')]);
+  // a rect pulled in by w on each of its named edges
+  const shrink = (r, edges, w) => [r[0] + (edges.includes('x0') ? w : 0), r[1] + (edges.includes('z0') ? w : 0), r[2] - (edges.includes('x1') ? w : 0), r[3] - (edges.includes('z1') ? w : 0)];
+  const ALL_EDGES = ['x0', 'x1', 'z0', 'z1'];
+  // two bars t thick crossing at a rect's centre, end inset in from its edges, centred on height y
+  const cross = (world, name, r, end, t, y) => {
+    const cx = (r[0] + r[2]) / 2, cz = (r[1] + r[3]) / 2;
+    world(name, [r[0] + end, cz - t / 2, r[2] - end, cz + t / 2], y - t / 2, y + t / 2);
+    world(name, [cx - t / 2, r[1] + end, cx + t / 2, r[3] - end], y - t / 2, y + t / 2);
+  };
 
   // the shapes, each from its frame: part(name, s0, s1, d0, d1, y0, y1), with L the length, D the
   // depth, y0 and y1 the item's own heights
@@ -281,16 +310,14 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
       const n = Math.max(1, Math.round(L / DOOR_W));
       for (let k = 1; k < n; k++) part('worktop', (k * L) / n - GROOVE / 2, (k * L) / n + GROOVE / 2, D - 0.006, D, y0 + plinth + 0.02, y1 - 0.02);
     },
-    sofa({ world, item, frame: { alongX, frontSign }, y0, h }) {
+    sofa({ world, item, frame, y0, h }) {
       // back and arm name the rect's edges that carry one, so two items can join into a corner
       // sofa; without them the back is on the side nearer a wall and an arm on each end
       const rect = item.rect, short = Math.min(rect[2] - rect[0], rect[3] - rect[1]);
-      const backs = item.back || [alongX ? (frontSign > 0 ? 'z0' : 'z1') : (frontSign > 0 ? 'x0' : 'x1')];
-      const arms = item.arm || (alongX ? ['x0', 'x1'] : ['z0', 'z1']);
+      const backs = backOf(item, frame);
+      const arms = item.arm || (frame.alongX ? ['x0', 'x1'] : ['z0', 'z1']);
       const armW = Math.min(0.22, short / 4), backW = Math.min(0.14, short / 3), cushion = Math.min(0.14, short / 4), foot = 0.04, inset = 0.03;
       const under = y0 + 0.12 * h, base = y0 + 0.34 * h, seat = y0 + 0.55 * h, armTop = y0 + 0.72 * h, top = y0 + h;
-      const shrink = (r, edges, w) => [r[0] + (edges.includes('x0') ? w : 0), r[1] + (edges.includes('z0') ? w : 0), r[2] - (edges.includes('x1') ? w : 0), r[3] - (edges.includes('z1') ? w : 0)];
-      const band = (r, edge, w) => ({ x0: [r[0], r[1], r[0] + w, r[3]], x1: [r[2] - w, r[1], r[2], r[3]], z0: [r[0], r[1], r[2], r[1] + w], z1: [r[0], r[3] - w, r[2], r[3]] }[edge]);
       // cushions side by side along the rect's longer side, a small gap between them
       const cushions = (r, a, b) => {
         const onX = r[2] - r[0] >= r[3] - r[1], lo = onX ? r[0] : r[1], len = (onX ? r[2] : r[3]) - lo, n = Math.max(1, Math.round(len / SEAT_W));
@@ -308,6 +335,54 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
       cushions(seats, base, seat);
       // the back cushions along z take the corner, those along x stop at them
       backs.forEach(e => cushions(band(e[0] === 'z' ? inner : [inner[0], seats[1], inner[2], seats[3]], e, cushion), base, top));
+    },
+    chair({ world, item, frame, y0, y1 }) {
+      // a moulded plastic shell, its seat and a back along the back edge up to y1, on four wooden
+      // legs braced by a steel cross
+      const r = item.rect, back = backOf(item, frame)[0], seat = y0 + CHAIR_SEAT, l = CHAIR_LEG;
+      [[r[0], r[1]], [r[2] - l, r[1]], [r[0], r[3] - l], [r[2] - l, r[3] - l]].forEach(([x, z]) => world('oak', [x, z, x + l, z + l], y0, seat - CHAIR_SEAT_T));
+      cross(world, 'steel', r, l, CHAIR_BRACE, y0 + CHAIR_BRACE_Y);
+      world('shell', r, seat - CHAIR_SEAT_T, seat);
+      world('shell', band(r, back, CHAIR_BACK), seat, y1);
+    },
+    office_chair({ world, item, frame, y0, y1 }) {
+      // a cross of a base, a steel column, a cushion, a tall back and two arms
+      const r = item.rect, back = backOf(item, frame)[0], seat = y0 + OFFICE_SEAT;
+      const cx = (r[0] + r[2]) / 2, cz = (r[1] + r[3]) / 2, b = OFFICE_BASE / 4;
+      cross(world, 'handle', r, 0, OFFICE_BASE, y0 + OFFICE_BASE / 2);
+      world('steel', [cx - b, cz - b, cx + b, cz + b], y0 + OFFICE_BASE, seat - OFFICE_CUSHION);
+      const top = shrink(r, ALL_EDGES, OFFICE_INSET);
+      world('sofa', top, seat - OFFICE_CUSHION, seat);
+      world('sofa', band(top, back, OFFICE_BACK), seat, y1);
+      const sides = back[0] === 'z' ? ['x0', 'x1'] : ['z0', 'z1'];
+      sides.forEach(e => world('handle', band(top, e, OFFICE_ARM), seat + 0.18, seat + 0.22));
+    },
+    plant({ cyl, item, y0, y1 }) {
+      // a pot, a short stem and a rounded crown of three offset cylinders; with bloom a taller
+      // vase, a smaller crown and flower heads above it
+      const [x0, z0, x1, z1] = item.rect, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, R = Math.min(x1 - x0, z1 - z0) / 2, h = y1 - y0;
+      const at = f => y0 + f * h, pot = at(item.bloom ? VASE_H : POT_H);
+      cyl('pot', cx, cz, (item.bloom ? 0.4 : 0.62) * R, y0, pot);
+      if (item.bloom) {
+        cyl('leaf', cx, cz, 0.6 * R, pot, at(0.78));
+        [[0.3, 0], [-0.2, 0.25], [-0.15, -0.3]].forEach(([dx, dz]) => cyl('bloom', cx + dx * R, cz + dz * R, 0.3 * R, at(0.72), y1));
+        return;
+      }
+      cyl('trunk', cx, cz, Math.min(0.02, 0.08 * R), pot, at(0.5));
+      cyl('leaf', cx, cz, 0.85 * R, at(0.42), at(0.74));
+      cyl('leaf', cx + 0.15 * R, cz - 0.1 * R, 0.7 * R, at(0.62), at(0.9));
+      cyl('leaf', cx - 0.15 * R, cz + 0.12 * R, 0.55 * R, at(0.82), y1);
+    },
+    picture({ part, item, L, D, y0, y1 }) {
+      // a black frame round a canvas with three colour fields, a ground, a sky and a sun, each in
+      // a layer of its own a little prouder than the last, so none fight for the same plane
+      const h = y1 - y0, f = Math.min(PICTURE_FRAME, L / 6, h / 6), [a, b, c] = ART[item.art || 0];
+      const inner = h - 2 * f, s = Math.min(L, h) * 0.18, d = k => D * (0.4 + 0.2 * k);
+      part('handle', 0, L, 0, d(0), y0, y1);
+      part('canvas', f, L - f, d(0), d(1), y0 + f, y1 - f);
+      part(a, f, L - f, d(1), d(2), y0 + f, y0 + f + 0.4 * inner);
+      part(b, f, L - f, d(1), d(2), y0 + f + 0.55 * inner, y1 - f);
+      part(c, 0.62 * L, 0.62 * L + s, d(2), D, y1 - f - 0.12 * h - s, y1 - f - 0.12 * h);
     },
     table(o) { legs(o, false); },
     desk(o) { legs(o, true); },
@@ -575,8 +650,8 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
       const [x, z, r] = f.circle;
       if (f.kind !== 'table') return cylinder(surf(MAIN[f.kind] || 'furniture'), i, x, z, r, y0, y1);
       const under = underTop(y0, y1);
-      cylinder('oak', i, x, z, r, under, y1);
-      cylinder('oak', i, x, z, Math.min(0.06, r / 3), 0, under);
+      cylinder(surf('oak'), i, x, z, r, under, y1);
+      cylinder(surf('oak'), i, x, z, Math.min(0.06, r / 3), 0, under);
       return;
     }
     if (f.kind === 'splashback') return splashback(f, i);
@@ -586,6 +661,7 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
     shape({
       part: (name, s0, s1, d0, d1, a, b) => add(surf(name), i, box(s0, s1, d0, d1), a, b),
       world: (name, rect, a, b) => add(surf(name), i, rect, a, b),
+      cyl: (name, x, z, r, a, b) => cylinder(surf(name), i, x, z, r, a, b),
       lean: (name, s0, s1, d0, d1, a, b, t) => leaning(surf(name), i, fr, s0, s1, d0, d1, a, b, t),
       L, D, y0, y1, h: y1 - y0, item: f, frame: fr
     });
@@ -596,12 +672,11 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
     im.userData.items = list.map(x => x.i);
     im.castShadow = im.receiveShadow = true;
   });
-  cylinders.forEach(({ name, i, x, z, r, y: [a, b] }) => {
-    const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, b - a, 24), mat(name));
-    c.position.set(x, (a + b) / 2, z);
-    c.userData = { part: 'furniture', items: [i] };
-    c.castShadow = c.receiveShadow = true;
-    group.add(c);
+  const unitCylinder = new THREE.CylinderGeometry(1, 1, 1, CYLINDER_SEGMENTS);
+  cylinders.forEach((list, name) => {
+    const im = instanced(unitCylinder, mat(name), list.map(x => x.matrix), 'furniture');
+    im.userData.items = list.map(x => x.i);
+    im.castShadow = im.receiveShadow = true;
   });
 
   // the cut walls' caps hide under the lifted walls while the roof is fully on; they cast no

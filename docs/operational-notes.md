@@ -508,8 +508,12 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   trims and corners from photos, paving stones, the play area, bar and mesh
   fences, the sun in the sky, the real sun and shadows; interior walls'
   doors and frames white, exterior ones anthracite, a door with
-  `"finish": "cladding"` on its opening in the walls' colour, and a glass
-  door under 1.2 m wide in one leaf, without the centre mullion; inside,
+  `"finish": "cladding"` on its opening in the walls' colour, a door with
+  `glass` (a width, at `glass_c` along the wall, else its middle) a
+  vertical glass strip down its leaf, a door with `hinge` (`a` or `b`, the
+  wall end it hangs from) and `swing` (`[dx, dz]`, square to the wall)
+  standing open by `open` degrees, flat against the wall by default, and a
+  glass door under 1.2 m wide in one leaf, without the centre mullion; inside,
   an architectural model: oak planks along the plan's z and the wet rooms'
   wood-look tile on the floors, near-black section caps on the walls' cut
   tops, oak skirting and a soft shade on the floor along the walls, and the furniture shaped by
@@ -707,19 +711,25 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   (bed, headboard, wardrobe, sofa, table, desk, counter, cabinet, bath,
   bench, appliance, base_units, wall_units, tall_units, hood, shelf,
   splashback, tv, rug, curtain, toilet, vanity, mirror, washer, stove,
-  bookcase). `base_units`, `wall_units`, `tall_units` and `vanity` also need
+  bookcase, chair, office_chair, plant, picture). `base_units`, `wall_units`, `tall_units` and `vanity` also need
   `along`, `"x"` or `"z"`, and `fronts`, a list of `[type, width]` from that
   axis's low end (types `door`, `drawers`, `oven`, `glass`, `blank`) whose
   widths sum to the item's size on `along` within 1 cm; no other kind takes
   either field. A `vanity` also needs `basins`, 1 or 2, evenly along its
   porcelain top; a basin with no cabinet is a vanity with one `blank` front.
-  Those four kinds and `bookcase` may take a `finish`: `kitchen` (the
-  default: blue-grey fronts under a brown worktop), `anthracite` (with steel
-  handles) or `white`, which colours the carcass, the fronts and a worktop
-  alike; no other kind takes `basins` or `finish`. A `stove` (a sauna
-  heater) needs a rect and a `mirror` a `y0` above 0. A `sofa` may name the
-  rect's edges that carry a `back` and an `arm` (`x0`, `x1`, `z0`, `z1`), so
-  two items join into a corner sofa. The real style draws an item by its kind inside its footprint
+  Those four kinds, `bookcase`, `table`, `desk` and `chair` may take a
+  `finish`: `kitchen` (the default: blue-grey fronts under a brown worktop),
+  `anthracite` (with steel handles), `white`, `dark_oak` or `medium_oak`,
+  which colours the carcass, the fronts, a worktop and the oak alike (a
+  table, desk or chair takes only the two oaks); no
+  other kind takes `basins` or `finish`. A `stove` (a sauna heater), a
+  `plant` and a `picture` need a rect, and a `mirror` and a `picture` a `y0`
+  above 0. A `sofa` may name the rect's edges that carry a `back` and an
+  `arm` (`x0`, `x1`, `z0`, `z1`), so two items join into a corner sofa, and a
+  `chair` (a black shell on wooden legs with a steel cross) or an
+  `office_chair` its one `back` edge. A `plant` is a pot and a rounded crown,
+  with `bloom: true` a vase of flowers; a `picture` is a framed canvas in
+  one of three palettes, its `art` 0 (the default) to 2. The real style draws an item by its kind inside its footprint
   and heights (a table's or desk's legs alone reach down to the floor),
   turning it to the nearest wall face and a bed's head to its headboard; a
   toilet's head and a washer's back go on whichever edge of the rect is

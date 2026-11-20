@@ -77,6 +77,10 @@ FURNITURE_KINDS = (
     "washer",
     "stove",
     "bookcase",
+    "chair",
+    "office_chair",
+    "plant",
+    "picture",
 )
 # a run of units: along is the axis its fronts run on, fronts [type, width] from that axis's low end
 FRONTED_KINDS = ("base_units", "wall_units", "tall_units", "vanity")
@@ -84,11 +88,21 @@ FINISHES = (
     "kitchen",
     "anthracite",
     "white",
-)  # a fitted item's carcass and fronts; kitchen without one
-FINISHED_KINDS = (*FRONTED_KINDS, "bookcase")
+    "dark_oak",
+    "medium_oak",
+)  # a fitted item's carcass and fronts, a table's, desk's or chair's wood; kitchen or oak without one
+WOOD_FINISHES = ("dark_oak", "medium_oak")  # the only ones that recolour oak
+WOOD_KINDS = ("table", "desk", "chair")
+FINISHED_KINDS = (*FRONTED_KINDS, "bookcase", *WOOD_KINDS)
 FRONT_TYPES = ("door", "drawers", "oven", "glass", "blank")
 FRONTS_SUM = 0.01  # how far the fronts' widths may miss the item's size on along
 SOFA_EDGES = ("x0", "x1", "z0", "z1")  # a sofa's back and arm: the rect's edges that carry one
+# the edges a kind may name for its back and arm: None for any number, else exactly that many
+EDGE_KEYS = {"sofa": {"back": None, "arm": None}, "chair": {"back": 1}, "office_chair": {"back": 1}}
+RECT_ONLY_KINDS = ("stove", "plant", "picture")
+WALL_HUNG_KINDS = ("mirror", "picture")  # y0 above the floor
+PICTURE_ARTS = 3  # a picture's art picks one of the engine's palettes, 0 by default
+DOOR_GLASS_MARGIN = 0.2  # how far a door's glass strip stays inside its opening on each side
 FUTURE_ROT = (0, 90, 180, 270)
 PANEL = (1.72, 1.13)  # a PV panel's long and short side; the engine lays them out the same way
 PANEL_GAP = 0.02
@@ -133,6 +147,30 @@ def with_room_names(model):
     # new room dicts: merge() shares them with the layers, and the rooms layer is shareable
     model["rooms"] = [dict(r, name=names.get(r["id"], r["name"])) for r in model["rooms"]]
     return model
+
+
+def _door_glass_ok(o):
+    """A door's glass strip, glass wide at glass_c along the wall (c by default), 0.2 inside."""
+    g, gc = o.get("glass"), o.get("glass_c", o["c"])
+    if o.get("kind") != "door" or not (_num(g) and _num(gc)) or g <= 0:
+        return False
+    return abs(gc - o["c"]) + g / 2 <= o["w"] / 2 - DOOR_GLASS_MARGIN + 1e-9
+
+
+def _door_swing_ok(o, w):
+    """A door drawn open: hinged at its wall's a or b end, swinging to one side square to it,
+    turned open up to 180 degrees (flat against the wall, the default)."""
+    sw = o.get("swing")
+    if o.get("kind") != "door" or "glass" in o or o.get("hinge") not in ("a", "b"):
+        return False
+    if "open" in o and not (_num(o["open"]) and 0 < o["open"] <= 180):
+        return False
+    if not _point(sw):
+        return False
+    ux, uz = w["b"][0] - w["a"][0], w["b"][1] - w["a"][1]
+    # square within about a degree, so a swing read off a slanted wall still passes
+    n = math.hypot(*sw) * math.hypot(ux, uz)
+    return n > 0 and abs(sw[0] * ux + sw[1] * uz) <= 0.02 * n
 
 
 def _num(v):
@@ -336,6 +374,16 @@ def validate(layers):
                 )
             if o.get("kind") == "window" and not _num(o.get("sill")):
                 bad(f"{where}.openings[{j}]: a window needs a sill")
+            if ("glass" in o or "glass_c" in o) and not _door_glass_ok(o):
+                bad(
+                    f"{where}.openings[{j}]: glass is a door's strip, wider than 0 and at least 0.2 "
+                    "inside the opening on each side, at glass_c if given"
+                )
+            if ("hinge" in o or "swing" in o or "open" in o) and not _door_swing_ok(o, w):
+                bad(
+                    f"{where}.openings[{j}]: an open door has hinge a or b, a swing [dx, dz] "
+                    "square to its wall, open up to 180 and no glass"
+                )
             if "finish" in o and o["finish"] not in OPENING_FINISHES:
                 bad(
                     f"{where}.openings[{j}]: finish {o['finish']!r} is not one of {', '.join(OPENING_FINISHES)}"
@@ -357,7 +405,7 @@ def validate(layers):
         if "kind" in f and f["kind"] not in FURNITURE_KINDS:
             bad(f"{where}: kind {f['kind']!r} is not one of {', '.join(FURNITURE_KINDS)}")
         _validate_fronts(where, f, bad)
-        _validate_sofa_edges(where, f, bad)
+        _validate_edges(where, f, bad)
         _validate_fitted(where, f, bad)
 
     site = model.get("site", {})
@@ -580,8 +628,8 @@ def _validate_fronts(where, f, bad):
 
 
 def _validate_fitted(where, f, bad):
-    """A vanity counts its basins, a fitted item or a bookcase may name its finish, a stove is a
-    rect and a mirror hangs above the floor; no other item takes basins or finish."""
+    """A vanity counts its basins, a finished kind may name its finish, some kinds need a rect or
+    hang above the floor, a plant may bloom and a picture name its art."""
     kind = f.get("kind")
     if kind == "vanity":
         if not (type(f.get("basins")) is int and f["basins"] in (1, 2)):
@@ -589,27 +637,38 @@ def _validate_fitted(where, f, bad):
     elif "basins" in f:
         bad(f"{where}: basins is only for vanity")
     if kind in FINISHED_KINDS:
-        if "finish" in f and f["finish"] not in FINISHES:
-            bad(f"{where}: finish {f['finish']!r} is not one of {', '.join(FINISHES)}")
+        allowed = WOOD_FINISHES if kind in WOOD_KINDS else FINISHES
+        if "finish" in f and f["finish"] not in allowed:
+            bad(f"{where}: finish {f['finish']!r} is not one of {', '.join(allowed)}")
     elif "finish" in f:
         bad(f"{where}: finish is only for {', '.join(FINISHED_KINDS)}")
-    if kind == "stove" and "rect" not in f:
-        bad(f"{where}: a stove needs a rect")
-    if kind == "mirror" and _point(f.get("y")) and f["y"][0] <= 0:
-        bad(f"{where}: a mirror hangs on the wall, its y0 above 0")
+    if kind in RECT_ONLY_KINDS and "rect" not in f:
+        bad(f"{where}: a {kind} needs a rect")
+    if kind in WALL_HUNG_KINDS and _point(f.get("y")) and f["y"][0] <= 0:
+        bad(f"{where}: a {kind} hangs on the wall, its y0 above 0")
+    if "bloom" in f and (kind != "plant" or not isinstance(f["bloom"], bool)):
+        bad(f"{where}: bloom is true or false on a plant")
+    if "art" in f and (
+        kind != "picture" or type(f["art"]) is not int or not 0 <= f["art"] < PICTURE_ARTS
+    ):
+        bad(f"{where}: art is 0 to {PICTURE_ARTS - 1} on a picture")
 
 
-def _validate_sofa_edges(where, f, bad):
-    """A sofa may name the rect's edges that carry a back and an arm; no other item has either."""
+def _validate_edges(where, f, bad):
+    """The kinds in EDGE_KEYS may name the rect's edges that carry a back or an arm, so two sofas
+    join into a corner sofa; no other item has either."""
     for key in ("back", "arm"):
         if key not in f:
             continue
-        if f.get("kind") != "sofa":
-            bad(f"{where}: {key} is only for sofa")
+        kinds = [k for k, keys in EDGE_KEYS.items() if key in keys]
+        if f.get("kind") not in kinds:
+            bad(f"{where}: {key} is only for {', '.join(kinds)}")
         elif "rect" not in f:
             bad(f"{where}: {key} needs a rect")
         elif not (isinstance(f[key], list) and all(e in SOFA_EDGES for e in f[key])):
             bad(f"{where}: {key} must be a list of {', '.join(SOFA_EDGES)}")
+        elif (n := EDGE_KEYS[f["kind"]][key]) is not None and len(f[key]) != n:
+            bad(f"{where}: a {f['kind']}'s {key} is {n} edge")
 
 
 def _validate_festive(festive, lot, bad):
