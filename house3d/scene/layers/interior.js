@@ -58,6 +58,14 @@ const OFFICE_SEAT = 0.5, OFFICE_CUSHION = 0.09, OFFICE_BACK = 0.12, OFFICE_INSET
 const POT_H = 0.3, VASE_H = 0.5, PICTURE_FRAME = 0.03;
 // a picture's three colour fields, by its art (scripts/house3d_model.py PICTURE_ARTS)
 const ART = [['artA', 'artB', 'artC'], ['artD', 'artC', 'artA'], ['artB', 'artD', 'bloom']];
+// art 3, after the three palettes: grey-blue brush strokes on a pale grey ground, each stroke
+// [from, to] across the canvas, [low, high] up it, and its colour, the later ones over the earlier
+const BRUSH_ART = ART.length, STROKE_T = 0.006, STROKE_STEP = 0.0007;
+const STROKES = [
+  [0, 0.72, 0.62, 1, 'brushB'], [0.3, 1, 0.7, 0.9, 'brushA'], [0, 0.55, 0.38, 0.6, 'brushA'],
+  [0.4, 1, 0.3, 0.52, 'brushD'], [0.08, 0.86, 0.12, 0.3, 'brushB'], [0.5, 0.95, 0.05, 0.16, 'brushD'],
+  [0.15, 0.6, 0.78, 0.86, 'brushC'], [0.62, 0.9, 0.44, 0.48, 'brushC'], [0.05, 0.38, 0.2, 0.24, 'brushC']
+];
 // a washer's door and control strip; a stove's cage bars, their spacing and the stones' lumps
 const DOOR_R = 0.33, STRIP_H = 0.07, BAR_T = 0.012, BAR_STEP = 0.1, LUMPS = 3;
 
@@ -376,9 +384,17 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
     picture({ part, item, L, D, y0, y1 }) {
       // a black frame round a canvas with three colour fields, a ground, a sky and a sun, each in
       // a layer of its own a little prouder than the last, so none fight for the same plane
-      const h = y1 - y0, f = Math.min(PICTURE_FRAME, L / 6, h / 6), [a, b, c] = ART[item.art || 0];
+      const h = y1 - y0, f = Math.min(PICTURE_FRAME, L / 6, h / 6);
       const inner = h - 2 * f, s = Math.min(L, h) * 0.18, d = k => D * (0.4 + 0.2 * k);
       part('handle', 0, L, 0, d(0), y0, y1);
+      if (item.art === BRUSH_ART) {
+        // each stroke a slab off the ground, the later ones a hair prouder, so no two faces share a plane
+        const w = L - 2 * f, front = k => Math.min(D, d(1) + STROKE_T + STROKE_STEP * k);
+        part('brushGround', f, L - f, d(0), d(1), y0 + f, y1 - f);
+        STROKES.forEach(([s0, s1, lo, hi, colour], k) => part(colour, f + s0 * w, f + s1 * w, d(1), front(k), y0 + f + lo * inner, y0 + f + hi * inner));
+        return;
+      }
+      const [a, b, c] = ART[item.art || 0];
       part('canvas', f, L - f, d(0), d(1), y0 + f, y1 - f);
       part(a, f, L - f, d(1), d(2), y0 + f, y0 + f + 0.4 * inner);
       part(b, f, L - f, d(1), d(2), y0 + f + 0.55 * inner, y1 - f);

@@ -101,7 +101,7 @@ SOFA_EDGES = ("x0", "x1", "z0", "z1")  # a sofa's back and arm: the rect's edges
 EDGE_KEYS = {"sofa": {"back": None, "arm": None}, "chair": {"back": 1}, "office_chair": {"back": 1}}
 RECT_ONLY_KINDS = ("stove", "plant", "picture")
 WALL_HUNG_KINDS = ("mirror", "picture")  # y0 above the floor
-PICTURE_ARTS = 3  # a picture's art picks one of the engine's palettes, 0 by default
+PICTURE_ARTS = 4  # a picture's art: the engine's three palettes, 0 by default, or 3, its grey-blue brush strokes
 DOOR_GLASS_MARGIN = 0.2  # how far a door's glass strip stays inside its opening on each side
 FUTURE_ROT = (0, 90, 180, 270)
 PANEL = (1.72, 1.13)  # a PV panel's long and short side; the engine lays them out the same way
@@ -673,8 +673,9 @@ def _validate_edges(where, f, bad):
 
 def _validate_festive(festive, lot, bad):
     """site.festive, the winter layer's lights, every key optional: icicles [{ path: [[x, y, z],
-    ...], drop?, ground? }] with each path of two or more points on the lot above the ground, and
-    planters (true winds a string round every tall planter plant)."""
+    ...], drop?, ground? }] with each path of two or more points on the lot above the ground,
+    planters (true winds a string round every tall planter plant) and christmas_trees [{ pos:
+    [x, z], height, base }] on the lot, base no wider than the tree is tall."""
     if not isinstance(festive, dict):
         bad("site.festive: not a JSON object")
         return
@@ -704,6 +705,24 @@ def _validate_festive(festive, lot, bad):
             bad(f"{where}: ground must be true or false")
     if "planters" in festive and not isinstance(festive["planters"], bool):
         bad("site.festive.planters: must be true or false")
+    trees = festive.get("christmas_trees", [])
+    if not isinstance(trees, list):
+        bad("site.festive.christmas_trees: not a list")
+        trees = []
+    for i, t in enumerate(trees):
+        where = f"site.festive.christmas_trees[{i}]"
+        if not isinstance(t, dict):
+            bad(f"{where}: not a JSON object")
+            continue
+        if not _point(t.get("pos"), 2):
+            bad(f"{where}: pos must be [x, z]")
+        elif lot and not _inside(t["pos"], lot):
+            bad(f"{where}: pos is outside the lot")
+        height, base = t.get("height"), t.get("base")
+        if not (_num(height) and 0.5 <= height <= 4):
+            bad(f"{where}: height must be from 0.5 to 4")
+        elif not (_num(base) and 0 < base <= height):
+            bad(f"{where}: base must be above 0 and at most the height")
 
 
 def _validate_future(model, roofs, bad):

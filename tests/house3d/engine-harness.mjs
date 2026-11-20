@@ -30,7 +30,7 @@ export const { OrbitControls } = await import(new URL('vendor/three-0.186.1/exam
 export const { sunPosition, gridBearing, sunDirection, sunGlow, realLight } = await import(new URL('scene/sun.js', E));
 export const { cornerBoards } = await import(new URL('scene/layers/building.js', E));
 export const { panelGrid } = await import(new URL('scene/layers/future.js', E));
-export const { icicleLeds } = await import(new URL('scene/layers/winter.js', E));
+export const { icicleLeds, spruce } = await import(new URL('scene/layers/winter.js', E));
 
 export const model = JSON.parse(execFileSync('python3', ['-I', fileURLToPath(new URL('../../scripts/house3d_model.py', import.meta.url)), '--layers', 'all',
   fileURLToPath(new URL('./fixture-model.md', import.meta.url))], { encoding: 'utf-8' }));

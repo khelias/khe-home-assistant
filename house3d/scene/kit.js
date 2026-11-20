@@ -46,7 +46,8 @@ const REAL = {
   rug: '#b9b1a3', sheer: '#f4f2ec', sofa: '#4a4c51',
   anthracite: '#3b3d40', white: '#eeeeeb', sanitary: '#f7f7f4', mirror: '#d3dade', stones: '#46484a', darkOak: '#7f6145', mediumOak: '#b08a62', shell: '#1c1d1f',
   pot: '#d4cec4', leaf: '#4b7343', bloom: '#d98aa0', canvas: '#efe9de', artA: '#c4744e', artB: '#8da488', artC: '#d8b05c', artD: '#3e5a6f',
-  snow: '#f1f4f7'
+  brushGround: '#c9ced3', brushA: '#5d7086', brushB: '#8e9caa', brushC: '#e2e5e8', brushD: '#3d4b5b',
+  snow: '#f1f4f7', spruce: '#2b4a2f', baubleRed: '#a8232c', baubleGold: '#d0a038', baubleSilver: '#c4c8cd'
 };
 // the cladding's boards: about 12 cm wide, rising to the right at 45 degrees, only their grooves
 // drawn, on a 2 m tile of the walls' metre UVs
@@ -87,6 +88,9 @@ export function createKit(THREE, style = 'simple') {
     steel: { roughness: 0.38, metalness: 0.65 },
     sanitary: { roughness: 0.18 },
     mirror: { roughness: 0.08, metalness: 0.2 },
+    baubleRed: { roughness: 0.25, metalness: 0.35 },
+    baubleGold: { roughness: 0.25, metalness: 0.6 },
+    baubleSilver: { roughness: 0.2, metalness: 0.7 },
     sheer: { transparent: true, opacity: SHEER_OPACITY, side: THREE.DoubleSide, depthWrite: false, forceSinglePass: true }
   };
   const surface = style === 'real'

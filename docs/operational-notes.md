@@ -587,7 +587,11 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   cable along the path with a strand every 0.18 m, the strands' lengths
   cycling through shares of `drop`, an LED every 7 cm down each, and the
   LEDs along the cable on a near-vertical segment) and `planters: true` (a
-  string winding round every tall planter plant). The trees carry no lights.
+  string winding round every tall planter plant). `christmas_trees`
+  `[{ "pos": [x, z], "height": 2, "base": 1.3 }]` are trees dressed indoors:
+  a stand, six stacked cones, baubles, a gold star and an LED string wound up
+  the outline, drawn with the ground, not the lift, each piece instanced
+  across the trees. The garden's trees carry no lights.
   They glow whenever it is dark: each LED a bright point with a soft halo,
   and a warm wash fading down the wall behind a roof path, since the real
   style has no bloom. The building api finds that wall (`wallBehind`), and

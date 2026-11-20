@@ -199,7 +199,7 @@ def _picture_on_floor(L):
 
 
 def _art_too_high(L):
-    L["geometry"]["furniture"][0].update(kind="picture", y=[1, 1.5], art=3)
+    L["geometry"]["furniture"][0].update(kind="picture", y=[1, 1.5], art=4)
 
 
 def _open_without_hinge(L):
@@ -232,6 +232,14 @@ def _festive_off_lot(L):
 
 def _festive_drop(L):
     _site(L)["festive"]["icicles"][0]["drop"] = 2
+
+
+def _christmas_tree_off_lot(L):
+    _site(L)["festive"]["christmas_trees"][0]["pos"] = [24.9, 40]
+
+
+def _christmas_tree_wide(L):
+    _site(L)["festive"]["christmas_trees"][0]["base"] = 2.5
 
 
 def _planter_finish(L):
@@ -493,6 +501,8 @@ MUTATIONS = [
     ("icicle path of one point", _festive_one_point, "site.festive.icicles[0]: path must be two or more [x, y, z] points"),
     ("icicle point off the lot", _festive_off_lot, "site.festive.icicles[1]: a point is outside the lot"),
     ("icicle drop of 2", _festive_drop, "site.festive.icicles[0]: drop must be above 0 and at most 1"),
+    ("christmas tree off the lot", _christmas_tree_off_lot, "site.festive.christmas_trees[0]: pos is outside the lot"),
+    ("christmas tree wider than tall", _christmas_tree_wide, "site.festive.christmas_trees[0]: base must be above 0 and at most the height"),
     ("unknown planter finish", _planter_finish, "site.planters[1]: finish 'brick' is not one of frame, cladding"),
     ("step without height", _step_height, "site.steps[0]: height is not a positive number"),
     ("planter not an object", _planter_list, "site.planters[0]: not a JSON object"),
@@ -540,7 +550,7 @@ MUTATIONS = [
     ("mirror on the floor", _mirror_on_floor, "furniture[0]: a mirror hangs on the wall, its y0 above 0"),
     ("picture on the floor", _picture_on_floor, "furniture[0]: a picture hangs on the wall, its y0 above 0"),
     ("bloom on a table", _bloom_on_table, "furniture[0]: bloom is true or false on a plant"),
-    ("art past the palettes", _art_too_high, "furniture[0]: art is 0 to 2 on a picture"),
+    ("art past the palettes", _art_too_high, "furniture[0]: art is 0 to 3 on a picture"),
     ("open without a hinge", _open_without_hinge, "walls[0].openings[2]: an open door has hinge a or b"),
     ("a kitchen finish on a desk", _kitchen_finish_on_desk, "furniture[0]: finish 'anthracite' is not one of dark_oak, medium_oak"),
 ]

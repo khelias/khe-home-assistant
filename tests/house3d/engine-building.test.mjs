@@ -502,6 +502,15 @@ test('interior: a chair\'s and an office chair\'s back stand on the edge they na
   // a picture's colour fields stand off the wall, in front of its frame
   const pic = parts.filter(p => p[0] === n - 1), frame = pic.find(p => p[2] === 'handle')[1];
   assert.ok(pic.some(p => p[2].startsWith('art') && p[1].min.x >= frame.max.x - 1e-9), 'the art in front of the frame');
+  // the brush art: strokes over a pale grey ground, in front of the frame, inside it
+  const brushed = structuredClone(model);
+  brushed.furniture.push({ ...WET.at(-1), art: 3 });
+  const { ctx: bctx, L: bL } = interiorOf(brushed), strokes = furnitureOf(bL, bctx.kit).filter(p => p[0] === brushed.furniture.length - 1);
+  const bframe = strokes.find(p => p[2] === 'handle')[1], E = 1e-5; // the instances' float32 matrices
+  assert.ok(strokes.some(p => p[2] === 'brushGround'));
+  assert.equal(strokes.filter(p => /^brush[A-D]$/.test(p[2])).length, 9);
+  strokes.forEach(([, b]) => [b.min.toArray(), b.max.toArray()].forEach(([x, y, z]) => assert.ok(x >= 31.2 - E && x <= 31.23 + E && y >= bframe.min.y - E && y <= bframe.max.y + E && z >= bframe.min.z - E && z <= bframe.max.z + E, `${x}, ${y}, ${z}`)));
+  assert.ok(!strokes.some(p => p[2].startsWith('art')), 'no colour fields');
   assert.ok(office.max.x < 32.9 + 0.2 && Math.abs(office.max.y - 1.3) < 1e-6, 'the office chair\'s back on x0');
 });
 

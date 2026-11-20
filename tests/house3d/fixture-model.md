@@ -163,7 +163,8 @@ model, never this file.
     { "path": [[31.32, 2.72, 1.68], [31.32, 3.74, 1.68], [21.68, 3.16, 1.68]] },
     { "path": [[31.35, 2.48, 2.45], [31.35, 0.1, 2.45]], "ground": true }
    ],
-   "planters": true
+   "planters": true,
+   "christmas_trees": [{ "pos": [24.9, 21.1], "height": 2, "base": 1.2 }]
   }
  }
 }

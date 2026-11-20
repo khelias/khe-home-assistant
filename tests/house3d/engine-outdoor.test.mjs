@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  LAYERS, THREE, createKit, BUILDERS, buildLayer, panelGrid, icicleLeds, model, options, makeCtx,
+  LAYERS, THREE, createKit, BUILDERS, buildLayer, panelGrid, icicleLeds, spruce, model, options, makeCtx,
   buildAll, hexOf, partsOf, winterOf, futureItem
 } from './engine-harness.mjs';
 
@@ -315,6 +315,34 @@ test('winter layer: a string round each thuja, no lights on the trees, glowing o
   L.group.traverse(o => assert.ok(!o.castShadow, 'casts nothing'));
   L.lift.traverse(o => assert.ok(!o.castShadow, 'casts nothing'));
   assert.ok(!L.shades);
+});
+
+test('winter layer: a dressed Christmas tree on the floor, its string, baubles and star glowing at night', () => {
+  const { ctx, byId } = winterOf(), L = byId.winter, [t] = model.site.festive.christmas_trees, [info] = L.group.userData.winter.trees;
+  const s = spruce(t);
+  assert.deepEqual(info, { leds: s.leds.length, baubles: s.baubles.length });
+  assert.equal(s.tiers.length, 6);
+  assert.ok(info.leds > 80 && info.baubles > 15, `${info.leds} LEDs, ${info.baubles} baubles`);
+  // the rims narrow to the tip, which is the tree's height, inside its base
+  s.tiers.forEach((tier, i) => i && assert.ok(tier.r < s.tiers[i - 1].r && tier.y > s.tiers[i - 1].y));
+  assert.ok(Math.abs(s.tiers.at(-1).y + s.tiers.at(-1).h - t.height) < 1e-9);
+  assert.equal(s.tiers[0].r, t.base / 2);
+  [...s.leds, ...s.baubles.map(b => b.at)].forEach(([x, y, z]) => {
+    assert.ok(Math.hypot(x - t.pos[0], z - t.pos[1]) <= t.base / 2 + 0.02 && y > 0 && y < t.height, `${x}, ${y}, ${z}`);
+  });
+  s.leds.forEach(([x, y, z]) => assert.ok(Math.abs(Math.hypot(x - t.pos[0], z - t.pos[1]) - s.radius(y) - 0.01) < 1e-9, 'the string lies on the outline'));
+  assert.ok(s.star[1] > t.height);
+  const tree = partsUnder(L.group, 'christmas-tree');
+  assert.equal(tree.length, 1);
+  assert.equal(partsUnder(L.lift, 'christmas-tree').length, 0, 'indoors, not in the lift');
+  const leds = partsUnder(L.group, 'tree-leds')[0];
+  assert.equal(leds.geometry.attributes.position.count, info.leds + 1, 'the string and the star');
+  for (let i = 0; i < 80; i++) L.update(0.05, 0.5);
+  const day = leds.material.size;
+  ctx.state.night = 1;
+  for (let i = 0; i < 80; i++) L.update(0.05, 0.5);
+  assert.ok(leds.material.size > day * 2, 'the string glows at night');
+  assert.deepEqual(spruce(t).leds, s.leds, 'seeded');
 });
 
 test('winter layer: two builds place every LED alike; the simple style has no toggle', () => {

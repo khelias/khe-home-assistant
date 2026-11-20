@@ -13,6 +13,10 @@
 // the roof, unless it is marked ground. kit.applyFade owns the opacity of everything in the lift,
 // so the glow is colour and size on additive materials, never opacity.
 //
+// Each site.festive.christmas_trees item is a dressed tree on the floor (spruce below): a stand,
+// stacked cones, baubles, a gold star and an LED string wound up it, drawn with the ground, not
+// the lift, since it stands indoors under the cut.
+//
 // The snow: a slab on every roof and on the garage roof (in the lift), the lawn and the land round
 // the lot blended white through the ground layer's api.snow, a light dusting over the paving and
 // the decks, a cap on every hedge and tree crown and a white tip on each tall plant, all placed
@@ -39,6 +43,14 @@ const WASH_FLAT = 0.05; // how much the wall's distance may change across one pi
 const ROOF_SNOW = 0.08, ROOF_INSET = 0.05, CAP = 0.12, CAP_OUT = 0.04, TIP = 0.8;
 const DUST_OPACITY = 0.5, DUST_LIFT = 0.004;
 const FLAKES = 1500, FLAKE_MARGIN = 4, FLAKE_TOP = 12, FLAKE_SIZE = 0.14, FLAKE_FALL = [0.5, 1], FLAKE_SWAY = 0.15, FLAKE_NIGHT = 0.45;
+
+// a Christmas tree: the stand's foot cross and post, the height its lowest branches start at, its
+// tiers, how far up the outline the last tier's rim stands and how far a tier reaches above its
+// rim, in rim spacings; the LED string's turns and spacing, the baubles' spacing on a rim, their
+// radii and colours, and the star's points over the tip
+const STAND = [0.5, 0.03, 0.1], POST_R = 0.035, SKIRT = 0.22, TIERS = 6, LAST_RIM = 0.8, REACH = 2.2;
+const SPRUCE_TURNS = 7, SPRUCE_GAP = 0.09, BAUBLE_STEP = 0.26, BAUBLE_R = [0.032, 0.045];
+const BAUBLES = ['baubleRed', 'baubleGold', 'baubleSilver'], STAR = [0.1, 0.045, 0.02];
 
 const lerp = (a, b, t) => a.map((v, k) => v + (b[k] - v) * t);
 
@@ -95,6 +107,44 @@ function insetOutline(pts, d) {
     const n1 = inward(pts[(i - 1 + n) % n], p), n2 = inward(p, pts[(i + 1) % n]), k = d / Math.max(0.25, 1 + n1[0] * n2[0] + n1[1] * n2[1]);
     return [p[0] + (n1[0] + n2[0]) * k, p[1] + (n1[1] + n2[1]) * k];
   });
+}
+
+/**
+ * spruce({ pos: [x, z], height, base }) -> { pos, tiers: [{ y, r, h }], radius(y), leds: [[x, y, z]],
+ * baubles: [{ at: [x, y, z], r, colour }], star: [x, y, z] }: a Christmas tree on the floor at pos,
+ * its tip at height and its lowest rim base wide. Each tier is a cone whose rim stands at y with
+ * radius r and whose tip is h above it; the rims narrow in a straight line to the tip, a little
+ * uneven, so the tree reads as a natural one. radius(y) is the outline at y, the widest tier there;
+ * the LED string winds up it, the baubles hang on the rims and the star stands over the tip.
+ * Seeded by pos, so two builds dress it alike.
+ */
+export function spruce({ pos: [x, z], height: H, base }) {
+  const rand = seeded(Math.round(x * 1000) * 7919 + Math.round(z * 1000)), R = base / 2, span = H - SKIRT;
+  const step = (LAST_RIM * span) / (TIERS - 1);
+  const tiers = Array.from({ length: TIERS }, (_, i) => {
+    const y = SKIRT + i * step;
+    return { y, r: R * (1 - (y - SKIRT) / span) * (i ? 0.94 + 0.08 * rand() : 1), h: i === TIERS - 1 ? H - y : Math.min(H - y, REACH * step) };
+  });
+  const radius = y => tiers.reduce((m, t) => (y >= t.y && y <= t.y + t.h ? Math.max(m, t.r * (1 - (y - t.y) / t.h)) : m), 0);
+  const leds = [], low = SKIRT + 0.04, high = H - 0.12, pitch = (high - low) / SPRUCE_TURNS;
+  let a = 0, y = low;
+  while (y < high) {
+    const r = radius(y) + 0.01;
+    leds.push([x + r * Math.cos(a), y, z + r * Math.sin(a)]);
+    // one SPRUCE_GAP along the string: round the outline and up by the turns' pitch
+    const da = SPRUCE_GAP / Math.hypot(Math.max(r, 0.05), pitch / (2 * Math.PI));
+    a += da;
+    y += (da / (2 * Math.PI)) * pitch;
+  }
+  const baubles = [];
+  tiers.forEach(t => {
+    const n = Math.max(3, Math.round((2 * Math.PI * t.r) / BAUBLE_STEP)), off = rand() * 2 * Math.PI;
+    for (let k = 0; k < n; k++) {
+      const ang = off + (k * 2 * Math.PI) / n, br = BAUBLE_R[0] + rand() * (BAUBLE_R[1] - BAUBLE_R[0]), r = t.r * 0.9;
+      baubles.push({ at: [x + r * Math.cos(ang), t.y - br * 0.6, z + r * Math.sin(ang)], r: br, colour: BAUBLES[Math.floor(rand() * BAUBLES.length)] });
+    }
+  });
+  return { pos: [x, z], tiers, radius, leds, baubles, star: [x, H + STAR[0] * 0.8, z] };
 }
 
 // a plant's radius at height h on its outline [[radius, height], ...] from the foot up
@@ -210,7 +260,42 @@ export default function build({ THREE, kit, model, options, style, state, roof, 
     }
   });
   points([...onGround.leds, ...plantLeds], group, 'leds');
-  group.userData.winter = { icicles, plants: plantLeds.length };
+  const spruces = (Array.isArray(festive.christmas_trees) ? festive.christmas_trees : []).map(spruce);
+  if (spruces.length) {
+    const tree = new THREE.Group();
+    tree.userData.part = 'christmas-tree';
+    // every piece of every tree is one instance of its kind, so the trees cost a draw call a kind
+    const cone = new THREE.ConeGeometry(1, 1, 11), post = new THREE.CylinderGeometry(POST_R, POST_R, 1, 8), foot = new THREE.BoxGeometry(...STAND);
+    const star = new THREE.Shape();
+    for (let k = 0; k < 10; k++) {
+      const ang = Math.PI / 2 + (k * Math.PI) / 5, r = STAR[k % 2];
+      star[k ? 'lineTo' : 'moveTo'](r * Math.cos(ang), r * Math.sin(ang));
+    }
+    const starGeo = new THREE.ExtrudeGeometry(star, { depth: STAR[2], bevelEnabled: false }).translate(0, 0, -STAR[2] / 2);
+    const ball = new THREE.SphereGeometry(1, 12, 8);
+    const q = new THREE.Quaternion(), Y = new THREE.Vector3(0, 1, 0), cross = [0, Math.PI / 2];
+    const at = (p, turn = 0, scale = [1, 1, 1]) => new THREE.Matrix4().compose(new THREE.Vector3(...p), q.setFromAxisAngle(Y, turn), new THREE.Vector3(...scale));
+    const kinds = [
+      [foot, 'anthracite', spruces.flatMap(({ pos: [x, z] }) => cross.map(t => at([x, STAND[2] / 2, z], t)))],
+      [post, 'trunk', spruces.map(({ pos: [x, z], tiers: [t] }) => at([x, t.y / 2, z], 0, [1, t.y, 1]))],
+      // each tier turned against the last, so the cones' facets do not line up
+      [cone, 'spruce', spruces.flatMap(({ pos: [x, z], tiers }) => tiers.map((t, k) => at([x, t.y + t.h / 2, z], k * 0.9, [t.r, t.h, t.r])))],
+      [starGeo, 'baubleGold', spruces.flatMap(s => cross.map(t => at(s.star, t)))],
+      ...BAUBLES.map(colour => [ball, colour, spruces.flatMap(s => s.baubles.filter(b => b.colour === colour).map(b => at(b.at, 0, [b.r, b.r, b.r])))])
+    ];
+    kinds.forEach(([geo, name, list]) => {
+      if (!list.length) return;
+      const im = new THREE.InstancedMesh(geo, kit.surface(name), list.length);
+      list.forEach((m, k) => im.setMatrixAt(k, m));
+      im.instanceMatrix.needsUpdate = true;
+      im.computeBoundingSphere();
+      im.receiveShadow = true;
+      tree.add(im);
+    });
+    group.add(tree);
+    points([...spruces.flatMap(s => s.leds), ...spruces.map(s => s.star)], group, 'tree-leds');
+  }
+  group.userData.winter = { icicles, plants: plantLeds.length, trees: spruces.map(s => ({ leds: s.leds.length, baubles: s.baubles.length })) };
 
   /* ---------- the snow ---------- */
   const snowM = kit.surface('snow'), roofSnowM = kit.surface('snow', { transparent: true });
