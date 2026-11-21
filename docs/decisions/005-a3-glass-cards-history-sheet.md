@@ -1,7 +1,7 @@
 # ADR-005: Kodu A3 is drawn by our own glass cards, with a view background and a history sheet
 
 - **Status:** Accepted (2026-11-12); front page: [ADR-006](006-a3-front-page-live-hero.md); decision 1 superseded by [ADR-007](007-a3-in-the-overview.md); decision 4's full-width hero superseded from two columns up by [ADR-010](010-a3-landscape-hero-beside-the-cards.md); decision 5 extended to page cards by [ADR-008](008-a3-page-cards-read-statistics.md) and to a days card's 30 days, 90 days and 12 months by [ADR-013](013-days-cards-open-a-long-range-sheet.md). Narrows [ADR-002](002-own-dashboard-cards.md) for the A3 dashboard; replaces the trial of [ADR-004](004-bubble-card-trial.md). Decision 6 superseded by [ADR-012](012-the-demo-is-the-houses-overview.md): the demo is the Overview with A3, on a simulated recorder.
-- **Related:** [ADR-001](001-own-3d-engine.md), [ADR-002](002-own-dashboard-cards.md), [ADR-004](004-bubble-card-trial.md), [estate ADR-025](https://github.com/khelias/khe-architecture/blob/main/decisions/025-the-house-dashboard-keeps-its-own-look.md)
+- **Related:** [ADR-001](001-own-3d-engine.md), [ADR-002](002-own-dashboard-cards.md), [ADR-004](004-bubble-card-trial.md), [estate ADR-035](https://github.com/khelias/khe-architecture/blob/main/decisions/035-family-shell-and-design-check-with-its-exceptions.md) (point 9)
 
 ## Context
 
@@ -22,7 +22,7 @@ approved the A3 design, in Apple Home's manner:
   dots;
 - a tap on a value or a device opens a sheet with its history.
 
-Estate ADR-025 lets the house dashboard use glass, blur and gradients.
+Estate ADR-035 point 9 lets the house dashboard use glass, blur and gradients.
 Bubble Card cannot draw the hero, the bars or the sheet, and the cards of
 ADR-002 already draw most of the rest.
 

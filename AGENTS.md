@@ -260,8 +260,7 @@ the operator first; an approval covers that task only.
   ([estate ADR-035](https://github.com/khelias/khe-architecture/blob/main/decisions/035-family-shell-and-design-check-with-its-exceptions.md)):
   its accent (`house`) and its ground (`house-ground`) are in khe-sites'
   `DESIGN.md`. The house drawing and Home Assistant's dashboard keep their
-  own look ([estate
-  ADR-025](https://github.com/khelias/khe-architecture/blob/main/decisions/025-the-house-dashboard-keeps-its-own-look.md)):
+  own look (ADR-035 points 1 and 9):
   the dashboard may use glass, blur, gradients and its own controls, and
   honours reduced transparency and reduced motion. The family shell around
   the house, the `/ha/` demo's header, follows ADR-035; this repo has no npm

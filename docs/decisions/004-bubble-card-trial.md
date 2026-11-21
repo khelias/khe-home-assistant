@@ -1,7 +1,7 @@
 # ADR-004: A two-week trial dashboard may use Bubble Card
 
 - **Status:** Deprecated (2026-11-12). The trial was dropped for A3, [ADR-005](005-a3-glass-cards-history-sheet.md); Bubble Card is removed.
-- **Related:** [ADR-002](002-own-dashboard-cards.md), [estate ADR-007](https://github.com/khelias/khe-architecture/blob/main/decisions/007-automated-writers.md), [estate ADR-021](https://github.com/khelias/khe-architecture/blob/main/decisions/021-family-shell-and-design-check.md)
+- **Related:** [ADR-002](002-own-dashboard-cards.md), [estate ADR-007](https://github.com/khelias/khe-architecture/blob/main/decisions/007-automated-writers.md), [estate ADR-035](https://github.com/khelias/khe-architecture/blob/main/decisions/035-family-shell-and-design-check-with-its-exceptions.md)
 
 ## Context
 
@@ -30,7 +30,7 @@ take back.
    into a Bubble Card pop-up. The trial lasts two weeks from its first
    save. Adopting Bubble Card for Kodu needs an ADR that supersedes
    ADR-002; dropping it means removing the dashboard and the card.
-2. **The trial does not meet estate ADR-021 point 1, and says so under its
+2. **The trial does not meet estate ADR-035 point 1, and says so under its
    point 5.** Bubble Card's round buttons, sliders and pop-up shadow are not
    the family's controls and radii. The repo's `AGENTS.md` names the
    exception. The trial still keeps no blur and no translucency: every

@@ -777,7 +777,7 @@ ha-card.modes{display:flex;flex-direction:column;gap:10px;padding:12px}
   }
 }
 
-/* ---------- A3: glass palette (ADR-005, estate ADR-025) ---------- */
+/* ---------- A3: glass palette (ADR-005, estate ADR-035 point 9) ---------- */
 
 const A3 = {
   light: {
