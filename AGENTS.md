@@ -182,7 +182,7 @@ model in its `SECURITY.md`.
 Automated writers
 ([estate ADR-007](https://github.com/khelias/khe-architecture/blob/main/decisions/007-automated-writers.md)): Renovate
 automerges GitHub Actions minor and patch updates, digests and pins
-(`renovate.json`), and every merge to `main` that touches `config/`,
+(`renovate.json`) once a release is three days old, and every merge to `main` that touches `config/`,
 `house3d/` or `cards/` deploys the config. The way back is to revert the commit on
 `main` and push: the revert is a new config deploy, and HA keeps running
 what it loaded last until a restart or reload, so restart or reload it
