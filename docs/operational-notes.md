@@ -10,8 +10,10 @@ backup and restore) is in khe-homelab's
 **Every `template/reload` must be followed at once by
 `POST /api/events/khe_price_refresh`.** Trigger-based template sensors do not
 re-run on reload, so the whole price stack (`elektri_hinna_prognoos`, `_tase`,
-`odavaim_aken_*`) goes blank and the Kodu Elekter card renders `None. None`
-until the hourly tick. A restart is safe, the package has a `start` trigger;
+`odavaim_aken_*`, and the Phase 6 shadow sensors in `heating_price.yaml`:
+`kutte_soovitatav_nihe`, `kutte_soovitatav_muutus`, `boileri_soovitatav_siht`)
+goes blank and the Kodu Elekter card renders `None. None`
+until the hourly tick. A restart is safe, the packages have a `start` trigger;
 only reload breaks it. An `event_template_reloaded` trigger does not fix it,
 the reload races the entities listening for it (core issues #65832, #101835).
 
