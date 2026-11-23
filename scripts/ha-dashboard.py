@@ -3,8 +3,8 @@
 
 The dashboard is storage-mode config in HA's .storage (backed up nightly by
 backup.sh); this script is its source of truth. The config is built by
-dashboard_a3.overview() (ADR-007): dashboard_config.build()'s views with A3 in
-place of Kodu and the 3D view last; this script reads their private inputs,
+dashboard.overview() (ADR-007): the A3 views first, then Süsteem, settings and camera subviews,
+and the 3D view last; this script reads their private inputs,
 builds and saves. Edit there, run here, and HA picks the new config up live.
 
 Usage:  ha-dashboard.py            (saves the Overview to "lovelace")
@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import dashboard_a3
+import dashboard
 import house3d_model
 
 HA = "192.168.0.11:8123"
@@ -77,7 +77,7 @@ def local_config():
     """The real dashboard: overview() with the local house files and the model."""
     house = _local("ha-house.json", {})
     model = with_car_entity(house3d_card_model(), house.get("car_entity"))
-    return dashboard_a3.overview(house, _local("ha-people.json", []), model)
+    return dashboard.overview(house, _local("ha-people.json", []), model)
 
 
 async def main(config, url_path):

@@ -50,19 +50,17 @@ own.
 ## Layout
 
 ```
-cards/             the dashboard's own Lovelace cards (khe-cards.js, ADR-002,
-                   ADR-005, ADR-008, ADR-011): summary, price, tile, chips,
-                   heading, status, Energia's month, days and split, and
-                   Soojuspump's and Ventilatsioon's reading,
-                   Pergola's forecast (ADR-014), Valve's motion
-                   with the house plan (ADR-015), Kaamerad's
-                   stills (ADR-016) and Teler's now and watch time
-                   (ADR-017), with the
-                   history sheet (a days card's over 30 days, 90 days
-                   and 12 months, ADR-013), their words in Estonian and English by
-                   their `language` config (ADR-012); A3 draws with them;
-                   deploy copies
-                   them to www/khe-cards/
+cards/             the dashboard's own Lovelace cards (khe-cards.js entry point
+                   loading zero-import modules under cards/parts/ with ?v= and
+                   retry; ADR-002, ADR-005, ADR-008, ADR-011): summary, price,
+                   tile, chips, heading, status, Energia's month, days and split,
+                   Soojuspump's and Ventilatsioon's reading, Pergola's forecast
+                   (ADR-014), Valve's motion with the house plan (ADR-015),
+                   Kaamerad's stills (ADR-016) and Teler's now and watch time
+                   (ADR-017), with the history sheet (a days card's over 30 days,
+                   90 days and 12 months, ADR-013), their words in Estonian and
+                   English by their `language` config (ADR-012); A3 draws with
+                   them; deploy copies cards/ recursively to www/khe-cards/
 config/            what deploy copies into HA's /config
   configuration.yaml
   packages/        one package per device or concern
@@ -79,13 +77,11 @@ docs/              operational notes and the README screenshot
 house3d/           3D house view: engine (core house3d.js, scene/ layer
                    modules, kit, sun and the marker overlay), HA card,
                    standalone viewer, placement page, vendored three.js
-scripts/           dashboard_config.py (the HA Overview as data, no I/O),
-                   dashboard_a3.py (A3, Energia, Soojuspump,
-                   Ventilatsioon, Pergola, Valve, Kaamerad and Teler in A3's look from the
-                   same entities, the plan slice, and
-                   overview(), what the house saves, ADR-005, ADR-007,
-                   ADR-008, ADR-011),
-                   ha-dashboard.py (reads the private inputs, saves either),
+scripts/           dashboard/ package (entities.py as the single source of house
+                   entity ids, primitives.py, view modules kodu/energia/climate/
+                   security/media/settings and overview.py, no I/O; ADR-005 to
+                   ADR-018),
+                   ha-dashboard.py (reads the private inputs, saves overview()),
                    dashboard_demo.py (the demo's made-up entities, texts,
                    series and recorder profiles for the same config),
                    dashboard_demo_en.py (its
@@ -101,10 +97,11 @@ tests/house3d/     3D view tests on a made-up fixture house: model and build
                    (Python unittest), engine (engine-*.test.mjs by area over
                    engine-harness.mjs), simple-style snapshot, demo
                    dashboard, its recorder and scenario player (node:test)
-tests/dashboard/   dashboard config, demo catalogue and scenario tests
-                   (Python unittest)
-tests/cards/       the dashboard cards' pure helpers (node:test), on recorder
-                   responses captured from the house in fixtures/
+tests/dashboard/   dashboard generator, demo catalogue and scenario tests
+                   (Python unittest, split by view area over helpers.py)
+tests/cards/       the dashboard cards' pure helpers and module invariants
+                   (cards-*.test.mjs by area over cards-harness.mjs, node:test),
+                   on recorder responses captured from the house in fixtures/
 ```
 
 ## Commands
@@ -148,16 +145,17 @@ tests/cards/       the dashboard cards' pure helpers (node:test), on recorder
    house3d/` with the real model before every commit that touches
    `house3d/`, and before publishing anything built from the model.
    `check.sh` scans `house3d/`, `cards/`, `demo/`, `scripts/dashboard_demo.py`,
-   its English, `scripts/dashboard_scenarios.py` and `scripts/dashboard_a3.py`, the
+   its English, `scripts/dashboard_scenarios.py` and every module under
+   `scripts/dashboard/` except `entities.py`, the
    test house and the whole fresh demo build with `--count` whenever the
    model is at hand (the main checkout's khe-meta or `HOUSE3D_MODEL`), so the
    commit gate covers the demo; CI has no model. What the test house may
    carry anyway (its `devices` key) is allowed
    per file in `check.sh`, with the reason, not by loosening a pattern. The ids and labels the scan flags are spelled once,
-   in `dashboard_config.py`, and the demo takes them from there.
-3. **Modules under `house3d/scene/` import nothing**
+   in `scripts/dashboard/entities.py`, and the demo takes them from there.
+3. **Modules under `house3d/scene/` and `cards/parts/` import nothing**
    ([notes](docs/operational-notes.md#the-3d-house-view-house3d)); the engine
-   tests enforce it.
+   and card module tests enforce it.
 4. **Fork PRs can reach the homelab runner**, since the deploy runs there:
    approve a fork run as the workspace `AGENTS.md` says ([estate
    ADR-023](https://github.com/khelias/khe-architecture/blob/main/decisions/023-agent-pushes-where-its-session-allows.md)
@@ -224,9 +222,9 @@ the operator first; an approval covers that task only.
   ([notes](docs/operational-notes.md#reloads-restarts-and-prices)).
 - **Helpers come up at their minimum.** Set the first value through the API;
   `initial:` would overwrite the household's choice on every restart.
-- **The dashboard is generated**: `dashboard_a3.overview()` makes it,
-  `dashboard_config.build()`'s views with A3 first in Kodu's place and the
-  3D view last, and `scripts/ha-dashboard.py` saves it
+- **The dashboard is generated**: `dashboard.overview()` makes it
+  (A3 views first, then Süsteem, settings and camera subviews, and the 3D view
+  last), and `scripts/ha-dashboard.py` saves it
   ([notes](docs/operational-notes.md#a3-the-overviews-first-view)). HA adds sections to the stored
   config by itself when a new device appears. Before rerunning, diff the
   generator's output against the live config: load `ha-dashboard.py` with

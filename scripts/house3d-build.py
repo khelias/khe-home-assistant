@@ -62,6 +62,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "house3d"
 DEMO = ROOT / "demo"
 CARDS = ROOT / "cards" / "khe-cards.js"
+CARDS_PARTS = ROOT / "cards" / "parts"
 FIXTURE = ROOT / "tests/house3d/fixture-model.md"
 DEMO_SUFFIXES = (".html", ".js", ".css", ".svg")
 DEVICES_KEY = re.compile(r"""["']?\bdevices["']?\s*:""")
@@ -293,6 +294,7 @@ def build_demo(outdir):
     out = copy_engine(outdir)
     shutil.copyfile(SRC / "house3d-card.js", out / "house3d-card.js")
     shutil.copyfile(CARDS, out / CARDS.name)
+    shutil.copytree(CARDS_PARTS, out / CARDS_PARTS.name, dirs_exist_ok=True)
     # nginx and Cloudflare cache .js for 30 days: ?v= on every module, as on HA's resource URL.
     # The card and engine keep the card's version, and the dashboard cards theirs, so HA's
     # resource URLs move only with them.

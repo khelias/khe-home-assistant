@@ -1,6 +1,6 @@
 # ADR-007: A3 is the Overview's first view, Kodu goes, the 3D view moves last
 
-- **Status:** Accepted (2026-11-12); decision 2's demo half superseded by [ADR-012](012-the-demo-is-the-houses-overview.md): the demo builds `overview()`, A3 first and 3D last
+- **Status:** Accepted (2026-11-12); decision 2's demo half superseded by [ADR-012](012-the-demo-is-the-houses-overview.md); amended (2026-11-23) to retire decision 2's legacy Kodu stock views now that the demo and all eight primary views are A3, replacing `dashboard_config.py` and `dashboard_a3.py` with the `scripts/dashboard/` package (git history stays as the fallback).
 - **Related:** [ADR-002](002-own-dashboard-cards.md), [ADR-005](005-a3-glass-cards-history-sheet.md), [ADR-006](006-a3-front-page-live-hero.md)
 
 ## Context

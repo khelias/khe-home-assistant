@@ -1,6 +1,6 @@
 """The public demo's dashboard: the house's own Overview on made-up data (ADR-012).
 
-demo_config(model) runs dashboard_a3.overview() with made-up inputs, so the demo opens on A3 and
+demo_config(model) runs dashboard.overview() with made-up inputs, so the demo opens on A3 and
 shows 3D last as the house does, and rewrites the copy it gets back: every entity id to a demo id
 (CATALOGUE), every statistic id to a demo one, the labels that name the house's own devices
 (LABELS), every templated markdown card to sample text (TEXTS), and every apexcharts
@@ -13,7 +13,7 @@ word up in dashboard_demo_en, and one it lacks fails the build as an uncatalogue
 house's own cards get `language: en` and draw their own words.
 
 Stdlib only and no I/O: khe-sites runs the demo build in CI without a venv or khe-meta. The real
-ids that name the house's own devices are spelled once, in dashboard_config, and taken from
+ids that name the house's own devices are spelled once, in dashboard.entities, and taken from
 there, so the privacy scan (check.sh) passes over this file.
 """
 
@@ -21,8 +21,7 @@ import copy
 import math
 import re
 
-import dashboard_a3 as a3
-import dashboard_config as dc
+import dashboard as dc
 import dashboard_demo_en as en
 
 ID = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
@@ -68,8 +67,8 @@ VENT_MODES = [
     "override",
     "holidays",
 ]
-# the house's two tones (dashboard_a3.TONES), which the demo's light selects offer too
-TONES = a3.TONES
+# the house's two tones (dashboard.TONES), which the demo's light selects offer too
+TONES = dc.TONES
 
 CATALOGUE = {}
 
@@ -832,7 +831,7 @@ def _real_ids(model):
 
 def demo_config(model):
     """The house's Overview for the demo house, every id and private label replaced."""
-    return _walk(a3.overview(DEMO_HOUSE, DEMO_PEOPLE, _real_ids(model)))
+    return _walk(dc.overview(DEMO_HOUSE, DEMO_PEOPLE, _real_ids(model)))
 
 
 # A starting state per fixture device the catalogue does not cover, varied by position in the
@@ -915,7 +914,7 @@ def demo_states(model):
 RECORDER_ZONE = "Europe/Tallinn"
 # older than the 3D view's 15-minute motion glow: the 3D scenarios start with every PIR off this long
 QUIET_AGO = 30
-# each PIR's day in dashboard_config.SHARED + PRIVATE order, then each door's
+# each PIR's day in dashboard.SHARED + PRIVATE order, then each door's
 PULSES = [
     [[6, 9, 12], [16, 21, 20]],
     [[7, 9, 6], [17, 23, 25]],

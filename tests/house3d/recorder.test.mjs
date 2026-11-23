@@ -13,7 +13,7 @@ const { createRecorder } = await import(new URL('demo/recorder.js', `file://${RO
 const cards = await import(new URL('cards/khe-cards.js', `file://${ROOT}`));
 const { zoneParts, dayStart, lastMonthName, sensorWords } = cards;
 
-const py = `import json, sys; sys.path.insert(0, 'scripts'); import dashboard_demo as d, dashboard_config as dc
+const py = `import json, sys; sys.path.insert(0, 'scripts'); import dashboard_demo as d, dashboard as dc
 m = __import__('house3d_model'); fx = m.with_room_names(m.merge(m.read_layers('tests/house3d/fixture-model.md'), m.CARD))
 ids = {k: v['id'] for k, v in d.CATALOGUE.items()}
 print(json.dumps({'spec': d.demo_recorder(), 'en': d.demo_states_en(fx)['levels'], 'et': d.demo_states(fx)['levels'],
@@ -160,7 +160,7 @@ test("months for the days sheet's 12 months (ADR-013): a month is the sum or the
   assert.equal(s.pts[11].out, 'open');
 });
 
-const py2 = `import json, sys; sys.path.insert(0, 'scripts'); import dashboard_demo as d, dashboard_config as dc
+const py2 = `import json, sys; sys.path.insert(0, 'scripts'); import dashboard_demo as d, dashboard as dc
 ids = {k: v['id'] for k, v in d.CATALOGUE.items()}
 print(json.dumps({k: ids[getattr(dc, k)] for k in ('RAIN_NOW', 'RAIN_2H', 'WEATHER', 'RAIN_RULE', 'SUNSET_RULE')}))`;
 const P = JSON.parse(execFileSync('python3', ['-I', '-c', py2], { cwd: ROOT, encoding: 'utf8' }));

@@ -714,6 +714,9 @@ class Demo(unittest.TestCase):
                 self.assertTrue((out / name).is_file(), name)
             self.assertTrue((out / "scene").is_dir())
             self.assertTrue((out / "vendor").is_dir())
+            self.assertTrue((out / "parts").is_dir())
+            for part in hb.CARDS_PARTS.glob("*.js"):
+                self.assertEqual((out / "parts" / part.name).read_bytes(), part.read_bytes(), part.name)
             model = json.loads((out / "model.json").read_text(encoding="utf-8"))
             L = layers()
             self.assertEqual(model["devices"], L["private"]["devices"])

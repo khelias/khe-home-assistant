@@ -28,8 +28,13 @@ if [ -n "$model" ] && [ -f "$model" ]; then
     for f in "$fixture" "$out/model.json" "$out/model.en.json"; do
       allow+=(--allow-devices-key "$f")
     done
+    dash_public=()
+    for f in scripts/dashboard/*.py; do
+      [ "$f" = "scripts/dashboard/entities.py" ] && continue
+      dash_public+=("$f")
+    done
     python3 -I scripts/house3d-build.py --scan --count "${allow[@]}" \
-      "$model" house3d cards demo scripts/dashboard_demo.py scripts/dashboard_demo_en.py scripts/dashboard_scenarios.py scripts/dashboard_a3.py tests/cards/fixtures \
+      "$model" house3d cards demo scripts/dashboard_demo.py scripts/dashboard_demo_en.py scripts/dashboard_scenarios.py "${dash_public[@]}" tests/cards/fixtures \
       "$fixture" "$out" || fail "privacy scan"
   else
     fail "demo build"

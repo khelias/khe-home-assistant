@@ -12,8 +12,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
-import dashboard_a3 as a3
-import dashboard_config as dc
+import dashboard as dc
+
+a3 = dc
 import dashboard_demo as dd
 import dashboard_demo_en as en
 import house3d_model
@@ -171,9 +172,9 @@ class DemoConfig(unittest.TestCase):
                 self.assertNotIn(label, s)
 
     def test_the_real_config_is_unchanged_by_the_demo(self):
-        before = json.dumps(dc.build({}, [], MODEL), ensure_ascii=False)
+        before = json.dumps(dc.overview({}, [], MODEL), ensure_ascii=False)
         dd.demo_config(MODEL)
-        self.assertEqual(json.dumps(dc.build({}, [], MODEL), ensure_ascii=False), before)
+        self.assertEqual(json.dumps(dc.overview({}, [], MODEL), ensure_ascii=False), before)
 
     def test_an_uncatalogued_id_fails_the_build(self):
         with self.assertRaises(KeyError):
@@ -301,10 +302,10 @@ class DemoEnglish(unittest.TestCase):
                 self.assertNotIn(label, s)
 
     def test_the_real_config_is_unchanged_by_the_english_demo(self):
-        before = json.dumps(dc.build({}, [], MODEL), ensure_ascii=False)
+        before = json.dumps(dc.overview({}, [], MODEL), ensure_ascii=False)
         dd.demo_config_en(MODEL)
         dd.demo_model_en(MODEL)
-        self.assertEqual(json.dumps(dc.build({}, [], MODEL), ensure_ascii=False), before)
+        self.assertEqual(json.dumps(dc.overview({}, [], MODEL), ensure_ascii=False), before)
 
     def test_the_houses_overview_is_unchanged_by_the_demo(self):
         before = json.dumps(a3.overview({}, [], MODEL), ensure_ascii=False)

@@ -1,6 +1,6 @@
 # ADR-012: The demo is the house's Overview, and the cards carry their own English
 
-- **Status:** Accepted (2026-11-12); decision 3 extended to the month period by [ADR-013](013-days-cards-open-a-long-range-sheet.md) and to the TV's watch time by [ADR-017](017-teler-cards-read-the-session-list-and-a-stacked-days-chart.md)
+- **Status:** Accepted (2026-11-12); decision 3 extended to the month period by [ADR-013](013-days-cards-open-a-long-range-sheet.md) and to the TV's watch time by [ADR-017](017-teler-cards-read-the-session-list-and-a-stacked-days-chart.md); amended (2026-11-23) to point decision 1 at `dashboard.overview()` after the legacy Kodu stock views were retired (ADR-007).
 - **Related:** [ADR-002](002-own-dashboard-cards.md), [ADR-003](003-demo-in-english.md), [ADR-005](005-a3-glass-cards-history-sheet.md), [ADR-007](007-a3-in-the-overview.md), [ADR-008](008-a3-page-cards-read-statistics.md)
 
 ## Context
@@ -24,11 +24,11 @@ words. A translation of the config cannot reach those.
 
 1. **The demo is the house's Overview on made-up data.**
    `dashboard_demo.demo_config()` walks
-   `dashboard_a3.overview(DEMO_HOUSE, DEMO_PEOPLE, model)`, so the demo
+   `dashboard.overview(DEMO_HOUSE, DEMO_PEOPLE, model)`, so the demo
    opens on A3 and shows 3D last in the house's order, and every later A3
    view reaches the demo by itself. This supersedes ADR-005 decision 6 and
-   ADR-007 decision 2's demo half. Kodu stays in code as the house's
-   fallback (ADR-007 decision 2) but is no longer published.
+   ADR-007 decision 2's demo half (the retired Kodu stock views were later
+   removed from code on 2026-11-23; git history is the fallback).
 2. **The cards carry both languages and take theirs from config.** Every
    khe card takes `language` (`et` by default, any other value reads
    Estonian); `hass.language` is not read, so a household member with an

@@ -1,6 +1,6 @@
 # ADR-002: A redesigned view draws with our own Lovelace cards
 
-- **Status:** Accepted (2026-10-17). Kodu, the first view drawn with the cards, went back to stock cards on 2026-10-18: the operator rejected the A2 direction, not the cards. The next design round decides which view uses them. A two-week Bubble Card trial on a second dashboard is allowed by [ADR-004](004-bubble-card-trial.md), which narrows this ADR for that dashboard only. Narrowed by [ADR-005](005-a3-glass-cards-history-sheet.md): the A3 dashboard draws the cards as glass boxes over a view background, with a history sheet, and is not mounted in the demo. Since [ADR-012](012-the-demo-is-the-houses-overview.md) the A3 cards are mounted in the demo, with a recorder.
+- **Status:** Accepted (2026-10-17); amended (2026-11-23) to split the implementation into zero-import modules under `cards/parts/` loaded by `cards/khe-cards.js` with `?v=${KHE_CARDS_VERSION}` and retry, and to point Decision 3 at `scripts/dashboard/entities.py`. Kodu, the first view drawn with the cards, went back to stock cards on 2026-10-18: the operator rejected the A2 direction, not the cards. The next design round decides which view uses them. A two-week Bubble Card trial on a second dashboard is allowed by [ADR-004](004-bubble-card-trial.md), which narrows this ADR for that dashboard only. Narrowed by [ADR-005](005-a3-glass-cards-history-sheet.md): the A3 dashboard draws the cards as glass boxes over a view background, with a history sheet, and is not mounted in the demo. Since [ADR-012](012-the-demo-is-the-houses-overview.md) the A3 cards are mounted in the demo, with a recorder.
 - **Related:** [ADR-001](001-own-3d-engine.md), [estate ADR-007](https://github.com/khelias/khe-architecture/blob/main/decisions/007-automated-writers.md)
 
 ## Context
@@ -39,19 +39,21 @@ room already does.
 ## Decision
 
 1. **Kodu is drawn with our own vanilla-JS Lovelace cards inside HA's
-   sections view.** One ES module, `cards/khe-cards.js`, defines
-   `khe-summary-card`, `khe-price-card` and `khe-tile-card`, in the house3d
-   card's pattern: an `HTMLElement` with a shadow root around `<ha-card>`,
-   pure helpers exported for the Node tests, no build step and no CDN
-   (ADR-001), and a `KHE_CARDS_VERSION` constant matched by `?v=` on the
-   Lovelace resource. Deploy copies `cards/` to `www/khe-cards/`.
+   sections view.** One ES module entry point, `cards/khe-cards.js`, defines
+   the custom elements in the house3d card's pattern: an `HTMLElement` with a
+   shadow root around `<ha-card>`, pure helpers re-exported for the Node tests,
+   no build step and no CDN (ADR-001), and a `KHE_CARDS_VERSION` constant
+   matched by `?v=` on the Lovelace resource. Its implementation is split into
+   zero-import modules under `cards/parts/`, loaded by `cards/khe-cards.js`
+   with `?v=${KHE_CARDS_VERSION}` and retry (mirroring `house3d/scene/`).
+   Deploy copies `cards/` recursively to `www/khe-cards/`.
 2. **Colours come from `hass.themes.darkMode` inside the cards**, with no
    HA theme file. The palette is the canvas's, light and dark, and a card
    redraws when the flag changes.
 3. **The status sentence is composed in the card** from the entities the
    generator passes (faults with their bad state, alarm panels, people and
    the price level), not in a template sensor. `FAULTS`, `ALARMS` and the
-   people list stay single-sourced in `dashboard_config.py`.
+   people list stay single-sourced in `scripts/dashboard/entities.py`.
 4. **Actions go through HA.** A card fires `hass-action` with
    `{config: {entity, tap_action}, action: 'tap'}`, bubbling and composed,
    and HA's `handleAction` runs the confirmation, more-info, navigate,
