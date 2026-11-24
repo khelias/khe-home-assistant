@@ -106,7 +106,7 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
   function endReach(f, P, d) {
     let reach = -1;
     frames.forEach(g => {
-      if (g === f || g.w.finish === 'panel') return;
+      if (g === f || g.w.finish === 'panel' || g.w.level > 0) return;
       if (Math.abs(f.ux * g.ux + f.uz * g.uz) > 0.9) {
         if ([g.w.a, g.w.b].some(Q => Math.hypot(Q[0] - P[0], Q[1] - P[1]) < 0.01)) reach = Math.max(reach, 0);
         return;
@@ -124,7 +124,8 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
   const capUncut = [], capCut = [];
   frames.forEach((f, i) => {
     const { w, L, ux, uz } = f;
-    if (w.finish === 'panel') return;
+    // an upper storey's walls are the lift's, outside the interior for now
+    if (w.finish === 'panel' || w.level > 0) return;
     const cut = cutOf(w), wallTop = roof.topFn(w.top);
     const top = u => (cut ? cut : wallTop(w.a[0] + ux * u, w.a[1] + uz * u));
     if (Math.abs(top(0) - top(L)) >= 0.005) return;
@@ -144,7 +145,8 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
   const skirts = [], shades = [];
   frames.forEach(f => {
     const { w, L, ux, uz } = f;
-    if (w.finish === 'panel') return;
+    // an upper storey's walls are the lift's, outside the interior for now
+    if (w.finish === 'panel' || w.level > 0) return;
     const gaps = (w.openings || []).filter(o => o.kind !== 'window' || o.sill < SKIRT_H).map(o => [o.c - o.w / 2, o.c + o.w / 2]).sort((a, b) => a[0] - b[0]);
     const n = Math.max(1, Math.ceil(L / PROBE)), k = w.t / 2 + PROBE_OUT;
     [1, -1].forEach(s => {

@@ -400,7 +400,7 @@ def house_box(geo):
     to a roof whose outline stands apart from the house's roofs (the house being the group of
     touching roofs with the largest area)."""
     roofs = geo["roofs"]
-    boxes = {k: bbox(r["outline"]) for k, r in roofs.items()}
+    boxes = {k: house3d_model.roof_bbox(r) for k, r in roofs.items()}
     touch = lambda a, b: (
         a[0] <= b[2] + 0.5 and b[0] <= a[2] + 0.5 and a[1] <= b[3] + 0.5 and b[1] <= a[3] + 0.5
     )
@@ -408,7 +408,7 @@ def house_box(geo):
     for k in roofs:
         near = [g for g in groups if any(touch(boxes[k], boxes[j]) for j in g)]
         groups = [g for g in groups if g not in near] + [set().union({k}, *near)]
-    house = max(groups, key=lambda g: sum(area(open_ring(roofs[k]["outline"])) for k in g))
+    house = max(groups, key=lambda g: sum(house3d_model.roof_area(roofs[k]) for k in g))
     pts, skipped = [], 0
     for w in geo["walls"]:
         if isinstance(w["top"], str) and w["top"] not in house:

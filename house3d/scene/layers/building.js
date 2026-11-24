@@ -80,12 +80,31 @@ export function cornerBoards(faces, W, D) {
   return out;
 }
 
+/**
+ * crossings(a, b, segs) -> the distances along the plan segment a -> b, strictly inside it,
+ * where it crosses one of segs [[p, q], ...]: a wall's top is sampled there too, so it follows a
+ * wing roof's ridge, hips and valleys.
+ */
+export function crossings(a, b, segs) {
+  const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz), out = [];
+  segs.forEach(([p, q]) => {
+    const ex = q[0] - p[0], ez = q[1] - p[1], den = dx * ez - dz * ex;
+    if (Math.abs(den) < 1e-12) return;
+    const t = ((p[0] - a[0]) * ez - (p[1] - a[1]) * ex) / den, s = ((p[0] - a[0]) * dz - (p[1] - a[1]) * dx) / den;
+    if (t > 1e-6 && t < 1 - 1e-6 && s >= -1e-9 && s <= 1 + 1e-9) out.push(t * L);
+  });
+  return out;
+}
+
 export default function build({ THREE, kit, C, model, roof, ceiling, state, style }) {
   const { basic, mats, edges, box, near } = kit;
   const real = style === 'real';
   const site = model.site || {};
+  const levels = model.levels || [0], levelOf = o => o.level || 0;
   const rooms = model.rooms || [];
-  const roomIds = new Set(rooms.map(r => r.id));
+  // the ground floor's rooms: the floors, the taps and the labels are theirs alone
+  const ground = rooms.filter(r => levelOf(r) === 0);
+  const roomIds = new Set(ground.map(r => r.id));
   const group = new THREE.Group(), lift = new THREE.Group();
   let mH, mR, wallMats, cladLeaf, glassFor = () => null;
   const roomGlass = new Map();
@@ -96,7 +115,10 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     const clad = o => ({ front: kit.surface('cladding', { ...o, map: front }), back: kit.surface('cladding', { ...o, map: back }), edge: kit.surface('cladding', o) });
     const inner = kit.surface('interior', two), glass = kit.surface('glass');
     // one glass per room, so a lit room's windows glow alone; panes in no room share the first
-    glassFor = room => {
+    // an upper storey's panes are in the lift, which fades them: one glass of their own
+    const liftGlass = kit.surface('glass');
+    glassFor = (room, lifted) => {
+      if (lifted) return liftGlass;
       if (!room) return glass;
       if (!roomGlass.has(room)) roomGlass.set(room, kit.surface('glass'));
       return roomGlass.get(room);
@@ -106,7 +128,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     const boarded = { ...clad(two), inner };
     // the lift's inner faces are never seen, so they keep the cladding's colour without boards
     const lifted = clad(fades);
-    mR = { boarded: { ...lifted, inner: lifted.edge }, roof: kit.surface('roof', fades), panel: kit.surface('frame', fades), frame: kit.surface('frame', fades) };
+    mR = { boarded: { ...lifted, inner: lifted.edge }, roof: kit.surface('roof', fades), panel: kit.surface('frame', fades), frame: kit.surface('frame', fades), inner: kit.surface('interior', fades), door: kit.surface('door', fades) };
     // a panel (the carport's walls and posts) is anthracite; else exterior is thick or running up
     // to a roof, and only it gets the boards and the base strip
     wallMats = w => {
@@ -149,7 +171,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     const face = side * (w.t / 2), proud = side * (w.t / 2 + PROUD);
     // a pane of glass w wide centred at c, tagged with the room it looks into
     const pane = (c, pw, y0, ph) => {
-      const room = paneRoom(w, L, c, side), p = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), glassFor(room));
+      const room = paneRoom(w, L, c, side), p = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), glassFor(room, levelOf(w) > 0));
       p.position.set(c, y0 + ph / 2, 0);
       p.userData.pane = room;
       g.add(p);
@@ -225,7 +247,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     // local +z is (-uz, ux) on the plan
     for (const s of side ? [-side] : [1, -1]) {
       const x = mx - uz * k * s, z = mz + ux * k * s;
-      const r = rooms.find(q => q.rects.some(([x0, z0, x1, z1]) => x >= x0 && x <= x1 && z >= z0 && z <= z1));
+      const r = rooms.find(q => levelOf(q) === levelOf(w) && q.rects.some(([x0, z0, x1, z1]) => x >= x0 && x <= x1 && z >= z0 && z <= z1));
       if (r) return r.id;
     }
     return null;
@@ -244,8 +266,10 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
 
   // +1 or -1 for the wall group's local z that faces out, 0 when both or neither side has a room;
   // a paved room (the carport) is outdoors under a roof
-  const cutOf = w => w.cut ?? (typeof w.top === 'string' ? ceiling : 0);
-  const inRoom = (x, z) => rooms.some(r => r.floor !== 'paving' && r.rects.some(([x0, z0, x1, z1]) => x >= x0 && x <= x1 && z >= z0 && z <= z1));
+  // a ground-floor wall up to a roof or above the ceiling is cut there (an upper storey's wall is
+  // in the lift whole, never asked)
+  const cutOf = w => w.cut ?? (typeof w.top === 'string' || w.top > ceiling ? ceiling : 0);
+  const inRoom = (x, z, level = 0) => rooms.some(r => levelOf(r) === level && r.floor !== 'paving' && r.rects.some(([x0, z0, x1, z1]) => x >= x0 && x <= x1 && z >= z0 && z <= z1));
   // probed at the midpoint first, then at a quarter and three quarters, for a wall that is
   // exterior over part of its length only
   function outerSide(w, L) {
@@ -253,17 +277,19 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     for (const f of [0.5, 0.25, 0.75]) {
       const mx = w.a[0] + ux * L * f, mz = w.a[1] + uz * L * f;
       // the group's rotation turns local +z to (-uz, ux) on the plan
-      const plus = inRoom(mx - uz * k, mz + ux * k), minus = inRoom(mx + uz * k, mz - ux * k);
+      const plus = inRoom(mx - uz * k, mz + ux * k, levelOf(w)), minus = inRoom(mx + uz * k, mz - ux * k, levelOf(w));
       if (plus !== minus) return plus ? -1 : 1;
     }
     return 0;
   }
 
+  // w.top and w.bot are (x, z) -> y; an upper storey's wall stands on y0, its openings measured
+  // from there, and its top is sampled where kinks (plan segments) cross it as well
   function buildWall(parent, w, m) {
     const dx = w.b[0] - w.a[0], dz = w.b[1] - w.a[1];
-    const L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L;
-    const top = u => w.top(w.a[0] + ux * u, w.a[1] + uz * u);
-    const bot = u => (w.bot ? w.bot(w.a[0] + ux * u, w.a[1] + uz * u) : 0);
+    const L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L, y0 = w.y0 || 0;
+    const top = u => w.top(w.a[0] + ux * u, w.a[1] + uz * u) - y0;
+    const bot = u => (w.bot ? w.bot(w.a[0] + ux * u, w.a[1] + uz * u) - y0 : 0);
     const shape = new THREE.Shape();
     const ops = w.openings || [];
     const doors = ops.filter(o => o.kind !== 'window').sort((p, q) => p.c - q.c);
@@ -277,10 +303,11 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
       shape.lineTo(d.c + d.w / 2, 0);
     });
     shape.lineTo(L, bot(L));
-    for (let i = steps; i >= 0; i--) {
-      const u = (L * i) / steps;
-      shape.lineTo(u, top(u));
-    }
+    const us = [];
+    for (let i = steps; i >= 0; i--) us.push((L * i) / steps);
+    const extra = [];
+    if (w.kinks) crossings(w.a, w.b, w.kinks).forEach(u => { if ([...us, ...extra].every(v => Math.abs(v - u) > 1e-4)) extra.push(u); });
+    (extra.length ? [...us, ...extra].sort((p, q) => q - p) : us).forEach(u => shape.lineTo(u, top(u)));
     ops.filter(o => o.kind === 'window').forEach(o => {
       const h = new THREE.Path();
       h.moveTo(o.c - o.w / 2, o.sill);
@@ -293,7 +320,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     const geo = new THREE.ExtrudeGeometry(shape, { depth: w.t, bevelEnabled: false });
     geo.translate(0, 0, -w.t / 2);
     const g = new THREE.Group();
-    g.position.set(w.a[0], 0, w.a[1]);
+    g.position.set(w.a[0], y0, w.a[1]);
     g.rotation.y = Math.atan2(-uz, ux);
     if (real) {
       dressWall(g, geo, ops, m, w, L, top);
@@ -332,10 +359,10 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   // real style: the boarded walls' corner boards, each as a span [lo, hi] along its wall, and how
   // far the fillers take each wall's base strip
   const corners = [], strips = new Map();
-  if (real) {
+  if (real) levels.forEach((_, level) => {
     const list = [];
     (model.walls || []).forEach((w, i) => {
-      if (!wallMats(w).boarded) return;
+      if (levelOf(w) !== level || !wallMats(w).boarded) return;
       const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), u = [(w.b[0] - w.a[0]) / L, (w.b[1] - w.a[1]) / L];
       const side = outerSide(w, L);
       if (side) list.push({ i, a: w.a, u, n: [-u[1] * side, u[0] * side], L, t: w.t, side });
@@ -360,15 +387,18 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
       }
       corners.push({ ...c, f, lo, hi });
     });
-  }
+  });
 
+  // the lift's materials for a wall: an upper storey's interior wall plain with white frames
+  const lifted = w => (w.finish === 'panel' && mR.panel ? { wall: mR.panel } : mR.inner && levelOf(w) > 0 && !wallMats(w).boarded ? { wall: mR.inner, frame: mR.door } : mR);
   (model.walls || []).forEach((w, i) => {
-    const base = { ...w, top: roof.topFn(w.top), strip: strips.get(i) };
+    const base = { ...w, top: roof.topFn(w.top), strip: strips.get(i), kinks: typeof w.top === 'string' ? roof.kinks(w.top) : null };
+    if (levelOf(w) > 0) return buildWall(lift, { ...base, y0: levels[levelOf(w)] }, lifted(w));
     const cut = cutOf(w);
     const mW = wallMats(w);
     if (!cut) return buildWall(group, base, mW);
     buildWall(group, { ...base, top: roof.flat(cut) }, mW);
-    buildWall(lift, { ...base, openings: [], bot: roof.flat(cut) }, w.finish === 'panel' && mR.panel ? { wall: mR.panel } : mR);
+    buildWall(lift, { ...base, openings: [], bot: roof.flat(cut) }, lifted(w));
   });
 
   // a board or filler is split at the wall's cut like the wall, the upper part in lift; a filler
@@ -377,9 +407,10 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   corners.forEach(c => {
     const w = model.walls[c.wall], { u, side, t } = c.f;
     const top = roof.topFn(w.top)(c.p[0], c.p[1]);
-    const cut = cutOf(w);
+    const cut = cutOf(w), y0 = levels[levelOf(w)];
     const mW = wallMats(w);
-    const spans = cut ? [[group, 0, cut, mW.frame, mW.boarded], [lift, cut, top, mR.frame, mR.boarded]] : [[group, 0, top, mW.frame, mW.boarded]];
+    const spans = levelOf(w) > 0 ? [[lift, y0, top, mR.frame, mR.boarded]]
+      : cut ? [[group, 0, cut, mW.frame, mW.boarded], [lift, cut, top, mR.frame, mR.boarded]] : [[group, 0, top, mW.frame, mW.boarded]];
     spans.forEach(([parent, y0, y1, frame, boarded]) => {
       if (y1 - y0 < 0.01) return;
       const key = `${parent === lift} ${c.wall}`;
@@ -416,11 +447,11 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   // face, since rooms are drawn to centrelines and drawings round, and the ground would show
   // between the floor and the wall; an edge already under a wall stays, and so does one whose
   // strip would cover another room's rect (an open plan beside a short wall)
-  const wallLines = (model.walls || []).filter(w => w.finish !== 'panel').flatMap(w => {
+  const wallLines = (model.walls || []).filter(w => w.finish !== 'panel' && levelOf(w) === 0).flatMap(w => {
     const axis = Math.abs(w.a[0] - w.b[0]) < 1e-6 ? 0 : Math.abs(w.a[1] - w.b[1]) < 1e-6 ? 1 : -1, o = 1 - axis;
     return axis < 0 ? [] : [[axis, w.a[axis], w.t / 2, Math.min(w.a[o], w.b[o]), Math.max(w.a[o], w.b[o])]];
   });
-  const houseRects = rooms.filter(r => r.floor !== 'paving').flatMap(r => r.rects);
+  const houseRects = ground.filter(r => r.floor !== 'paving').flatMap(r => r.rects);
   const overlaps = ([a0, b0, a1, b1]) => houseRects.some(([x0, z0, x1, z1]) => Math.min(a1, x1) - Math.max(a0, x0) > 1e-6 && Math.min(b1, z1) - Math.max(b0, z0) > 1e-6);
   function snapRect(rect) {
     // each edge: its axis, its index in the rect and which way is out
@@ -442,7 +473,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
 
   // a room can be several rectangles
   const floorMeshes = [];
-  rooms.forEach(r => {
+  ground.forEach(r => {
     r.rects.map(rc => (real && r.floor !== 'paving' ? snapRect(rc) : rc)).forEach(([x0, z0, x1, z1]) => {
       const stones = real && r.floor === 'paving';
       const map = !real ? null : stones ? kit.pavers() : r.floor === 'tile' ? kit.tiles() : kit.planks();
@@ -489,9 +520,12 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     const p = geo.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), z = p.getY(i), d = p.getZ(i);
-      p.setXYZ(i, x, h(x) - roof.gap + d, z);
+      p.setXYZ(i, x, h(x, z) - roof.gap + d, z);
     }
     geo.computeVertexNormals();
+    addRoof(geo);
+  }
+  function addRoof(geo) {
     if (real) {
       // the extrusion's first group is the top and underside, the second the edge band
       const mesh = new THREE.Mesh(geo, [mR.roof, mR.frame]);
@@ -504,10 +538,41 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     mesh.renderOrder = 4;
     lift.add(mesh, edges(geo, mR.edge, 20));
   }
-  for (const [id, r] of Object.entries(model.roofs || {})) shedRoof(r.outline, roof.fns[id], r.thick);
+  // a wing roof (hip, gable, flat): its faces as a slab, the top and underside in the first group
+  // and the band along the outer outline in the second, as a shed roof's extrusion has them
+  function wingRoof({ faces, edges: outer }, thick) {
+    const caps = [], band = [];
+    const at = ([a, b, c], [x, z], d) => [x, a * x + b * z + c - roof.gap + d, z];
+    // a triangle wound so its normal points up (up true) or down
+    const tri = (out, p, q, r, up) => {
+      const ny = (q[2] - p[2]) * (r[0] - p[0]) - (q[0] - p[0]) * (r[2] - p[2]);
+      out.push(...(ny > 0 === up ? [...p, ...q, ...r] : [...p, ...r, ...q]));
+    };
+    faces.forEach(({ poly, plane }) => {
+      for (let i = 1; i + 1 < poly.length; i++) {
+        tri(caps, at(plane, poly[0], thick), at(plane, poly[i], thick), at(plane, poly[i + 1], thick), true);
+        tri(caps, at(plane, poly[0], 0), at(plane, poly[i], 0), at(plane, poly[i + 1], 0), false);
+      }
+    });
+    outer.forEach(([p, q, plane]) => {
+      const a = at(plane, p, 0), b = at(plane, q, 0), c = at(plane, q, thick), d = at(plane, p, thick);
+      band.push(...a, ...b, ...c, ...a, ...c, ...d);
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([...caps, ...band], 3));
+    geo.addGroup(0, caps.length / 3, 0);
+    geo.addGroup(caps.length / 3, band.length / 3, 1);
+    geo.computeVertexNormals();
+    addRoof(geo);
+  }
+  for (const [id, r] of Object.entries(model.roofs || {})) {
+    const faces = roof.faces(id);
+    if (faces) wingRoof(faces, r.thick);
+    else shedRoof(r.outline, roof.fns[id], r.thick);
+  }
   (model.roof_steps || []).forEach(s => {
     const low = model.roofs[s.bot];
-    buildWall(lift, { a: s.a, b: s.b, t: 0.2, top: roof.under(s.top), bot: x => roof.fns[s.bot](x) - roof.gap + low.thick }, mR);
+    buildWall(lift, { a: s.a, b: s.b, t: 0.2, top: roof.under(s.top), bot: (x, z) => roof.fns[s.bot](x, z) - roof.gap + low.thick }, mR);
   });
 
   // the real style's light floors tint lighter, towards amber

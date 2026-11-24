@@ -32,8 +32,10 @@ export const { cornerBoards } = await import(new URL('scene/layers/building.js',
 export const { panelGrid } = await import(new URL('scene/layers/future.js', E));
 export const { icicleLeds, spruce } = await import(new URL('scene/layers/winter.js', E));
 
-export const model = JSON.parse(execFileSync('python3', ['-I', fileURLToPath(new URL('../../scripts/house3d_model.py', import.meta.url)), '--layers', 'all',
-  fileURLToPath(new URL('./fixture-model.md', import.meta.url))], { encoding: 'utf-8' }));
+// a fixture under tests/house3d/, every layer merged as house3d_model.py gives it
+export const loadModel = name => JSON.parse(execFileSync('python3', ['-I', fileURLToPath(new URL('../../scripts/house3d_model.py', import.meta.url)), '--layers', 'all',
+  fileURLToPath(new URL(`./${name}`, import.meta.url))], { encoding: 'utf-8' }));
+export const model = loadModel('fixture-model.md');
 
 // the fixture's first interior wall with doors
 export const INNER = model.walls.findIndex(w => typeof w.top === 'number' && !w.finish && (w.openings || []).length);
@@ -63,8 +65,8 @@ export function makeCtx(opts = options, m = model) {
   return { ctx, byId };
 }
 
-export function buildAll(opts) {
-  const { ctx, byId } = makeCtx(opts);
+export function buildAll(opts, m = model) {
+  const { ctx, byId } = makeCtx(opts, m);
   const built = [];
   BUILDERS.forEach((mod, i) => {
     const L = mod.default(ctx);

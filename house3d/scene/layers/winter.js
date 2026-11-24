@@ -300,21 +300,44 @@ export default function build({ THREE, kit, model, options, style, state, roof, 
   /* ---------- the snow ---------- */
   const snowM = kit.surface('snow'), roofSnowM = kit.surface('snow', { transparent: true });
   const snowy = (m, part) => { m.castShadow = false; m.receiveShadow = true; m.userData.part = part; return m; };
-  for (const [id, r] of Object.entries(model.roofs || {})) {
-    if (!Array.isArray(r.outline) || r.outline.length < 3) continue;
-    const top = roof.top(id), pts = insetOutline(r.outline, ROOF_INSET);
-    const geo = new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, z))), { depth: ROOF_SNOW, bevelEnabled: false });
-    const p = geo.attributes.position;
-    for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getY(i), d = p.getZ(i); p.setXYZ(i, x, top(x) + DUST_LIFT + d, z); }
-    // swapping y and z mirrors the shape, so each triangle turns its back: turn it round again,
-    // or the face seen from above is the bottom one, 4 mm over the slab
-    const a = p.array;
-    for (let i = 0; i < a.length; i += 9) for (let k = 0; k < 3; k++) [a[i + 3 + k], a[i + 6 + k]] = [a[i + 6 + k], a[i + 3 + k]];
+  // a slab over each plan polygon of rings at top (x, z) -> y, one mesh for the roof
+  const slab = (rings, top, id) => {
+    const parts = rings.map(pts => {
+      const geo = new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, z))), { depth: ROOF_SNOW, bevelEnabled: false });
+      const p = geo.attributes.position;
+      for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getY(i), d = p.getZ(i); p.setXYZ(i, x, top(x, z) + DUST_LIFT + d, z); }
+      // swapping y and z mirrors the shape, so each triangle turns its back: turn it round again,
+      // or the face seen from above is the bottom one, 4 mm over the slab
+      const a = p.array;
+      for (let i = 0; i < a.length; i += 9) for (let k = 0; k < 3; k++) [a[i + 3 + k], a[i + 6 + k]] = [a[i + 6 + k], a[i + 3 + k]];
+      return geo;
+    });
+    let geo = parts[0];
+    if (parts.length > 1) {
+      geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(parts.flatMap(g => Array.from(g.attributes.position.array)), 3));
+      parts.forEach(g => g.dispose());
+    }
     geo.computeVertexNormals();
     const m = snowy(new THREE.Mesh(geo, roofSnowM), 'roof-snow');
     m.userData.roof = id;
     lift.add(m);
+  };
+  for (const [id, r] of Object.entries(model.roofs || {})) {
+    const wings = roof.faces(id);
+    if (wings) {
+      // a wing roof: its faces, each inside its wing's edges, under the slab's top over it
+      const rings = wings.faces.map(({ poly, wing }) => {
+        const [x0, z0, x1, z1] = r.rects[wing], d = ROOF_INSET;
+        return [[-1, 0, x0 + d], [1, 0, -(x1 - d)], [0, -1, z0 + d], [0, 1, -(z1 - d)]].reduce((q, h) => (q.length >= 3 ? roof.clip(q, h) : q), poly);
+      }).filter(q => q.length >= 3);
+      if (rings.length) slab(rings, roof.top(id), id);
+      continue;
+    }
+    if (!Array.isArray(r.outline) || r.outline.length < 3) continue;
+    slab([insetOutline(r.outline, ROOF_INSET)], roof.top(id), id);
   }
+
   // on the garage roof, inside its fascia: an edge shared with another of its rects stays, so the
   // snow runs on across the joint
   const gr = site.garage_roof;

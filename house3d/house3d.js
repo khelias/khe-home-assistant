@@ -50,7 +50,8 @@
 //   dispose()?      frees what the kit's list and the scene traversal do not
 // ctx: THREE, kit, C (kit.C), model, options, style ('simple' | 'real'),
 //   frame { lotBox, wallBox, ext, E, lotCx, lotCz } (modelFrame),
-//   roof { fns, flat, under, topFn, gap, top(id) -> x -> the slab's top }, ceiling, reduceMotion, state (read-only: mode,
+//   roof { fns, flat, under, topFn, gap, top(id), faces(id), kinks(id), clip }: fns[id], under(id),
+//   topFn(top) and top(id) (the slab's top) are (x, z) -> y for every roof kind (modelFrame()), ceiling, reduceMotion, state (read-only: mode,
 //   roofFade, hovered, selection, night: 0 by day to 1 at night, the real style's only, sun: the
 //   sun's { alt, dir, time } in both styles, null without a place), layer(id), screen(x, y, z) -> { x, y } | null, invalidate().
 //   build() and the first setOn() run before the loop exists: they must not call invalidate()
@@ -133,22 +134,35 @@ const STYLE = `
 ` + OVERLAY_STYLE;
 
 /**
- * modelFrame(model) -> { roof: { fns, flat, under, topFn, gap, top }, frame: { lotBox, wallBox, ext, E, lotCx, lotCz } }
- * The model's roof height functions and its framing boxes, as ctx carries them; roof.top(id) is
- * roofTop() for that roof.
+ * modelFrame(model) -> { roof: { fns, flat, under, topFn, gap, top, faces, kinks }, frame: { lotBox, wallBox, ext, E, lotCx, lotCz } }
+ * The model's roof height functions (x, z) -> y and its framing boxes, as ctx carries them;
+ * roof.top(id) is roofTop() for that roof, roof.faces(id) roofFaces() of it (null for a shed
+ * roof), roof.kinks(id) the plan segments where its faces meet or end, for the wall tops, and
+ * roof.clip(poly, [a, b, c]) a convex plan polygon cut to where a x + b z + c <= 0.
  */
 export function modelFrame(model) {
   const site = model.site || {};
-  const fns = {};
-  for (const [id, r] of Object.entries(model.roofs || {})) {
-    const slope = r.slope ?? Math.tan(r.pitch_deg * D2R);
-    const sign = r.falls === 'west' ? -1 : 1;
-    fns[id] = x => r.high_y - sign * (x - r.high_x) * slope;
-  }
+  const fns = {}, faceCache = {};
+  for (const [id, r] of Object.entries(model.roofs || {})) fns[id] = roofHeight(r);
   const flat = h => () => h;
-  const under = id => x => fns[id](x) - ROOF_GAP;
+  const under = id => (x, z) => fns[id](x, z) - ROOF_GAP;
   const topFn = top => (typeof top === 'string' ? under(top) : flat(top));
-  const roof = { fns, flat, under, topFn, gap: ROOF_GAP };
+  const faces = id => {
+    const r = (model.roofs || {})[id];
+    if (!r || roofKind(r) === 'shed') return null;
+    return (faceCache[id] ||= roofFaces(r));
+  };
+  // every face edge once: a ridge, hip or valley is two faces' edge
+  const kinkCache = {};
+  const kinks = id => (kinkCache[id] ||= (() => {
+    const seen = new Map();
+    (faces(id)?.faces || []).forEach(({ poly }) => poly.forEach((p, i) => {
+      const q = poly[(i + 1) % poly.length], key = [p, q].map(v => v.map(c => c.toFixed(4)).join()).sort().join(' ');
+      if (!seen.has(key)) seen.set(key, [p, q]);
+    }));
+    return [...seen.values()];
+  })());
+  const roof = { fns, flat, under, topFn, gap: ROOF_GAP, faces, kinks, clip: clipHalf };
   roof.top = id => roofTop(roof, model, id);
 
   // the lot sets the scale, the fog and the shadow box; homeBox() frames the home view
@@ -159,6 +173,136 @@ export function modelFrame(model) {
   const ext = Math.max(lotBox[2] - lotBox[0], lotBox[3] - lotBox[1]);
   const E = ext / 41; // the prototype's framing was tuned on a 41 m lot
   return { roof, frame: { lotBox, wallBox, ext, E, lotCx, lotCz } };
+}
+
+const roofKind = r => r.kind || 'shed';
+const roofSlope = r => r.slope ?? Math.tan(r.pitch_deg * D2R);
+
+// a wing roof's faces on one wing q = [x0, z0, x1, z1]: each its plane [a, b, c] (y = a x + b z
+// + c) and the half-planes [a, b, c] (a x + b z + c <= 0) of where it is the wing's surface,
+// nearer its own edge than the others'; flat is one face
+function wingFaces(r, q) {
+  const [x0, z0, x1, z1] = q, inside = [[-1, 0, x0], [1, 0, -x1], [0, -1, z0], [0, 1, -z1]];
+  if (roofKind(r) === 'flat') return [{ plane: [0, 0, r.y], halves: inside }];
+  const s = roofSlope(r), e = r.eave_y;
+  // the distance to each edge, d = a x + b z + c
+  const ds = [[1, 0, -x0], [-1, 0, x1], [0, 1, -z0], [0, -1, z1]];
+  const across = roofKind(r) === 'gable' ? (r.ridge === 'x' ? ds.slice(2) : ds.slice(0, 2)) : ds;
+  return across.map((d, k) => ({
+    plane: [s * d[0], s * d[1], e + s * d[2]],
+    halves: [...inside, ...across.filter((_, j) => j !== k).map(o => [d[0] - o[0], d[1] - o[1], d[2] - o[2]])]
+  }));
+}
+const atPlane = ([a, b, c], x, z) => a * x + b * z + c;
+
+/**
+ * roofHeight(r) -> (x, z) -> y: the roof line of roof r for every kind, as
+ * scripts/house3d_model.py's roof_height(): a shed roof's plane along x; a wing roof's highest
+ * wing at (x, z), a wing's height the lowest of its faces' planes, or outside every wing the
+ * nearest wing at the nearest point.
+ */
+export function roofHeight(r) {
+  if (roofKind(r) === 'shed') {
+    const slope = roofSlope(r), sign = r.falls === 'west' ? -1 : 1;
+    return x => r.high_y - sign * (x - r.high_x) * slope;
+  }
+  const wings = r.rects.map(q => ({ q, planes: wingFaces(r, q).map(f => f.plane) }));
+  const wing = (w, x, z) => Math.min(...w.planes.map(p => atPlane(p, x, z)));
+  return (x, z) => {
+    let best = -Infinity, near = null, nearD = Infinity;
+    for (const w of wings) {
+      const [x0, z0, x1, z1] = w.q;
+      if (x >= x0 && x <= x1 && z >= z0 && z <= z1) best = Math.max(best, wing(w, x, z));
+      else if (best === -Infinity) {
+        const cx = Math.min(Math.max(x, x0), x1), cz = Math.min(Math.max(z, z0), z1), d = Math.hypot(x - cx, z - cz);
+        if (d < nearD) { nearD = d; near = [w, cx, cz]; }
+      }
+    }
+    return best > -Infinity ? best : wing(...near);
+  };
+}
+
+// a convex plan polygon [[x, z], ...] cut to where a x + b z + c <= 0
+function clipHalf(poly, [a, b, c]) {
+  const f = ([x, z]) => a * x + b * z + c, out = [];
+  poly.forEach((p, i) => {
+    const q = poly[(i + 1) % poly.length], fp = f(p), fq = f(q);
+    if (fp <= 0) out.push(p);
+    if ((fp < 0 && fq > 0) || (fp > 0 && fq < 0)) {
+      const t = fp / (fp - fq);
+      out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]);
+    }
+  });
+  return out;
+}
+const polyArea = poly => Math.abs(poly.reduce((a, [x, z], i) => { const [u, v] = poly[(i + 1) % poly.length]; return a + x * v - u * z; }, 0)) / 2;
+const AREA_EPS = 1e-6, HEIGHT_EPS = 1e-6;
+const kept = p => p.length >= 3 && polyArea(p) > AREA_EPS;
+
+// convex polygon poly less the convex region where every half-plane of halves holds: the
+// pieces outside each half-plane in turn, all convex
+function subtract(poly, halves) {
+  const out = [];
+  let rest = poly;
+  for (const h of halves) {
+    // a half-plane with no direction is the whole plane or nothing
+    if (Math.abs(h[0]) < 1e-12 && Math.abs(h[1]) < 1e-12) {
+      if (h[2] > 0) return [...out, rest];
+      continue;
+    }
+    const outside = clipHalf(rest, [-h[0], -h[1], -h[2]]);
+    if (kept(outside)) out.push(outside);
+    rest = clipHalf(rest, h);
+    if (!kept(rest)) return out;
+  }
+  return out;
+}
+
+const inRects = (rects, [x, z], strict) => rects.some(q => (strict ? x > q[0] && x < q[2] && z > q[1] && z < q[3] : x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3]));
+
+/**
+ * roofFaces(r) -> { faces: [{ poly, plane, wing }], edges: [[p, q, plane]] } for a wing roof:
+ * each wing's faces clipped to where that wing is the roof's surface, as convex plan polygons
+ * [[x, z], ...] with their plane [a, b, c] (y = a x + b z + c), and the faces' polygon edges that
+ * lie on the roof's outer outline, each with its face's plane. Where two wings stand equally
+ * high, the first in rects keeps the face, so every point of the wings lies in one face.
+ */
+export function roofFaces(r) {
+  const rects = r.rects, wings = rects.map(q => wingFaces(r, q));
+  const faces = [];
+  wings.forEach((list, wi) => list.forEach(f => {
+    const [x0, z0, x1, z1] = rects[wi];
+    let pieces = [f.halves.reduce((p, h) => (p.length >= 3 ? clipHalf(p, h) : p), [[x0, z0], [x1, z0], [x1, z1], [x0, z1]])].filter(kept);
+    // take away where a face of another wing stands higher, or as high on an earlier wing
+    wings.forEach((other, wj) => {
+      if (wj === wi) return;
+      const eps = wj < wi ? -HEIGHT_EPS : HEIGHT_EPS;
+      // g over f: f - g + eps <= 0
+      other.forEach(g => { pieces = pieces.flatMap(p => subtract(p, [...g.halves, [f.plane[0] - g.plane[0], f.plane[1] - g.plane[1], f.plane[2] - g.plane[2] + eps]])); });
+    });
+    pieces.forEach(poly => faces.push({ poly, plane: f.plane, wing: wi }));
+  }));
+  const edges = [];
+  faces.forEach(({ poly, plane }) => poly.forEach((p, i) => {
+    const q = poly[(i + 1) % poly.length], L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (L < 1e-6) return;
+    const m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], n = [-(q[1] - p[1]) / L, (q[0] - p[0]) / L], k = 1e-4;
+    const a = [m[0] + n[0] * k, m[1] + n[1] * k], b = [m[0] - n[0] * k, m[1] - n[1] * k];
+    if (inRects(rects, a) !== inRects(rects, b) && !inRects(rects, m, true)) edges.push([p, q, plane]);
+  }));
+  return { faces, edges };
+}
+
+/**
+ * roofPeak(r) -> the highest point of roof r's line: a shed roof's high_y, a flat roof's y, a
+ * hip or gable roof's highest wing ridge (the eave plus the slope over half the wing's span
+ * across it).
+ */
+export function roofPeak(r) {
+  if (roofKind(r) === 'shed') return r.high_y;
+  if (roofKind(r) === 'flat') return r.y;
+  const s = roofSlope(r), gableX = roofKind(r) === 'gable' && r.ridge === 'x', gableZ = roofKind(r) === 'gable' && r.ridge === 'z';
+  return Math.max(...r.rects.map(([x0, z0, x1, z1]) => r.eave_y + (s * (gableX ? z1 - z0 : gableZ ? x1 - x0 : Math.min(x1 - x0, z1 - z0))) / 2));
 }
 
 /**
@@ -192,12 +336,12 @@ export function roofNormal(model, roofId) {
 }
 
 /**
- * roofTop(roof, model, roofId) -> x -> the height of the roof slab's top surface (roof is
+ * roofTop(roof, model, roofId) -> (x, z) -> the height of the roof slab's top surface (roof is
  * modelFrame()'s): the slab runs up from under the roof line by its thickness.
  */
 export function roofTop(roof, model, roofId) {
   const fn = roof.fns[roofId], thick = model.roofs[roofId].thick;
-  return x => fn(x) - roof.gap + thick;
+  return (x, z) => fn(x, z) - roof.gap + thick;
 }
 
 /**
@@ -278,9 +422,9 @@ export function guardLayer(L, off) {
 export function homeBox(model) {
   const rects = (model.rooms || []).filter(r => r.floor !== 'paving').flatMap(r => r.rects);
   const pts = (rects.length ? rects.flatMap(([x0, z0, x1, z1]) => [[x0, z0], [x1, z1]]) : (model.walls || []).flatMap(w => [w.a, w.b]))
-    .concat(Object.values(model.roofs || {}).flatMap(r => r.outline || []));
+    .concat(Object.values(model.roofs || {}).flatMap(r => (roofKind(r) === 'shed' ? r.outline || [] : r.rects.flatMap(([x0, z0, x1, z1]) => [[x0, z0], [x1, z1]]))));
   const b = pts.reduce((a, [x, z]) => [Math.min(a[0], x), Math.min(a[1], z), Math.max(a[2], x), Math.max(a[3], z)], [Infinity, Infinity, -Infinity, -Infinity]);
-  const top = Math.max(model.ceiling || 0, ...Object.values(model.roofs || {}).map(r => r.high_y + (r.thick || 0)));
+  const top = Math.max(model.ceiling || 0, ...Object.values(model.roofs || {}).map(r => roofPeak(r) + (r.thick || 0)));
   return [...b, top || 3];
 }
 
@@ -532,8 +676,9 @@ export function mount(element, model, options = {}) {
   scene.fog = new THREE.Fog(C.bg, 34, 78);
 
   /* ---------- model ---------- */
-  const rooms = model.rooms || [];
-  const roomById = Object.fromEntries(rooms.map(r => [r.id, r]));
+  // an upper storey's rooms have no floor, label or chip yet, but their markers are indoor ones
+  const rooms = (model.rooms || []).filter(r => !(r.level > 0));
+  const roomById = Object.fromEntries((model.rooms || []).map(r => [r.id, r]));
   const { roof, frame: modelBox } = modelFrame(model);
   const { ext, E } = modelBox;
   // the home view frames the house rooms, not the lot or the carport
@@ -733,7 +878,7 @@ export function mount(element, model, options = {}) {
   }
   // the shadow camera holds the lot from the ground to the highest roof or tree
   const msite = model.site || {};
-  const shadowTop = 0.5 + Math.max(model.ceiling || 0, ...Object.values(model.roofs || {}).map(r => r.high_y + (r.thick || 0)),
+  const shadowTop = 0.5 + Math.max(model.ceiling || 0, ...Object.values(model.roofs || {}).map(r => roofPeak(r) + (r.thick || 0)),
     ...(msite.trees || []).map(t => t.height), msite.garage_roof && msite.garage_roof.y ? msite.garage_roof.y[1] : 0,
     msite.pergola ? msite.pergola.height : 0);
   // the sky texture: the horizon colour up to SKY_HORIZON of the view, blending to the zenith's at

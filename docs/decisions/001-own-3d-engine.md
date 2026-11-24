@@ -1,6 +1,6 @@
 # ADR-001: The 3D view is our own three.js engine over the measured house model
 
-- **Status:** Accepted (2026-10-11)
+- **Status:** Accepted (2026-11-24)
 - **Related:** [estate ADR-001](https://github.com/khelias/khe-architecture/blob/main/decisions/001-repo-per-product.md), [estate ADR-012](https://github.com/khelias/khe-architecture/blob/main/decisions/012-estate-architecture-is-public.md)
 
 ## Context
@@ -43,6 +43,22 @@ JSON:
 3. **three.js is vendored**, versioned by directory, with no CDN (the view
    must work with the internet down) and no bundler (the code is served as
    static ES modules from HA's `/local`).
+4. **The model format holds other houses too** (amended 2026-11-24). Besides
+   the shed roofs of this house, a roof can be hip, gable or flat, made of
+   wings: plan rectangles with one eave height and one pitch, each running
+   into the next, the surface being the highest wing, which gives an L or T
+   house its valleys. The viewer clips each wing's faces to where that wing
+   is highest, so a fading roof shows no hidden faces; wings that only touch
+   are refused, and a non-rectangular outline stays a shed roof. Storeys are
+   walls and rooms on a `level` of a `levels` list of floor heights; an upper
+   storey lifts away with the roof, and inside views per storey are later
+   work.
+5. **A consumer outside the estate reads it by path** (amended 2026-11-24).
+   A private side project outside the estate, no repo of its own, reads the
+   format, the validator and the build from a checkout of this repo. It owns
+   nothing in the estate, so the engine stays here and this is no estate
+   decision; moving the engine to a repo of its own stays one (estate
+   ADR-001) for the day a second estate repo needs it.
 
 ## Alternatives considered
 
@@ -75,6 +91,7 @@ JSON:
   houses, for example as a HACS card, first needs a way to author that model
   without measured drawings, translations and the Estonia-specific parts
   made optional. Moving the engine to a repo of its own would be an estate
-  decision (estate ADR-001) for the day a second consumer exists.
+  decision (estate ADR-001) for the day a second estate repo needs it
+  (point 5).
 - The public demo can be built from a made-up house in the same model
   format, so the engine is shown without any of the real house.

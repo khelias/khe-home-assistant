@@ -73,7 +73,7 @@ export default function build({ THREE, kit, C, model, style, state, roof }) {
   function pv(it) {
     const top = roof.top(it.roof);
     // the roof's rise per metre of x, and the tilt that lays a panel on it
-    const rise = top(1) - top(0), tilt = Math.atan(rise);
+    const rise = top(1, 0) - top(0, 0), tilt = Math.atan(rise);
     const [w, d] = it.size, turned = it.rot === 90 || it.rot === 270;
     const geoL = box(PANEL[0], PANEL_T, PANEL[1]), geoP = box(PANEL[1], PANEL_T, PANEL[0]);
     panelGrid(w, d, it.panels).forEach(p => {
@@ -85,7 +85,7 @@ export default function build({ THREE, kit, C, model, style, state, roof }) {
       m.userData.panel = true;
       // the underside's centre PANEL_LIFT over the roof, the panel turned to the roof's slope
       const n = [-Math.sin(tilt), Math.cos(tilt)];
-      m.position.set(x + n[0] * (PANEL_T / 2), top(x) + PANEL_LIFT + n[1] * (PANEL_T / 2), z);
+      m.position.set(x + n[0] * (PANEL_T / 2), top(x, z) + PANEL_LIFT + n[1] * (PANEL_T / 2), z);
       m.rotation.z = tilt;
     });
   }

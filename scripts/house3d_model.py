@@ -20,6 +20,21 @@ crosses is the drive gate, and the path has to start far enough out for the car 
 clear it while it opens. The future items are optional too: things the house does not
 have yet, each placed on the plan, a pv item on a roof with its panels fitting.
 
+Roofs: geometry.roofs.<id>.kind is "shed" (the default), "hip", "gable" or "flat". A shed
+roof has an outline [[x, z], ...] and falls east or west along x from high_x at high_y by
+pitch_deg or slope. The other kinds are a set of wings, rects [[x0, z0, x1, z1], ...] with
+the overhang included, each wing overlapping the next (wings that only touch are refused):
+hip and gable have eave_y, the roof line at the wings' edges, and pitch_deg or slope, a gable
+also ridge "x" or "z" (the axis its ridge runs along); flat has y. The height at (x, z) is the
+highest wing there: hip eave_y + slope * the distance to the wing's nearest edge, gable to the
+nearest edge across the ridge, flat y; outside every wing the nearest wing's at the nearest
+point. roof_height(), roof_rects(), roof_bbox() and roof_area() read every kind. PV items lie
+on shed roofs only.
+
+Storeys: geometry.levels is the floor heights [0, 3.05, ...] (default [0]); a wall or room has
+level (default 0). A wall's openings, doors and sills are relative to levels[level]; its top,
+a height or a roof id, and the furniture's y stay absolute. The ceiling is the ground floor's.
+
 Usage:  house3d_model.py --check FILE
         house3d_model.py --layers geometry,rooms,showcase FILE   (or --layers all)
 Import: load(path, layers), validate(layers), private_strings(model)
@@ -31,7 +46,7 @@ import math
 import re
 import sys
 from datetime import date
-from itertools import pairwise
+from itertools import combinations, pairwise
 
 REQUIRED = ("geometry", "rooms", "private", "showcase")
 LAYERS = REQUIRED + ("surroundings",)
@@ -48,6 +63,7 @@ SLIDE_OFFSET = (
     0.12  # a sliding leaf runs this far to the lot side of the fence line, past its rails
 )
 CAR_CLEARANCE = 0.3  # between the car and a gate leaf's sweep
+ROOF_KINDS = ("shed", "hip", "gable", "flat")
 FUTURE_KINDS = ("pv", "charger", "battery", "greenhouse", "tub")
 # furniture: what the real style draws an item as; without a kind it is a plain block
 FURNITURE_KINDS = (
@@ -195,6 +211,152 @@ def _area(ring):
     return abs(sum(x0 * z1 - x1 * z0 for (x0, z0), (x1, z1) in zip(ring, ring[1:] + ring[:1]))) / 2
 
 
+def _kind(roof):
+    return roof.get("kind", "shed")
+
+
+def _rect_problem(where, v):
+    """The problem with a rect [x0, z0, x1, z1], or None."""
+    if not _rect(v):
+        return f"{where}: rect {v} is not [x0, z0, x1, z1] with x0 < x1 and z0 < z1"
+    return None
+
+
+def roof_rects(roof):
+    """A roof's plan rects: a wing roof's own, a shed roof's outline box as one."""
+    if _kind(roof) == "shed":
+        return [roof_bbox(roof)]
+    return [list(q) for q in roof["rects"]]
+
+
+def roof_bbox(roof):
+    """[x0, z0, x1, z1] round a roof's outline or wings."""
+    if _kind(roof) == "shed":
+        xs, zs = [p[0] for p in roof["outline"]], [p[1] for p in roof["outline"]]
+        return [min(xs), min(zs), max(xs), max(zs)]
+    q = roof["rects"]
+    return [min(r[0] for r in q), min(r[1] for r in q), max(r[2] for r in q), max(r[3] for r in q)]
+
+
+def _union_area(rects):
+    xs = sorted({v for r in rects for v in (r[0], r[2])})
+    zs = sorted({v for r in rects for v in (r[1], r[3])})
+    total = 0.0
+    for x0, x1 in pairwise(xs):
+        for z0, z1 in pairwise(zs):
+            if any(r[0] <= x0 and x1 <= r[2] and r[1] <= z0 and z1 <= r[3] for r in rects):
+                total += (x1 - x0) * (z1 - z0)
+    return total
+
+
+def roof_area(roof):
+    """A roof's plan area in m2: its outline's, or its wings' union."""
+    if _kind(roof) == "shed":
+        return _area(roof["outline"])
+    return _union_area(roof["rects"])
+
+
+def roof_slope(roof):
+    return roof["slope"] if _num(roof.get("slope")) else math.tan(math.radians(roof["pitch_deg"]))
+
+
+def _wing_height(roof, q, x, z):
+    kind = _kind(roof)
+    if kind == "flat":
+        return roof["y"]
+    x0, z0, x1, z1 = q
+    if kind == "gable":
+        d = min(z - z0, z1 - z) if roof["ridge"] == "x" else min(x - x0, x1 - x)
+    else:
+        d = min(x - x0, x1 - x, z - z0, z1 - z)
+    return roof["eave_y"] + roof_slope(roof) * d
+
+
+def roof_height(roof, x, z):
+    """The roof line's height at plan point (x, z), for every kind (see the module docstring)."""
+    if _kind(roof) == "shed":
+        sign = -1 if roof["falls"] == "west" else 1
+        return roof["high_y"] - sign * (x - roof["high_x"]) * roof_slope(roof)
+    rects = roof["rects"]
+    inside = [q for q in rects if q[0] <= x <= q[2] and q[1] <= z <= q[3]]
+    if inside:
+        return max(_wing_height(roof, q, x, z) for q in inside)
+
+    def clamp(q):
+        return min(max(x, q[0]), q[2]), min(max(z, q[1]), q[3])
+
+    q = min(rects, key=lambda q: math.dist((x, z), clamp(q)))
+    return _wing_height(roof, q, *clamp(q))
+
+
+def _roof_problems(rid, roof):
+    """A roof's problems, empty when it is usable."""
+    out = []
+    _validate_roof(rid, roof, out.append)
+    return out
+
+
+def _validate_roof(rid, roof, bad):
+    kind = _kind(roof)
+    if kind not in ROOF_KINDS:
+        bad(f"roof {rid}: kind {kind!r} is not one of {', '.join(ROOF_KINDS)}")
+        return
+    if not _num(roof.get("thick")):
+        bad(f"roof {rid}: thick is not a number")
+    if kind == "shed":
+        if not all(_point(p) for p in roof.get("outline", [])) or len(roof.get("outline", [])) < 3:
+            bad(f"roof {rid}: outline needs three or more [x, z] points")
+        if not (_num(roof.get("pitch_deg")) or _num(roof.get("slope"))):
+            bad(f"roof {rid}: needs pitch_deg or slope")
+        for k in ("high_x", "high_y"):
+            if not _num(roof.get(k)):
+                bad(f"roof {rid}: {k} is not a number")
+        if roof.get("falls") not in ("east", "west"):
+            bad(f"roof {rid}: falls must be east or west (heights run along x)")
+        return
+    if "outline" in roof:
+        bad(f"roof {rid}: a {kind} roof has rects, not an outline")
+    rects = roof.get("rects")
+    if not (isinstance(rects, list) and rects):
+        bad(f"roof {rid}: rects must be a non-empty list of [x0, z0, x1, z1]")
+        return
+    good = True
+    for i, q in enumerate(rects):
+        if problem := _rect_problem(f"roof {rid}: rects[{i}]", q):
+            bad(problem)
+            good = False
+    if kind == "flat":
+        if not _num(roof.get("y")):
+            bad(f"roof {rid}: a flat roof needs y")
+    else:
+        if not _num(roof.get("eave_y")):
+            bad(f"roof {rid}: eave_y is not a number")
+        if not (_num(roof.get("pitch_deg")) or _num(roof.get("slope"))):
+            bad(f"roof {rid}: needs pitch_deg or slope")
+    if kind == "gable" and roof.get("ridge") not in ("x", "z"):
+        bad(f"roof {rid}: a gable roof's ridge must be x or z")
+    if not good:
+        return
+
+    # wings that touch must overlap, and all of them must hang together through the overlaps
+    def span(a, b):
+        return min(a[2], b[2]) - max(a[0], b[0]), min(a[3], b[3]) - max(a[1], b[1])
+
+    for (i, a), (j, b) in combinations(enumerate(rects), 2):
+        w, d = span(a, b)
+        if w >= 0 and d >= 0 and min(w, d) <= 1e-6:
+            bad(f"roof {rid}: rects[{i}] and rects[{j}] only touch; wings must overlap")
+    linked, todo = {0}, [0]
+    while todo:
+        a = rects[todo.pop()]
+        for j, b in enumerate(rects):
+            if j not in linked and min(span(a, b)) > 1e-6:
+                linked.add(j)
+                todo.append(j)
+    if len(linked) < len(rects):
+        bad(f"roof {rid}: its wings do not overlap into one roof")
+
+
 def _cross(o, a, b):
     return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
 
@@ -316,8 +478,8 @@ def validate(layers):
         return [str(e)]
 
     def rect(where, v):
-        if not _rect(v):
-            bad(f"{where}: rect {v} is not [x0, z0, x1, z1] with x0 < x1 and z0 < z1")
+        if problem := _rect_problem(where, v):
+            bad(problem)
 
     def ids(where, values):
         seen = set()
@@ -331,15 +493,8 @@ def validate(layers):
         bad("geometry: roofs missing")
         roofs = {}
     for rid, roof in roofs.items():
-        if not all(_point(p) for p in roof.get("outline", [])) or len(roof.get("outline", [])) < 3:
-            bad(f"roof {rid}: outline needs three or more [x, z] points")
-        if not (_num(roof.get("pitch_deg")) or _num(roof.get("slope"))):
-            bad(f"roof {rid}: needs pitch_deg or slope")
-        for k in ("high_x", "high_y", "thick"):
-            if not _num(roof.get(k)):
-                bad(f"roof {rid}: {k} is not a number")
-        if roof.get("falls") not in ("east", "west"):
-            bad(f"roof {rid}: falls must be east or west (heights run along x)")
+        for problem in _roof_problems(rid, roof):
+            bad(problem)
     for i, s in enumerate(model.get("roof_steps", [])):
         if not (_point(s.get("a")) and _point(s.get("b"))):
             bad(f"roof_steps[{i}]: a and b must be [x, z]")
@@ -348,6 +503,23 @@ def validate(layers):
                 bad(f"roof_steps[{i}]: {k} {s.get(k)!r} is not a roof")
     if not _num(model.get("ceiling")):
         bad("geometry: ceiling is not a number")
+    levels = model.get("levels", [0])
+    if not (
+        isinstance(levels, list)
+        and levels
+        and all(_num(v) for v in levels)
+        and levels[0] == 0
+        and all(a < b for a, b in pairwise(levels))
+    ):
+        bad(f"geometry: levels {levels!r} must be ascending floor heights from 0")
+        levels = [0]
+
+    def level_of(where, item):
+        lv = item.get("level", 0)
+        if isinstance(lv, int) and not isinstance(lv, bool) and 0 <= lv < len(levels):
+            return lv
+        bad(f"{where}: level {lv!r} is not an index into levels (0..{len(levels) - 1})")
+        return 0
 
     for i, w in enumerate(model.get("walls", [])):
         where = f"walls[{i}]"
@@ -356,9 +528,18 @@ def validate(layers):
             continue
         if not _num(w.get("t")) or w["t"] <= 0:
             bad(f"{where}: t is not a positive number")
+        lv = level_of(where, w)
         top = w.get("top")
         if not (_num(top) or top in roofs):
             bad(f"{where}: top {top!r} is neither a height nor a roof id")
+        elif _num(top) and top <= levels[lv]:
+            bad(f"{where}: top {top} is not above its level's floor {levels[lv]}")
+        elif (
+            top in roofs
+            and not _roof_problems(top, roofs[top])
+            and min(roof_height(roofs[top], *p) for p in (w["a"], w["b"])) <= levels[lv]
+        ):
+            bad(f"{where}: roof {top} runs below its level's floor {levels[lv]}")
         if "cut" in w and not _num(w["cut"]):
             bad(f"{where}: cut is not a number")
         if "finish" in w and w["finish"] != "panel":
@@ -540,6 +721,7 @@ def validate(layers):
         bad(f"rooms: {OUTDOOR!r} is reserved for outdoor devices")
     for r in rooms:
         where = f"room {r.get('id')}"
+        level_of(where, r)
         if not (isinstance(r.get("name"), str) and r["name"]):
             bad(f"{where}: name missing")
         if not r.get("rects"):
@@ -795,6 +977,9 @@ def _validate_future(model, roofs, bad):
         roof = roofs.get(it.get("roof")) if isinstance(it.get("roof"), str) else None
         if not roof:
             bad(f"{where}: roof {it.get('roof')!r} is not a roof")
+        elif _kind(roof) != "shed":
+            bad(f"{where}: roof {it['roof']} is not a shed roof; PV lies on shed roofs only")
+            continue
         if not (placed and sized and it.get("rot", 0) in FUTURE_ROT):
             continue
         outline = roof.get("outline") if roof else None

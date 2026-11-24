@@ -75,7 +75,8 @@ demo/              the public demo: the house's Overview on made-up data,
 docs/              operational notes and the README screenshot
   decisions/       ADRs: NNN-slug.md, numbered from 001
 house3d/           3D house view: engine (core house3d.js, scene/ layer
-                   modules, kit, sun and the marker overlay), HA card,
+                   modules, kit, sun and the marker overlay; shed, hip, gable
+                   and flat roofs, storeys with the upper one in the lift), HA card,
                    standalone viewer, placement page, vendored three.js
 scripts/           dashboard/ package (entities.py as the single source of house
                    entity ids, primitives.py, view modules kodu/energia/climate/
@@ -95,7 +96,9 @@ scripts/           dashboard/ package (entities.py as the single source of house
                    the Estfeed hourly load), check.sh, install-hooks.sh
 tests/house3d/     3D view tests on a made-up fixture house: model and build
                    (Python unittest), engine (engine-*.test.mjs by area over
-                   engine-harness.mjs), simple-style snapshot, demo
+                   engine-harness.mjs), simple-style snapshot, geometry
+                   baseline, the two-storey fixture with hip, gable and flat
+                   roofs (fixture-twostorey.md), demo
                    dashboard, its recorder and scenario player (node:test)
 tests/dashboard/   dashboard generator, demo catalogue and scenario tests
                    (Python unittest, split by view area over helpers.py)

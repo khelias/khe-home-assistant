@@ -2,11 +2,12 @@
 
 Run from the repo root: python3 -I -m unittest discover -s tests/house3d -v
 """
-import copy, importlib.util, json, os, re, shutil, subprocess, sys, tempfile, unittest
+import copy, importlib.util, json, math, os, re, shutil, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "tests/house3d/fixture-model.md"
+TWOSTOREY = ROOT / "tests/house3d/fixture-twostorey.md"
 ENGINE = ROOT / "house3d"
 BUILD = ROOT / "scripts/house3d-build.py"
 
@@ -565,6 +566,99 @@ class Mutations(unittest.TestCase):
                 mutate(L)
                 problems = hm.validate(L)
                 self.assertTrue(any(problem in p for p in problems), f"{problem!r} not in {problems}")
+
+
+def twostorey():
+    return hm.read_layers(TWOSTOREY)
+
+
+def _geo(L):
+    return L["geometry"]
+
+
+# mutations of the two-storey fixture: (name, mutate(layers), substring of the problem)
+TWO_MUTATIONS = [
+    ("a roof kind that does not exist", lambda L: _geo(L)["roofs"]["main"].update(kind="mansard"), "roof main: kind 'mansard' is not one of"),
+    ("wings that only touch", lambda L: _geo(L)["roofs"]["main"].update(rects=[[0, 0, 6, 8], [6, 0, 12, 8]]), "roof main: rects[0] and rects[1] only touch"),
+    ("wings that only meet at a corner", lambda L: _geo(L)["roofs"]["main"].update(rects=[[0, 0, 6, 8], [6, 8, 12, 14]]), "only touch"),
+    ("wings apart", lambda L: _geo(L)["roofs"]["main"].update(rects=[[0, 0, 6, 8], [7, 0, 12, 8]]), "roof main: its wings do not overlap into one roof"),
+    ("a reversed wing", lambda L: _geo(L)["roofs"]["main"]["rects"].__setitem__(0, [12, 0, 0, 8]), "roof main: rects[0]"),
+    ("a gable ridge that is no axis", lambda L: _geo(L)["roofs"]["garage"].update(ridge="y"), "roof garage: a gable roof's ridge must be x or z"),
+    ("a hip roof without eave_y", lambda L: _geo(L)["roofs"]["main"].pop("eave_y"), "roof main: eave_y is not a number"),
+    ("a hip roof without a pitch", lambda L: _geo(L)["roofs"]["main"].pop("pitch_deg"), "roof main: needs pitch_deg or slope"),
+    ("a flat roof without y", lambda L: _geo(L)["roofs"]["porch"].pop("y"), "roof porch: a flat roof needs y"),
+    ("a hip roof with an outline", lambda L: _geo(L)["roofs"]["main"].update(outline=[[0, 0], [1, 0], [1, 1]]), "roof main: a hip roof has rects, not an outline"),
+    ("levels not ascending", lambda L: _geo(L).update(levels=[0, 3, 2]), "geometry: levels [0, 3, 2] must be ascending"),
+    ("levels not from 0", lambda L: _geo(L).update(levels=[0.5, 3]), "must be ascending floor heights from 0"),
+    ("a wall on a level that does not exist", lambda L: _geo(L)["walls"][9].update(level=2), "walls[9]: level 2 is not an index into levels"),
+    ("a room on a level that does not exist", lambda L: L["rooms"]["rooms"][3].update(level=-1), "room bed: level -1 is not an index"),
+    ("an upper wall's top under its floor", lambda L: _geo(L)["walls"][15].update(top=2.8), "walls[15]: top 2.8 is not above its level's floor 3"),
+    ("an upper wall under a roof below its floor", lambda L: _geo(L)["walls"][9].update(top="garage"), "walls[9]: roof garage runs below its level's floor 3"),
+]
+
+
+class RoofKinds(unittest.TestCase):
+    def test_the_two_storey_fixture_validates(self):
+        self.assertEqual(hm.validate(twostorey()), [])
+
+    def test_each_mutation_reports_its_problem(self):
+        base = twostorey()
+        for name, mutate, problem in TWO_MUTATIONS:
+            with self.subTest(name):
+                L = copy.deepcopy(base)
+                mutate(L)
+                problems = hm.validate(L)
+                self.assertTrue(any(problem in p for p in problems), f"{problem!r} not in {problems}")
+
+    def test_pv_on_a_hip_roof_is_refused(self):
+        L = layers()
+        L["geometry"]["roofs"]["wingN"] = {"kind": "hip", "rects": [[30, 3, 38, 23]], "eave_y": 4, "slope": 0.2, "thick": 0.3}
+        self.assertIn("future item pv: roof wingN is not a shed roof; PV lies on shed roofs only", hm.validate(L))
+
+    def test_heights_of_each_kind(self):
+        roofs = _geo(twostorey())["roofs"]
+        main, porch, garage = roofs["main"], roofs["porch"], roofs["garage"]
+        slope = math.tan(math.radians(22))
+        # hip: eave at the edge, rising by the distance to the nearest edge
+        self.assertAlmostEqual(hm.roof_height(main, -0.5, 4), 5.4)
+        self.assertAlmostEqual(hm.roof_height(main, 0.5, 4), 5.4 + slope)
+        self.assertAlmostEqual(hm.roof_height(main, 6, 4), 5.4 + 4.5 * slope, msg="the long wing's ridge")
+        self.assertAlmostEqual(hm.roof_height(main, 12, 4), 5.4 + 0.5 * slope, msg="its hipped end")
+        # gable, ridge along z: across x only, so the gable end stands at the ridge's height
+        gs = math.tan(math.radians(30))
+        self.assertAlmostEqual(hm.roof_height(garage, 18, 0.6), 2.5 + 3.3 * gs)
+        self.assertAlmostEqual(hm.roof_height(garage, 15, 5), 2.5 + 0.3 * gs)
+        # flat
+        self.assertEqual(hm.roof_height(porch, 13, 4), 3.3)
+        # outside every wing: the nearest wing at the nearest point
+        self.assertAlmostEqual(hm.roof_height(main, -3, 4), 5.4)
+        self.assertAlmostEqual(hm.roof_height(garage, 18, -1), 2.5 + 3.3 * gs)
+
+    def test_the_l_valley_is_both_wings_roofs(self):
+        main = _geo(twostorey())["roofs"]["main"]
+        slope = math.tan(math.radians(22))
+        a, b = main["rects"]
+        wing = lambda q, x, z: 5.4 + slope * min(x - q[0], q[2] - x, z - q[1], q[3] - z)
+        # the inner corner (6.5, 8.5): on its 45-degree diagonal into the overlap both wings agree
+        for t in (0.5, 1.5, 3):
+            x, z = 6.5 - t, 8.5 - t
+            self.assertAlmostEqual(wing(a, x, z), wing(b, x, z))
+            self.assertAlmostEqual(hm.roof_height(main, x, z), wing(a, x, z))
+        # off the diagonal the higher wing wins
+        self.assertAlmostEqual(hm.roof_height(main, 3, 7), max(wing(a, 3, 7), wing(b, 3, 7)))
+
+    def test_rects_bbox_and_area(self):
+        roofs = _geo(twostorey())["roofs"]
+        self.assertEqual(hm.roof_bbox(roofs["main"]), [-0.5, -0.5, 12.5, 14.5])
+        self.assertAlmostEqual(hm.roof_area(roofs["main"]), 13 * 9 + 7 * 6)
+        self.assertEqual(hm.roof_rects(roofs["garage"]), [[14.7, 0.6, 21.3, 8.4]])
+        wing_n = _geo(layers())["roofs"]["wingN"]
+        self.assertEqual(hm.roof_bbox(wing_n), [30.7, 3.7, 37.3, 22.3])
+        self.assertEqual(hm.roof_rects(wing_n), [hm.roof_bbox(wing_n)])
+        self.assertAlmostEqual(hm.roof_area(wing_n), 6.3 * 18.6 + 0.3 * 8)
+        # a shed roof's height is its plane, the same at every z
+        self.assertAlmostEqual(hm.roof_height(wing_n, 37.3, 5), 5)
+        self.assertAlmostEqual(hm.roof_height(wing_n, 31, 20), 5 - 6.3 * math.tan(math.radians(7)))
 
 
 class Festive(unittest.TestCase):

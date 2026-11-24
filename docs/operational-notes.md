@@ -500,6 +500,23 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   module scope holds constants only, since a module runs once per URL and a
   second card or a remount would share its state. The engine tests check the
   import rule, so `scripts/check.sh` enforces it (below).
+- **Roofs and storeys:** a roof is a shed (an outline falling east or west
+  along x, the house's own) or a hip, gable or flat roof made of wings,
+  plan rects with one eave height and pitch whose surface is the highest
+  wing (`scripts/house3d_model.py`'s docstring has the fields). The engine's
+  roof heights are `(x, z) -> y` for every kind; `roofFaces()` clips each
+  wing's faces to where it is highest, which the building layer draws as a
+  slab and the winter layer snows on, and wall tops are sampled where they
+  cross a ridge, hip or valley, so a gable end reaches its peak. A model may
+  list `levels` (floor heights) with walls and rooms on a `level`: an upper
+  storey's walls stand in the lift on their level, on a glass of their own,
+  so they rise and fade with the roof while the ground floor's glass stays,
+  and a ground-floor wall taller than the ceiling is cut at it. Upper rooms
+  get no floor, label or chip and the interior layer leaves their walls out;
+  PV lies on shed roofs only. `tests/house3d/fixture-twostorey.md` is the
+  made-up house that exercises all of it, and
+  `tests/house3d/geometry-baseline.json` pins where the roof-reading layers
+  stand on the main fixture.
 - **One broken layer does not blank the view.** A layer module that fails to
   load, or whose build throws (say a model shape the deployed engine does not
   know yet), is left out and logged as `house3d: layer <id> failed`; the rest
