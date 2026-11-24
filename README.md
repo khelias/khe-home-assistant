@@ -34,7 +34,8 @@ or rain on the pergola, and mark what the house's real automations do.
   needs them leaves its card or entity out when they are missing.
 - **The 3D view** is generated from a private model of the house: walls,
   roofs, rooms, the yard, the neighbourhood from the national topographic
-  database, and live device markers. It runs as a custom card inside HA.
+  database, and live device markers. It runs as a custom card inside HA, on
+  the 3D engine from [khe-house3d](https://github.com/khelias/khe-house3d).
 
 The quirks behind each of these are in
 [docs/operational-notes.md](docs/operational-notes.md).

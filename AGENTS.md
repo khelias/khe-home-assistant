@@ -13,7 +13,8 @@ This file holds rules and pointers; the reference lives in:
 - [docs/operational-notes.md](docs/operational-notes.md) - per-integration
   quirks, measured behaviour and the 3D view
 - [docs/decisions/](docs/decisions/) - this repo's decisions, estate-style
-  ADRs (the estate's own are in khe-architecture): the 3D engine (ADR-001),
+  ADRs (the estate's own are in khe-architecture): the 3D engine (ADR-001,
+  moved to khe-house3d with the engine),
   the dashboard's own cards ([ADR-002](docs/decisions/002-own-dashboard-cards.md)),
   the demo's English ([ADR-003](docs/decisions/003-demo-in-english.md)),
   a community card trial, since dropped ([ADR-004](docs/decisions/004-bubble-card-trial.md)),
@@ -74,11 +75,10 @@ demo/              the public demo: the house's Overview on made-up data,
                    player in scenario.js; not deployed to HA
 docs/              operational notes and the README screenshot
   decisions/       ADRs: NNN-slug.md, numbered from 001
-house3d/           3D house view: engine (core house3d.js, scene/ layer
-                   modules, kit, sun and the marker overlay; shed, hip, gable
-                   and flat roofs, storeys with the upper one in the lift, a
-                   house's look from its model over a neutral default), HA card,
-                   standalone viewer, placement page, vendored three.js
+house3d/           3D house view: the HA card house3d-card.js, and the engine's
+                   pinned copy from khe-house3d (core house3d.js, scene/,
+                   viewer.html, place.html, vendored three.js), never edited
+                   here (below)
 scripts/           dashboard/ package (entities.py as the single source of house
                    entity ids, primitives.py, view modules kodu/energia/climate/
                    security/media/settings and overview.py, no I/O; ADR-005 to
@@ -90,17 +90,20 @@ scripts/           dashboard/ package (entities.py as the single source of house
                    English, ADR-003), dashboard_scenarios.py (the demo's
                    scenarios),
                    ha-ws.py (HA WebSocket commands from the CLI),
-                   house3d-* and house3d_model.py (3D view build, vendoring,
-                   device and tree placement, ETAK surroundings, model),
-                   house3d-test.sh (the 3D view's and the cards' tests),
+                   house3d-build.py (the demo build; the viewer build and
+                   scan go to the engine's house3d_viewer.py),
+                   house3d-engine.sh (writes and checks the engine's copy),
+                   house3d_model.py and house3d_viewer.py (the engine's
+                   copy), house3d-test.sh (the 3D card's, demo's and the
+                   cards' tests),
                    pv-sim.py (rooftop PV, battery and EV simulation against
                    the Estfeed hourly load), check.sh, install-hooks.sh
-tests/house3d/     3D view tests on a made-up fixture house: model and build
-                   (Python unittest), engine (engine-*.test.mjs by area over
-                   engine-harness.mjs), simple-style snapshot, geometry
-                   and look baselines, the two-storey fixture with hip, gable and flat
-                   roofs (fixture-twostorey.md), demo
-                   dashboard, its recorder and scenario player (node:test)
+tests/house3d/     3D card and demo tests on the made-up test house: the demo
+                   build (Python unittest), the card (engine-card.test.mjs
+                   over the copy's engine-harness.mjs), the demo dashboard,
+                   its recorder and scenario player (node:test); the test
+                   house fixture-model.md and the harness are the engine's
+                   copy
 tests/dashboard/   dashboard generator, demo catalogue and scenario tests
                    (Python unittest, split by view area over helpers.py)
 tests/cards/       the dashboard cards' pure helpers and module invariants
@@ -114,7 +117,8 @@ tests/cards/       the dashboard cards' pure helpers and module invariants
   ruff==0.17.0` (the version `ci.yml` pins), then
   `bash scripts/install-hooks.sh` for the gitleaks pre-commit hook.
 - `bash scripts/check.sh` is the whole check: `bash -n` on every
-  `scripts/*.sh`, `scripts/house3d-test.sh` (needs `node` and `python3`), the
+  `scripts/*.sh`, `scripts/house3d-engine.sh --check`,
+  `scripts/house3d-test.sh` (needs `node` and `python3`), the
   dashboard tests, the privacy scan of the demo when the real model is at
   hand (skipped in CI) and ruff lint and format over `scripts/`. It runs
   everything and exits 1 if anything failed. CI runs it with `RUFF=ruff`, the
@@ -130,6 +134,15 @@ tests/cards/       the dashboard cards' pure helpers and module invariants
   deploy: a push to khe-sites, its weekly schedule, or
   `gh workflow run deploy.yml -R khelias/khe-sites`, which the agent runs
   itself after a demo change lands on `main`.
+- `scripts/house3d-engine.sh <commit>` writes the 3D engine's copy from
+  [khe-house3d](https://github.com/khelias/khe-house3d) at that commit (a full
+  sha) with its hashes in `house3d-engine.json` ([estate
+  ADR-052](https://github.com/khelias/khe-architecture/blob/main/decisions/052-the-3d-house-engine-has-a-repo-of-its-own.md)).
+  The copy is `house3d/` but the card, `scripts/house3d_model.py`,
+  `scripts/house3d_viewer.py`, `tests/house3d/engine-harness.mjs` and
+  `tests/house3d/fixture-model.md`; it is never edited here (`--check` fails
+  on it): change khe-house3d and bump the copy, with `HOUSE3D_VERSION` and
+  the Lovelace resource's `?v=`. Ruff leaves the copy's Python out.
 - `ha-ws.py` and `ha-dashboard.py` import `websockets`, and `pv-sim.py`
   needs numpy and scipy (plus websockets for its `fetch`). The `.venv` above
   carries only ruff; run those scripts from a venv that has them.

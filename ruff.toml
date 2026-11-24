@@ -1,5 +1,7 @@
 target-version = "py313"
 line-length = 100
+# the engine's copy from khe-house3d, checked there (scripts/house3d-engine.sh)
+extend-exclude = ["scripts/house3d_model.py", "scripts/house3d_viewer.py"]
 
 [lint]
 extend-select = ["I"]

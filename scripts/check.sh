@@ -10,6 +10,7 @@ fail() { echo "check: FAILED: $1" >&2; rc=1; }
 for f in scripts/*.sh; do
   bash -n "$f" || fail "bash -n $f"
 done
+bash scripts/house3d-engine.sh --check || fail "engine copy"
 bash scripts/house3d-test.sh || fail "house3d tests"
 python3 -I -m unittest discover -s tests/dashboard || fail "dashboard tests"
 

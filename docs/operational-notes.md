@@ -463,10 +463,19 @@ behind every value and device. It replaced the Bubble Card trial of
 
 ## The 3D house view (`house3d`)
 
-The code lives in `house3d/` (engine `house3d.js` and its `scene/` modules,
-card `house3d-card.js`, standalone `viewer.html`, vendored three.js); why it
-is its own engine and not floor3d-card is
-[ADR-001](decisions/001-own-3d-engine.md). Deploy
+The engine, its model format, validator and viewer build, the placement
+page, the surroundings writer and the second test house live in
+[khe-house3d](https://github.com/khelias/khe-house3d), with its ADR-001 (why
+it is its own engine, a house's look as model data) and its own tests; the
+notes below on the engine describe it as this card runs it. Here are the card
+`house3d/house3d-card.js` and a pinned copy of the engine at the same paths
+(`house3d/` but the card, `scripts/house3d_model.py`,
+`scripts/house3d_viewer.py`, `tests/house3d/engine-harness.mjs` and
+`tests/house3d/fixture-model.md`), written by `scripts/house3d-engine.sh
+<commit>` and listed with their hashes in `house3d-engine.json`; `check.sh`
+fails when the copy differs, so it is never edited here ([estate
+ADR-052](https://github.com/khelias/khe-architecture/blob/main/decisions/052-the-3d-house-engine-has-a-repo-of-its-own.md)).
+A bump of the copy bumps `HOUSE3D_VERSION` and the resource's `?v=` with it. Deploy
 replaces `www/house3d/` in HA's config volume with it, so HA serves it as
 `/local/house3d/`, and a change arrives without a restart.
 
@@ -513,20 +522,19 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   so they rise and fade with the roof while the ground floor's glass stays,
   and a ground-floor wall taller than the ceiling is cut at it. Upper rooms
   get no floor, label or chip and the interior layer leaves their walls out;
-  PV lies on shed roofs only. `tests/house3d/fixture-twostorey.md` is the
-  made-up house that exercises all of it, and
-  `tests/house3d/geometry-baseline.json` pins where the roof-reading layers
-  stand on the main fixture.
+  PV lies on shed roofs only. khe-house3d's `fixture-twostorey.md` is the
+  made-up house that exercises all of it, and its geometry baseline pins
+  where the roof-reading layers stand on the main fixture.
 - **A house's look:** the real style's finishes are the model's
-  `geometry.look` ([ADR-001](decisions/001-own-3d-engine.md) point 6, the
+  `geometry.look` ([khe-house3d ADR-001](https://github.com/khelias/khe-house3d/blob/main/docs/decisions/001-own-3d-engine.md) point 6, the
   fields in `scripts/house3d_model.py`'s docstring): surface colours and
   finishes by the kit's names, plain cladding or boards at 0, 45 or 90
   degrees, and the opening trims, corner boards and base strip each on or
   off. `createKit(THREE, style, look)` resolves it over a neutral default
   (light matt walls, no trims) and exposes `kit.REAL` and `kit.look`. Our
   house and the test house carry today's look in their own models;
-  `tests/house3d/look-baseline.json` pins every material of the test house
-  in the real style, as `geometry-baseline.json` pins where things stand.
+  khe-house3d's look baseline pins every material of the test house in the
+  real style, as its geometry baseline pins where things stand.
 - **One broken layer does not blank the view.** A layer module that fails to
   load, or whose build throws (say a model shape the deployed engine does not
   know yet), is left out and logged as `house3d: layer <id> failed`; the rest
@@ -733,8 +741,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   that view; a remount swaps the canvas in place without it. The engine and three.js take a few seconds
   over a phone connection on a first visit or after a version bump.
 - **three.js updates** are manual, Renovate does not see the vendored copy:
-  `scripts/house3d-vendor.sh <version>`, point the engine's imports at the new
-  directory, bump the version, remove the old directory.
+  in khe-house3d, `scripts/house3d-vendor.sh <version>`, point the engine's
+  imports at the new directory, remove the old one; then bump the copy here.
 - **The model** (walls, rooms, trees, devices) is not in this repo. It is the
   `house3d:*` blocks of khe-meta's `house/house-model.md`;
   `scripts/ha-dashboard.py` reads it (`HOUSE3D_MODEL`, else the sibling
@@ -791,13 +799,13 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   forecast: no clouds, no shading. The sun is computed in both styles for
   it (`onSun`, the view's `sun`). The standalone viewer never gets the
   layer; the scan covers the items' positions.
-- **Placing devices, trees and future items:** `scripts/house3d-place.py serve <model>`
+- **Placing devices, trees and future items:** khe-house3d's `scripts/house3d-place.py serve <model>`
   serves `place.html` on 127.0.0.1 with the private layer from memory. Pick a
   device, a tree or a future item, click or drag it into place on the plan, turn a camera
   with the Suund slider, size a tree with the Kõrgus and Võra sliders, turn a
   future item with the Pööre buttons (its size and numbers stay hand edits), then
   copy the changes, `{"devices": {...}, "trees": {...}, "future": {...}}` with only the groups
-  that changed; `pbpaste | scripts/house3d-place.py apply <model> -` rewrites
+  that changed; `pbpaste | scripts/house3d-place.py apply <model> -` (there too) rewrites
   those device lines in the private block (heights stay by type), those
   tree lines in the geometry block's `site.trees` and those item lines in
   the private block's future `items`, refusing a pv item moved off its roof. Trees are geometry, so they
@@ -851,17 +859,12 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   visitor's own style and live time. The generator names the real house's devices,
   so `check.sh` scans the whole demo build and the test house with the real
   model when it is at hand.
-- **Tests:** `scripts/house3d-test.sh` runs the model and build tests
-  (`tests/house3d/test_house3d_model.py`), the placement apply's tests
-  (`tests/house3d/test_house3d_place.py`), the engine tests in Node
-  (`tests/house3d/engine-*.test.mjs` by area over the shared
-  `engine-harness.mjs`: `engine-core` for every layer building, the simple
-  style matching `simple-snapshot.json`, failure isolation, the camera, the
-  sun, the kit, the real style's materials and shadow flags and the scene
-  import rule; `engine-overlay` for the overlay's placement and taps;
-  `engine-building` for the building and the interior; `engine-outdoor` for
-  the site, ground, car, lights, winter and future layers; `engine-card` for
-  the card's own logic), the demo
+- **Tests:** the engine's own (model, build, placement, every layer, the
+  simple snapshot, the geometry and look baselines) are khe-house3d's.
+  Here `scripts/house3d-test.sh` runs the demo build's tests
+  (`tests/house3d/test_house3d_demo.py`), the card's
+  (`tests/house3d/engine-card.test.mjs`, over the copy's
+  `engine-harness.mjs`), the demo
   dashboard's tests (`tests/house3d/demo.test.mjs`: every card type, feature
   and icon drawn, every perform-action through the simulation, visibility
   conditions, no fixture name in `demo/`), the demo recorder's tests
@@ -869,11 +872,9 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   equal to their days, the zone's days, the prices), the scenario player's tests
   (`tests/house3d/scenario.test.mjs`: every built scenario plays to its end in
   both languages, the scene times' sun) and a syntax
-  check of every engine module, all on a made-up house,
-  `tests/house3d/fixture-model.md`. `scripts/check.sh` runs it, so CI and
-  the workspace commit gate do too. A deliberate change to the simple
-  style rewrites the snapshot with `UPDATE_SNAPSHOT=1 node --test
-  tests/house3d/engine-core.test.mjs`.
+  check of every card, demo and test module, all on a made-up house,
+  `tests/house3d/fixture-model.md`. `scripts/check.sh` runs it and
+  `house3d-engine.sh --check`, so CI and the workspace commit gate do too.
 - **The car** stands in the carport when it is home and drives in from the
   street the first time the view opens after it arrived; a tap on it replays
   the drive. The engine only draws a generic vehicle from data: the car's
@@ -904,7 +905,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   area, from Maa- ja Ruumiamet's ETAK. Together they fix the house's
   location, so the layer is private like the devices: `ha-dashboard.py` puts
   it into the card config, the standalone viewer never gets it, and the scan
-  covers it. `scripts/house3d-surroundings.py <model> <ETAK_EESTI_GPKG.gpkg>`
+  covers it. khe-house3d's `scripts/house3d-surroundings.py <model> <ETAK_EESTI_GPKG.gpkg>`
   writes it (`--write`; a dry run prints the checks) from the whole-Estonia
   GeoPackage, read offline so the service never learns the area. It stops
   unless ETAK's house footprint matches the model's walls within 1 m and a
