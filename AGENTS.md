@@ -136,7 +136,7 @@ tests/cards/       the dashboard cards' pure helpers and module invariants
   itself after a demo change lands on `main`.
 - `scripts/house3d-engine.sh <commit>` writes the 3D engine's copy from
   [khe-house3d](https://github.com/khelias/khe-house3d) at that commit (a full
-  sha) with its hashes in `house3d-engine.json` ([estate
+  sha on its `main`; a fork's commit or a symlink is refused) with its hashes in `house3d-engine.json` ([estate
   ADR-052](https://github.com/khelias/khe-architecture/blob/main/decisions/052-the-3d-house-engine-has-a-repo-of-its-own.md)).
   The copy is `house3d/` but the card, `scripts/house3d_model.py`,
   `scripts/house3d_viewer.py`, `tests/house3d/engine-harness.mjs` and

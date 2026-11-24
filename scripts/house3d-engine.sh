@@ -54,6 +54,17 @@ if ! printf '%s' "$commit" | grep -Eq '^[0-9a-f]{40}$'; then
   exit 2
 fi
 
+# only a commit on khe-house3d's main: GitHub serves a fork's commits under the same repo URL
+compare=$(curl -fsSL "https://api.github.com/repos/$REPO/compare/$commit...main") || {
+  echo "house3d-engine: $REPO has no commit $commit" >&2
+  exit 1
+}
+status=$(printf '%s' "$compare" | python3 -I -c 'import json, sys; print(json.load(sys.stdin).get("status", ""))')
+case "$status" in
+  ahead|identical) ;;
+  *) echo "house3d-engine: $commit is not on $REPO main ($status)" >&2; exit 1 ;;
+esac
+
 tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
 curl -fsSL "https://codeload.github.com/$REPO/tar.gz/$commit" -o "$tmp/engine.tar.gz" || exit 1
@@ -69,6 +80,9 @@ SINGLE = ("scripts/house3d_model.py", "scripts/house3d_viewer.py",
           "tests/house3d/engine-harness.mjs", "tests/house3d/fixture-model.md")
 want = sorted(p.relative_to(src) for p in (src / "house3d").rglob("*") if p.is_file())
 want += [Path(p) for p in SINGLE]
+links = [str(p.relative_to(src)) for p in src.rglob("*") if p.is_symlink()]
+if links:
+    sys.exit(f"house3d-engine: {commit[:12]} has symlinks ({', '.join(links)}); nothing was changed")
 missing = [str(p) for p in want if not (src / p).is_file()]
 if missing:
     sys.exit(f"house3d-engine: {commit[:12]} has no {', '.join(missing)}; nothing was changed")
@@ -79,7 +93,7 @@ for p in sorted(Path("house3d").rglob("*")):
 files = {}
 for rel in want:
     Path(rel).parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src / rel, rel)
+    shutil.copy2(src / rel, rel, follow_symlinks=False)
     files[str(rel)] = hashlib.sha256(Path(rel).read_bytes()).hexdigest()
 Path(manifest).write_text(json.dumps({"repo": repo, "commit": commit, "files": dict(sorted(files.items()))}, indent=1) + "\n", encoding="utf-8")
 print(f"house3d-engine: {len(files)} files from {repo}@{commit[:12]}")
