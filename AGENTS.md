@@ -92,7 +92,7 @@ scripts/           dashboard/ package (entities.py as the single source of house
                    ha-ws.py (HA WebSocket commands from the CLI),
                    house3d-build.py (the demo build; the viewer build and
                    scan go to the engine's house3d_viewer.py),
-                   house3d-engine.sh (writes and checks the engine's copy),
+                   house3d-copy.sh (writes and checks the engine's copy),
                    house3d_model.py and house3d_viewer.py (the engine's
                    copy), house3d-test.sh (the 3D card's, demo's and the
                    cards' tests),
@@ -117,7 +117,7 @@ tests/cards/       the dashboard cards' pure helpers and module invariants
   ruff==0.17.0` (the version `ci.yml` pins), then
   `bash scripts/install-hooks.sh` for the gitleaks pre-commit hook.
 - `bash scripts/check.sh` is the whole check: `bash -n` on every
-  `scripts/*.sh`, `scripts/house3d-engine.sh --check`,
+  `scripts/*.sh`, `scripts/house3d-copy.sh --check`,
   `scripts/house3d-test.sh` (needs `node` and `python3`), the
   dashboard tests, the privacy scan of the demo when the real model is at
   hand (skipped in CI) and ruff lint and format over `scripts/`. It runs
@@ -134,15 +134,15 @@ tests/cards/       the dashboard cards' pure helpers and module invariants
   deploy: a push to khe-sites, its weekly schedule, or
   `gh workflow run deploy.yml -R khelias/khe-sites`, which the agent runs
   itself after a demo change lands on `main`.
-- `scripts/house3d-engine.sh <commit>` writes the 3D engine's copy from
+- `bash scripts/house3d-copy.sh <commit>` writes the 3D engine's copy from
   [khe-house3d](https://github.com/khelias/khe-house3d) at that commit (a full
-  sha on its `main`; a fork's commit or a symlink is refused) with its hashes in `house3d-engine.json` ([estate
+  sha on its `main`; a fork's commit or a symlink is refused) with its hashes
+  in `house3d-engine.json` ([estate
   ADR-052](https://github.com/khelias/khe-architecture/blob/main/decisions/052-the-3d-house-engine-has-a-repo-of-its-own.md)).
-  The copy is `house3d/` but the card, `scripts/house3d_model.py`,
-  `scripts/house3d_viewer.py`, `tests/house3d/engine-harness.mjs` and
-  `tests/house3d/fixture-model.md`; it is never edited here (`--check` fails
-  on it): change khe-house3d and bump the copy, with `HOUSE3D_VERSION` and
-  the Lovelace resource's `?v=`. Ruff leaves the copy's Python out.
+  The copy is what that file's `include` lists, the script among them, but
+  the card, its `own`; it is never edited here (`--check` fails on it):
+  change khe-house3d and bump the copy, with `HOUSE3D_VERSION` and the
+  Lovelace resource's `?v=`. Ruff leaves the copy's Python out.
 - `ha-ws.py` and `ha-dashboard.py` import `websockets`, and `pv-sim.py`
   needs numpy and scipy (plus websockets for its `fetch`). The `.venv` above
   carries only ruff; run those scripts from a venv that has them.

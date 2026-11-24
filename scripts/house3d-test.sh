@@ -2,7 +2,7 @@
 # The house 3D view's tests here: the demo build's tests (Python), the HA card's over the engine's
 # harness, the demo dashboard's (in Estonian and in English, its scenarios and recorder), the
 # dashboard cards', and a syntax check of every card, demo and test module. The engine's own
-# tests are in khe-house3d; its copy here is checked by scripts/house3d-engine.sh --check.
+# tests are in khe-house3d; its copy here is checked by scripts/house3d-copy.sh --check.
 # Runs from any directory; exits 1 when anything fails, after running everything.
 set -u
 cd "$(dirname "$0")/.." || exit 1

@@ -1,6 +1,17 @@
 {
  "repo": "khelias/khe-house3d",
- "commit": "ef9fb74e389021512bcec739c202ccfaa3a10c4a",
+ "commit": "408ce33e44d487f8075f22b0a879a1a142ec51a0",
+ "include": [
+  "house3d/",
+  "scripts/house3d_model.py",
+  "scripts/house3d_viewer.py",
+  "tests/house3d/engine-harness.mjs",
+  "tests/house3d/fixture-model.md",
+  "scripts/house3d-copy.sh"
+ ],
+ "own": [
+  "house3d/house3d-card.js"
+ ],
  "files": {
   "house3d/house3d.js": "6827443a334e9f530343fb527dfa409d9ab97bf82113f4b4fdf759ae4d70dffa",
   "house3d/place.html": "5a3c88076886eddfde2730e2496383e4d10fcc3dee8df3c09e4cc94638b1a135",
@@ -39,6 +50,7 @@
   "house3d/vendor/three-0.186.1/examples/jsm/shaders/OutputShader.js": "353479f77a8d7e2629d49ccac9fc2f5dbfdda5442e0adf867b00377a2fcb0cb2",
   "house3d/vendor/three-0.186.1/examples/jsm/shaders/PoissonDenoiseShader.js": "2103dbdbcc8b2d56333a1fd061f1a2e313ed7f1d93ec0ca2b41d097ecaf63c96",
   "house3d/viewer.html": "00d232e3a2a29ea8d9207bba19b8a2d26efa046c6788ee7e86de7445a2c22e96",
+  "scripts/house3d-copy.sh": "d23c617a13f8c60eacc1a249cada1a9153b95369fe45d73d5d88cd7e60828cd7",
   "scripts/house3d_model.py": "22ed8a6349566df21927800c4a2cc6105a80e82504d335a1a512f710ff9016e4",
   "scripts/house3d_viewer.py": "e44c4b2f70bc031ac9bd6a4137b9b1a95045ed4d3a0f39a934eeb90c6f9ce111",
   "tests/house3d/engine-harness.mjs": "59b29920b9a94b969af894cdaa2cdbf9ce6f5e9dfaf5a724a0d1230c5d1e23a2",

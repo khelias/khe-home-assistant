@@ -469,10 +469,8 @@ page, the surroundings writer and the second test house live in
 it is its own engine, a house's look as model data) and its own tests; the
 notes below on the engine describe it as this card runs it. Here are the card
 `house3d/house3d-card.js` and a pinned copy of the engine at the same paths
-(`house3d/` but the card, `scripts/house3d_model.py`,
-`scripts/house3d_viewer.py`, `tests/house3d/engine-harness.mjs` and
-`tests/house3d/fixture-model.md`), written by `scripts/house3d-engine.sh
-<commit>` and listed with their hashes in `house3d-engine.json`; `check.sh`
+(what `include` in `house3d-engine.json` lists), written by
+`scripts/house3d-copy.sh <commit>` and listed there with their hashes; `check.sh`
 fails when the copy differs, so it is never edited here ([estate
 ADR-052](https://github.com/khelias/khe-architecture/blob/main/decisions/052-the-3d-house-engine-has-a-repo-of-its-own.md)).
 A bump of the copy bumps `HOUSE3D_VERSION` and the resource's `?v=` with it. Deploy
@@ -874,7 +872,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   both languages, the scene times' sun) and a syntax
   check of every card, demo and test module, all on a made-up house,
   `tests/house3d/fixture-model.md`. `scripts/check.sh` runs it and
-  `house3d-engine.sh --check`, so CI and the workspace commit gate do too.
+  `house3d-copy.sh --check`, so CI and the workspace commit gate do too.
 - **The car** stands in the carport when it is home and drives in from the
   street the first time the view opens after it arrived; a tap on it replays
   the drive. The engine only draws a generic vehicle from data: the car's
