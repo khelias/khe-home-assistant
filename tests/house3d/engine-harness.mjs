@@ -4,6 +4,7 @@
 // renderer, camera or loop, and every helper more than one of the test files uses.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 export const E = new URL('../../house3d/', import.meta.url);
@@ -25,7 +26,6 @@ export const { createKit } = await import(new URL('scene/kit.js', E));
 export const BUILDERS = await Promise.all(LAYERS.map(id => import(new URL(`scene/layers/${id}.js`, E))));
 export const { modelFrame, seasonOn, seasonWindow, buildLayer, guardLayer, syncCamera, toScreen, releaseVelocity, coast, homeBox, homeDir, homeView, pvNow, roofNormal, roofTop, tapAction, aoWanted } = await import(new URL('house3d.js', E));
 export const { collide, inChip, hitRect } = await import(new URL('scene/overlay.js', E));
-export const card = await import(new URL('house3d-card.js', E));
 export const { OrbitControls } = await import(new URL('vendor/three-0.186.1/examples/jsm/controls/OrbitControls.js', E));
 export const { sunPosition, gridBearing, sunDirection, sunGlow, realLight } = await import(new URL('scene/sun.js', E));
 export const { cornerBoards } = await import(new URL('scene/layers/building.js', E));
@@ -50,7 +50,7 @@ export const options = {
 // the ctx mount() builds, without a renderer, camera or loop
 export function makeCtx(opts = options, m = model) {
   const style = opts.style === 'real' ? 'real' : 'simple';
-  const kit = createKit(THREE, style);
+  const kit = createKit(THREE, style, m.look);
   const { roof, frame } = modelFrame(m);
   const byId = {};
   const ctx = {
@@ -106,3 +106,16 @@ export const partsOf = (L, part) => { const out = []; L.group.traverse(o => { if
 export const winterOf = (o = {}) => buildAll({ ...options, style: 'real', ...o });
 
 export const futureItem = id => model.future.items.find(it => it.id === id);
+
+// a baseline test's check: snap against the committed JSON at url, key by key; with
+// UPDATE_BASELINE=1, or with none committed yet, writes snap there instead
+export function checkBaseline(url, snap) {
+  if (process.env.UPDATE_BASELINE === '1' || !existsSync(url)) {
+    writeFileSync(url, JSON.stringify(snap, null, 1) + '\n');
+    if (process.env.UPDATE_BASELINE !== '1') assert.fail('no baseline yet: wrote one, check it in and rerun');
+    return;
+  }
+  const want = JSON.parse(readFileSync(url, 'utf-8'));
+  assert.deepEqual(Object.keys(snap).sort(), Object.keys(want).sort());
+  for (const k of Object.keys(want)) assert.deepEqual(snap[k], want[k], k);
+}

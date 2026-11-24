@@ -35,6 +35,14 @@ Storeys: geometry.levels is the floor heights [0, 3.05, ...] (default [0]); a wa
 level (default 0). A wall's openings, doors and sills are relative to levels[level]; its top,
 a height or a roof id, and the furniture's y stay absolute. The ceiling is the ground floor's.
 
+Look: geometry.look (optional) is the house's finishes in the real style; without it the engine
+draws a light, matt architectural model. surfaces maps an engine surface name (SURFACES) to
+"#rrggbb" or {"color": "#rrggbb", "roughness": 0..1, "metalness": 0..1}; cladding is
+{"pattern": "plain"} or {"pattern": "boards", "angle_deg": 0, 45 or 90} (0 horizontal);
+trims {"openings", "corners", "base"} are booleans for the opening trims with their reveals and
+sill flashings, the corner boards and the base strip, each off by default. The simple style
+ignores it.
+
 Usage:  house3d_model.py --check FILE
         house3d_model.py --layers geometry,rooms,showcase FILE   (or --layers all)
 Import: load(path, layers), validate(layers), private_strings(model)
@@ -123,6 +131,21 @@ FUTURE_ROT = (0, 90, 180, 270)
 PANEL = (1.72, 1.13)  # a PV panel's long and short side; the engine lays them out the same way
 PANEL_GAP = 0.02
 FUTURE_FACTS, FACT_CHARS = 6, 80
+# the real style's surface names, every key of the engine's kit.js REAL (a test compares them)
+SURFACES = (
+    "cladding", "roof", "frame", "unit", "glass", "interior", "door", "floor", "tile", "deck",
+    "paving", "lawn", "outside", "hedge", "crown", "trunk", "fence", "car", "neighbour", "road",
+    "timber", "sand", "slide", "nest", "pad", "mat", "net", "mesh", "stone", "cut", "skirting",
+    "linen", "fabric", "oak", "worktop", "cabinet", "furniture", "kitchen", "kitchenTop",
+    "handle", "steel", "blackGlass", "screen", "rug", "sheer", "sofa", "anthracite", "white",
+    "sanitary", "mirror", "stones", "darkOak", "mediumOak", "shell", "pot", "leaf", "bloom",
+    "canvas", "artA", "artB", "artC", "artD", "brushGround", "brushA", "brushB", "brushC",
+    "brushD", "snow", "spruce", "baubleRed", "baubleGold", "baubleSilver",
+)  # fmt: skip
+CLADDING_PATTERNS = ("plain", "boards")
+BOARD_ANGLES = (0, 45, 90)
+TRIMS = ("openings", "corners", "base")
+HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 BLOCK = re.compile(r"^```json house3d:(\w+)[ \t]*\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
 
 
@@ -513,6 +536,8 @@ def validate(layers):
     ):
         bad(f"geometry: levels {levels!r} must be ascending floor heights from 0")
         levels = [0]
+    if "look" in model:
+        _validate_look(model["look"], bad)
 
     def level_of(where, item):
         lv = item.get("level", 0)
@@ -851,6 +876,61 @@ def _validate_edges(where, f, bad):
             bad(f"{where}: {key} must be a list of {', '.join(SOFA_EDGES)}")
         elif (n := EDGE_KEYS[f["kind"]][key]) is not None and len(f[key]) != n:
             bad(f"{where}: a {f['kind']}'s {key} is {n} edge")
+
+
+def _validate_look(look, bad):
+    """geometry.look: the surfaces' finishes, the cladding's pattern and which trims are drawn."""
+    if not isinstance(look, dict):
+        bad("look: is not a JSON object")
+        return
+    for k in sorted(set(look) - {"surfaces", "cladding", "trims"}):
+        bad(f"look: unknown key {k!r}")
+    surfaces = look.get("surfaces", {})
+    if not isinstance(surfaces, dict):
+        bad("look.surfaces: is not a JSON object")
+        surfaces = {}
+    for name, v in surfaces.items():
+        where = f"look.surfaces.{name}"
+        if name not in SURFACES:
+            bad(f"{where}: {name!r} is not an engine surface")
+            continue
+        if isinstance(v, str):
+            v = {"color": v}
+        if not isinstance(v, dict):
+            bad(f"{where}: is not a colour or an object")
+            continue
+        for k in sorted(set(v) - {"color", "roughness", "metalness"}):
+            bad(f"{where}: unknown key {k!r}")
+        if not (isinstance(v.get("color"), str) and HEX.fullmatch(v["color"])):
+            bad(f"{where}: color {v.get('color')!r} is not #rrggbb")
+        for k in ("roughness", "metalness"):
+            if k in v and not (_num(v[k]) and 0 <= v[k] <= 1):
+                bad(f"{where}: {k} {v[k]!r} is not between 0 and 1")
+    if "cladding" in look:
+        c = look["cladding"]
+        if not isinstance(c, dict):
+            bad("look.cladding: is not a JSON object")
+        elif c.get("pattern") not in CLADDING_PATTERNS:
+            bad(
+                f"look.cladding: pattern {c.get('pattern')!r} is not one of {', '.join(CLADDING_PATTERNS)}"
+            )
+        else:
+            allowed = {"pattern", "angle_deg"} if c["pattern"] == "boards" else {"pattern"}
+            for k in sorted(set(c) - allowed):
+                bad(f"look.cladding: unknown key {k!r} for {c['pattern']}")
+            a = c.get("angle_deg", 45)
+            if c["pattern"] == "boards" and not (_num(a) and a in BOARD_ANGLES):
+                bad(f"look.cladding: angle_deg {a!r} is not one of 0, 45, 90")
+    if "trims" in look:
+        t = look["trims"]
+        if not isinstance(t, dict):
+            bad("look.trims: is not a JSON object")
+        else:
+            for k, v in t.items():
+                if k not in TRIMS:
+                    bad(f"look.trims: unknown key {k!r}")
+                elif not isinstance(v, bool):
+                    bad(f"look.trims.{k}: {v!r} is not true or false")
 
 
 def _validate_festive(festive, lot, bad):

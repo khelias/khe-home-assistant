@@ -6,7 +6,7 @@ export default function build({ THREE, kit, C, model, style }) {
   if (!p) return null;
   const { basic, lineMat, edges, near } = kit;
   const real = style === 'real';
-  // the real style: anthracite like the house's frames, casting shadows, no outlines
+  // the real style: in the frame's colour, casting shadows, no outlines
   const box = real ? (g, m, _e, r, y) => { const s = kit.solid(g, m, r, y); s.castShadow = true; return s; } : kit.box;
   const group = new THREE.Group();
   const frameM = real ? kit.surface('frame') : basic({ color: C.wall, opacity: 0.35 });

@@ -34,6 +34,15 @@ model, never this file.
 ```json house3d:geometry
 {
  "units": "m",
+ "look": {
+  "surfaces": {
+   "cladding": "#bebeb8", "roof": { "color": "#7b8083", "roughness": 0.7, "metalness": 0.1 }, "frame": "#383e42",
+   "interior": "#dddcd8", "floor": "#c39566", "tile": "#5e4a3c", "deck": "#4d4540", "paving": "#b8b1a3",
+   "fence": "#4a4d50", "kitchen": "#c3c9cf", "kitchenTop": "#5f4a3e"
+  },
+  "cladding": { "pattern": "boards", "angle_deg": 45 },
+  "trims": { "openings": true, "corners": true, "base": true }
+ },
  "axes": "x along the street (about north), z away from the street (about east), y up",
  "georef": { "crs": "EPSG:3301", "origin_E": 135797.137, "origin_N": 197531.371, "x_axis_bearing_deg": 354, "fit_rms_m": 0.05 },
  "ceiling": 2.7,

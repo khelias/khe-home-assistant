@@ -13,10 +13,11 @@
 // line in LAYERS.
 //
 // Styles: 'simple' (default) is the unlit neon wireframe; 'real' draws lit surfaces in the
-// house's own colours (kit.surface, from photos) under a sun with shadows. A layer branches on
-// ctx.style === 'real' and leaves its simple path as it is; tests/house3d/simple-snapshot.json
-// pins the simple style's objects and materials. The interior layer is the real style's alone (it
-// builds null in the simple one) and reads the building layer's api, so it comes after it.
+// house's look (kit.surface: the model's geometry.look over a neutral default) under a sun with
+// shadows. A layer branches on ctx.style === 'real' and leaves its simple path as it is;
+// tests/house3d/simple-snapshot.json pins the simple style's objects and materials. The interior
+// layer is the real style's alone (it builds null in the simple one) and reads the building
+// layer's api, so it comes after it.
 //
 // One layer cannot take the view down: a layer module that fails to load is left out,
 // buildLayer() leaves out a layer whose build throws, and guardLayer() switches off for good a
@@ -550,7 +551,7 @@ export function aoWanted({ real, ao, width, roofFade }) {
  *                                     carScreen, layers, time, view, sun }
  *
  * model: geometry + rooms layers (private and showcase are ignored). A wall with finish 'panel' is
- *   drawn in the real style as anthracite panel (the carport's walls and posts); a room's floor
+ *   drawn in the real style as a panel in the frame's colour (the carport's walls and posts); a room's floor
  *   ('tile' or 'paving', else oak) is its floor finish there. site.decks and site.paving:
  *   items that are rects [x0, z0, x1, z1] or outlines [[x, z], ...]. site.gates: [{ a, b, kind,
  *   height, opens?, slide?, name? }], drawn closed in the fence line; kind 'sliding' (one leaf, set
@@ -669,7 +670,7 @@ export function mount(element, model, options = {}) {
   stage.appendChild(renderer.domElement);
 
   const style = options.style === 'real' ? 'real' : 'simple', real = style === 'real';
-  const kit = createKit(THREE, style), C = kit.C;
+  const kit = createKit(THREE, style, model.look), C = kit.C;
   root.classList.toggle('h3d-real', real);
   const scene = new THREE.Scene();
   scene.background = C.bg;
@@ -848,7 +849,7 @@ export function mount(element, model, options = {}) {
     skyTex.colorSpace = THREE.SRGBColorSpace;
     skyTex.magFilter = THREE.LinearFilter;
     scene.background = skyTex;
-    // the ground bounces light onto the walls: a shaded wall in the photos is a little darker than
+    // the ground bounces light onto the walls: a shaded wall is a little darker than
     // a sunlit one, not near black
     hemi = new THREE.HemisphereLight('#ffffff', '#ffffff', 1);
     sun = new THREE.DirectionalLight('#ffffff', 2.5);

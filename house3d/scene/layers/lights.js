@@ -1,5 +1,5 @@
 // The outdoor luminaires (site.lights), a view effect of the dark: in the real style each is a
-// small anthracite fixture, a flat disc under a ceiling or a box on a wall set out along its
+// small fixture in the frame's colour, a flat disc under a ceiling or a box on a wall set out along its
 // face, that glows warm with a halo sprite and an additive pool of light on the ground, all
 // scaled by ctx.state.night and eased like a room's glow. They follow no HA entity. There are no
 // real-time lights. The simple style has no night, so there the layer is an empty group.

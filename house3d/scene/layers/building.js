@@ -5,22 +5,22 @@
 // Walls that run up to a roof are cut at the ceiling, and the part above goes in lift with the
 // roofs, which rises and fades with the roof mode. The floors are the room tap targets and warm
 // with a room's markers in state 'on'. The real style draws them as lit surfaces: exterior walls
-// boarded outside and plain inside, interior walls plain with white doors and frames, framed
+// clad outside (boards when the look's cladding asks) and plain inside, interior walls plain with white doors and frames, framed
 // openings (a door with finish 'cladding' gets a leaf of plain cladding, one with glass a
 // vertical glass strip, one with a hinge stands open), floors in the room's
 // finish (oak planks, the wet rooms' tiles, the carport's paving stones, all on world (x, z)) that
 // tint from their own colour, a house room's floor reaching the faces of the walls it runs along,
-// and the lift on materials of its own, so its fade never reaches the lower walls. Its exterior
-// walls also carry anthracite opening trims with lined reveals and sill flashings, and corner
-// boards on every outer and inner corner; the roofs have an anthracite edge, the carport roof an
-// anthracite fascia and soffit. At night (ctx.state.night) a room with a light on, or with a marker
+// and the lift on materials of its own, so its fade never reaches the lower walls. With the look's
+// trims (kit.look.trims), its exterior walls also carry opening trims with lined reveals and sill
+// flashings, corner boards on every outer and inner corner and a base strip, in the frame's
+// colour; the roofs have an edge, the carport roof a fascia and soffit, in the same colour. At night (ctx.state.night) a room with a light on, or with a marker
 // carrying glow (recent motion), glows: its floor and its windows, each pane tagged with its room
 // at build, take a warm emissive scaled by the light's level or the glow; there are no real-time
 // lights.
 const FRAME = 0.06, FRAME_D = 0.1; // real style: an opening's frame width and depth
-const BASE_H = 0.12; // real style: the dark strip along an exterior wall's foot
-// real style, read off photos: an opening's trim and a corner board, both standing PROUD off the
-// face, and a sill's metal flashing
+const BASE_H = 0.12; // real style: the strip along an exterior wall's foot
+// real style: an opening's trim and a corner board, both standing PROUD off the face, and a
+// sill's metal flashing; common cladding-trim sizes
 const TRIM = 0.1, CORNER = 0.12, PROUD = 0.025, REVEAL = 0.015;
 const FLASH_T = 0.03, FLASH_OUT = 0.06, FLASH_PAST = 0.03;
 // a glass door narrower than this is one leaf, without the centre mullion
@@ -111,8 +111,9 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   if (real) {
     // walls and roofs are DoubleSide: a roof's remapped extrusion faces inwards
     const two = { side: THREE.DoubleSide }, fades = { ...two, transparent: true };
-    const [front, back] = kit.boards();
-    const clad = o => ({ front: kit.surface('cladding', { ...o, map: front }), back: kit.surface('cladding', { ...o, map: back }), edge: kit.surface('cladding', o) });
+    const [front, back] = kit.look.cladding.pattern === 'boards' ? kit.boards() : [];
+    const mapped = (o, map) => (map ? { ...o, map } : o);
+    const clad = o => ({ front: kit.surface('cladding', mapped(o, front)), back: kit.surface('cladding', mapped(o, back)), edge: kit.surface('cladding', o) });
     const inner = kit.surface('interior', two), glass = kit.surface('glass');
     // one glass per room, so a lit room's windows glow alone; panes in no room share the first
     // an upper storey's panes are in the lift, which fades them: one glass of their own
@@ -129,12 +130,12 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     // the lift's inner faces are never seen, so they keep the cladding's colour without boards
     const lifted = clad(fades);
     mR = { boarded: { ...lifted, inner: lifted.edge }, roof: kit.surface('roof', fades), panel: kit.surface('frame', fades), frame: kit.surface('frame', fades), inner: kit.surface('interior', fades), door: kit.surface('door', fades) };
-    // a panel (the carport's walls and posts) is anthracite; else exterior is thick or running up
-    // to a roof, and only it gets the boards and the base strip
+    // a panel (the carport's walls and posts) is in the frame's colour; else exterior is thick or
+    // running up to a roof, and only it gets the cladding, the trims and the base strip
     wallMats = w => {
       if (w.finish === 'panel') return { wall: panel, glass, frame, base: false };
       const outside = w.t >= 0.3 || typeof w.top === 'string';
-      // an interior wall's frames and door leaves are white
+      // an interior wall's frames and door leaves are in the door's colour
       return outside ? { boarded, glass, frame, base: true } : { wall: inner, glass, frame: door, base: false };
     };
   } else {
@@ -146,8 +147,8 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   }
 
   // real style: the wall solid, glass in windows and glass doors, a leaf in doors, and a frame
-  // round each opening; a boarded wall's openings also get a trim on the outer face, a lined
-  // reveal and, under a window with a sill, a flashing
+  // round each opening; with the look's opening trims, a clad wall's openings also get a trim on
+  // the outer face, a lined reveal and, under a window with a sill, a flashing
   function dressWall(g, geo, ops, m, w, L, top) {
     const side = outerSide(w, L);
     const mesh = new THREE.Mesh(geo, m.boarded ? faces(geo, m.boarded, side) : m.wall);
@@ -167,7 +168,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
       b.position.z = (z0 + z1) / 2;
       b.userData.part = part;
     };
-    const trims = !!(m.boarded && side);
+    const trims = !!(m.boarded && side && kit.look.trims.openings);
     const face = side * (w.t / 2), proud = side * (w.t / 2 + PROUD);
     // a pane of glass w wide centred at c, tagged with the room it looks into
     const pane = (c, pw, y0, ph) => {
@@ -228,7 +229,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
       piece('sill', x0 - TRIM - FLASH_PAST, x1 + TRIM + FLASH_PAST, y0 - FLASH_T, y0, face, side * (w.t / 2 + FLASH_OUT + PROUD));
       piece('reveal', x0, x1, y0, y0 + REVEAL, 0, face);
     });
-    if (!m.base || w.bot) return;
+    if (!m.base || !kit.look.trims.base || w.bot) return;
     // the base strip sits on the outer face, the side with no room just beyond it; when that
     // cannot be told, on both
     const d = side ? 0.02 : w.t + 0.02, zc = side * (w.t / 2 + 0.01);
@@ -350,14 +351,15 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   if (site.garage_roof) {
     (site.garage_roof.rects || [site.garage_roof.rect]).forEach(r => {
       if (!real) return box(lift, mR.wall, mR.edge, r, site.garage_roof.y);
-      // an anthracite fascia and soffit, the roof grey on top only (BoxGeometry's +y face is third)
+      // a fascia and soffit in the frame's colour, the roof's on top only (BoxGeometry's +y face is third)
       const f = mR.frame, s = kit.solid(lift, [f, f, mR.roof, f, f, f], r, site.garage_roof.y);
       s.castShadow = s.receiveShadow = true;
     });
   }
 
-  // real style: the boarded walls' corner boards, each as a span [lo, hi] along its wall, and how
-  // far the fillers take each wall's base strip
+  // real style: the clad walls' corner boards (with the look's corner trims), each as a span
+  // [lo, hi] along its wall, and how far the fillers take each wall's base strip; the fillers
+  // close the walls' corners with or without the boards
   const corners = [], strips = new Map();
   if (real) levels.forEach((_, level) => {
     const list = [];
@@ -376,6 +378,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
         const [a, b] = strips.get(c.wall) || [0, f.L];
         strips.set(c.wall, [Math.min(a, lo), Math.max(b, hi)]);
       } else {
+        if (!kit.look.trims.corners) return;
         // a board runs from the corner up to the first opening in its way
         (model.walls[c.wall].openings || []).forEach(o => {
           const x0 = o.c - o.w / 2, x1 = o.c + o.w / 2;

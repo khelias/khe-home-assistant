@@ -560,7 +560,7 @@ MUTATIONS = [
 class Mutations(unittest.TestCase):
     def test_each_mutation_reports_its_problem(self):
         base = layers()
-        for name, mutate, problem in MUTATIONS:
+        for name, mutate, problem in MUTATIONS + LOOK_MUTATIONS:
             with self.subTest(name):
                 L = copy.deepcopy(base)
                 mutate(L)
@@ -710,6 +710,53 @@ class FuturePanels(unittest.TestCase):
     def test_future_corners_turn_with_rot(self):
         it = {"pos": [10, 20], "size": [4, 2], "rot": 90}
         self.assertEqual(hm.future_corners(it), [[9, 18], [11, 18], [11, 22], [9, 22]])
+
+
+def _look(**look):
+    def mutate(L):
+        L["geometry"]["look"] = look
+
+    return mutate
+
+
+# mutations of the fixture's look, run with MUTATIONS: (name, mutate(layers), substring of the problem)
+LOOK_MUTATIONS = [
+    ("not an object", lambda L: L["geometry"].update(look=[]), "look: is not a JSON object"),
+    ("an unknown key", _look(colours={}), "look: unknown key 'colours'"),
+    ("an unknown surface", _look(surfaces={"brick": "#aa0000"}), "look.surfaces.brick: 'brick' is not an engine surface"),
+    ("a bad hex", _look(surfaces={"roof": "#abc"}), "look.surfaces.roof: color '#abc' is not #rrggbb"),
+    ("a trailing newline", _look(surfaces={"roof": "#7b8083\n"}), "is not #rrggbb"),
+    ("a colour name", _look(surfaces={"roof": {"color": "grey"}}), "color 'grey' is not #rrggbb"),
+    ("roughness over 1", _look(surfaces={"roof": {"color": "#7b8083", "roughness": 1.5}}), "look.surfaces.roof: roughness 1.5 is not between 0 and 1"),
+    ("metalness below 0", _look(surfaces={"roof": {"color": "#7b8083", "metalness": -0.1}}), "metalness -0.1 is not between 0 and 1"),
+    ("an unknown surface key", _look(surfaces={"roof": {"color": "#7b8083", "sheen": 1}}), "look.surfaces.roof: unknown key 'sheen'"),
+    ("an unknown pattern", _look(cladding={"pattern": "brick"}), "look.cladding: pattern 'brick' is not one of plain, boards"),
+    ("boards at 30", _look(cladding={"pattern": "boards", "angle_deg": 30}), "look.cladding: angle_deg 30 is not one of 0, 45, 90"),
+    ("an angle on plain", _look(cladding={"pattern": "plain", "angle_deg": 45}), "look.cladding: unknown key 'angle_deg' for plain"),
+    ("a trim as a string", _look(trims={"openings": "yes"}), "look.trims.openings: 'yes' is not true or false"),
+    ("an unknown trim", _look(trims={"gutters": True}), "look.trims: unknown key 'gutters'"),
+]
+
+
+class Look(unittest.TestCase):
+    def test_every_key_is_optional(self):
+        for look in ({}, {"surfaces": {}}, {"cladding": {"pattern": "plain"}}, {"cladding": {"pattern": "boards"}}, {"trims": {"base": True}}):
+            with self.subTest(look):
+                L = layers()
+                L["geometry"]["look"] = look
+                self.assertEqual(hm.validate(L), [])
+        L = layers()
+        L["geometry"].pop("look", None)
+        self.assertEqual(hm.validate(L), [])
+
+    def test_a_full_look_passes(self):
+        L = layers()
+        L["geometry"]["look"] = {
+            "surfaces": {"cladding": "#bebeb8", "roof": {"color": "#7b8083", "roughness": 0.7, "metalness": 0.1}},
+            "cladding": {"pattern": "boards", "angle_deg": 90},
+            "trims": {"openings": True, "corners": False, "base": True},
+        }
+        self.assertEqual(hm.validate(L), [])
 
 
 class BuildAndScan(unittest.TestCase):

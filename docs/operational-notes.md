@@ -517,6 +517,16 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   made-up house that exercises all of it, and
   `tests/house3d/geometry-baseline.json` pins where the roof-reading layers
   stand on the main fixture.
+- **A house's look:** the real style's finishes are the model's
+  `geometry.look` ([ADR-001](decisions/001-own-3d-engine.md) point 6, the
+  fields in `scripts/house3d_model.py`'s docstring): surface colours and
+  finishes by the kit's names, plain cladding or boards at 0, 45 or 90
+  degrees, and the opening trims, corner boards and base strip each on or
+  off. `createKit(THREE, style, look)` resolves it over a neutral default
+  (light matt walls, no trims) and exposes `kit.REAL` and `kit.look`. Our
+  house and the test house carry today's look in their own models;
+  `tests/house3d/look-baseline.json` pins every material of the test house
+  in the real style, as `geometry-baseline.json` pins where things stand.
 - **One broken layer does not blank the view.** A layer module that fails to
   load, or whose build throws (say a model shape the deployed engine does not
   know yet), is left out and logged as `house3d: layer <id> failed`; the rest

@@ -10,48 +10,48 @@ const COLORS = {
   future: '#b37bff'
 };
 
-// The real style's surfaces, from photos of the house (2026-10-14) where they differ from the
-// drawings' specification (A-101/A-102, AR-5): the cladding is grey-glazed diagonal boarding
-// (its boards come from boards()), roofs and flashing a mid grey standing seam, and every frame,
-// door, trim, corner board, roof edge, the wall's base strip, the carport's panels and the
-// pergola one anthracite, about RAL 7016 (the drawings' RR25 yellow frames were not built).
-// Inside, the walls are light grey, the doors and their frames white, the living floors oak planks
-// (planks()) and the wet rooms a dark wood-look tile (tiles()). The interior is drawn as an
+// The real style's default surfaces, which a model's look (geometry.look) overrides by name: a
+// light, matt architectural model. The walls are a plain light grey without trims, the roofs a
+// matt mid grey, and every frame, roof edge, the carport's panels and the pergola an off-white
+// (frame). Inside, the walls are light grey, the doors and their frames white, the living floors
+// light wood planks (planks()) and the wet rooms a grey tile (tiles()). The interior is drawn as an
 // architectural model: the walls' cut tops near black (cut), oak skirting, and the furniture in
 // white linen, a blue-grey fabric, light oak, a dark worktop and white-grey cabinets; an item of no
-// known kind is a warm grey block (furniture), apart from the walls. Fitted kitchens are blue-grey
-// fronts (kitchen) under a brown worktop (kitchenTop) with dark handles, steel and black glass, the
+// known kind is a warm grey block (furniture), apart from the walls. Fitted kitchens are light
+// fronts (kitchen) under a dark worktop (kitchenTop) with dark handles, steel and black glass, the
 // wall behind them light tiles (splashTiles()); a TV's screen, a rug and sheer curtains have their
 // own surfaces, a sofa a dark charcoal velvet. Fitted units, a vanity and a bookcase may instead be
 // anthracite or a painted white, carcass, fronts and top alike; toilets, basins and the bath are
 // glazed porcelain (sanitary), a mirror a light polished slab, a sauna stove's stones dark grey.
-// The deck is dark composite,
-// the paving light grey-beige concrete pavers with sandy joints (their stones come from pavers()),
-// the entrance step dark grey, the outdoor units white.
-// The bar fence and the gates are black bars (bars()), the other fences a dark wire mesh
+// The deck is a grey-brown composite, the paving light grey concrete pavers with sandy joints
+// (their stones come from pavers()), the entrance step dark grey, the outdoor units white.
+// The bar fence and the gates are dark bars (bars()), the other fences a dark wire mesh
 // (wireMesh()). The play area is stained timber with a sand box, a mint slide and a dark nest
 // seat; the trampoline a green edge pad on a black mat with a black net.
 // The car and surroundings are plain stand-ins; outside the lot is a light base, like an
 // architectural model's. Snow (the winter layer) is a cool white.
 const REAL = {
-  cladding: '#bebeb8', roof: '#7b8083', frame: '#383e42', unit: '#e4e4e0',
-  glass: '#9fb8c4', interior: '#dddcd8', door: '#f2f1ed', floor: '#c39566', tile: '#5e4a3c', deck: '#4d4540', paving: '#b8b1a3',
+  cladding: '#e6e4df', roof: '#6e7377', frame: '#f0f0ed', unit: '#e4e4e0',
+  glass: '#9fb8c4', interior: '#e4e3df', door: '#f2f1ed', floor: '#cdbfa8', tile: '#9a9690', deck: '#8a8178', paving: '#c4c0b8',
   lawn: '#64904a', outside: '#d8d6cc', hedge: '#355a32', crown: '#4f7a3a', trunk: '#5b4636',
-  fence: '#4a4d50', car: '#2f3336', neighbour: '#b9b6ae', road: '#6b6b68',
+  fence: '#5a5d60', car: '#2f3336', neighbour: '#b9b6ae', road: '#6b6b68',
   timber: '#8a6a4c', sand: '#d6c6a0', slide: '#9ed8c2', nest: '#3d4a5c', pad: '#3f8a4b', mat: '#202325',
   net: '#151719', mesh: '#2c2f31', stone: '#56595b',
   cut: '#2a2d30', skirting: '#c9a67c', linen: '#ecebe6', fabric: '#7d8792', oak: '#d6c2a2', worktop: '#3b3b3b',
   cabinet: '#e6e5e0', furniture: '#a59f95',
-  kitchen: '#c3c9cf', kitchenTop: '#5f4a3e', handle: '#2b2c2e', steel: '#a4a7aa', blackGlass: '#0e0f11', screen: '#07080a',
+  kitchen: '#dcdad5', kitchenTop: '#575553', handle: '#2b2c2e', steel: '#a4a7aa', blackGlass: '#0e0f11', screen: '#07080a',
   rug: '#b9b1a3', sheer: '#f4f2ec', sofa: '#4a4c51',
   anthracite: '#3b3d40', white: '#eeeeeb', sanitary: '#f7f7f4', mirror: '#d3dade', stones: '#46484a', darkOak: '#7f6145', mediumOak: '#b08a62', shell: '#1c1d1f',
   pot: '#d4cec4', leaf: '#4b7343', bloom: '#d98aa0', canvas: '#efe9de', artA: '#c4744e', artB: '#8da488', artC: '#d8b05c', artD: '#3e5a6f',
   brushGround: '#c9ced3', brushA: '#5d7086', brushB: '#8e9caa', brushC: '#e2e5e8', brushD: '#3d4b5b',
   snow: '#f1f4f7', spruce: '#2b4a2f', baubleRed: '#a8232c', baubleGold: '#d0a038', baubleSilver: '#c4c8cd'
 };
-// the cladding's boards: about 12 cm wide, rising to the right at 45 degrees, only their grooves
-// drawn, on a 2 m tile of the walls' metre UVs
-const BOARD_TILE = 2, BOARDS = 12, BOARD_PX = 512, GROOVE = 0.045;
+// the cladding's boards (a look's cladding pattern 'boards'): about 12 cm wide, at 45 degrees
+// rising to the right, 0 horizontal or 90 upright, only their grooves drawn, on a 2 m tile of the
+// walls' metre UVs; BOARDS is the boards across the tile at 45, BOARDS_SQUARE at 0 and 90
+const BOARD_TILE = 2, BOARDS = 12, BOARDS_SQUARE = 17, BOARD_PX = 512, GROOVE = 0.045;
+// what a look leaves out: plain cladding, no trims
+const LOOK = { cladding: { pattern: 'plain' }, trims: { openings: false, corners: false, base: false } };
 const GLASS_OPACITY = 0.35, SHEER_OPACITY = 0.55;
 // the paving's stones: running-bond rows ROW deep of stones STONE long, the long joints waving
 // WAVE either way, on a PAVER_TILE m tile that holds whole rows and stones
@@ -69,18 +69,33 @@ const TILE_W = 0.2, TILE_L = 1.2, GROUT = 0.004, TILE_PX = 512;
 // the kitchen wall's tiles: SPLASH_W wide and SPLASH_H high in a straight stack, a soft grey joint
 const SPLASH_TILE = 1.2, SPLASH_W = 0.6, SPLASH_H = 0.3, SPLASH_JOINT = 0.003, SPLASH_PX = 512;
 
-export function createKit(THREE, style = 'simple') {
+// a model's look (geometry.look) resolved over the defaults: the surfaces' colours and finishes by
+// name, the cladding's pattern (boards at 45 degrees unless the look gives an angle) and the trims;
+// the card's model comes from HA's stored config, not only through the validator, so what is not a
+// known surface, finish or trim is left out rather than drawn
+function resolveLook(look) {
+  const given = Object.entries((look && look.surfaces) || {}).filter(([k]) => Object.hasOwn(REAL, k))
+    .map(([k, v]) => [k, typeof v === 'string' ? { color: v } : v]).filter(([, v]) => v && typeof v.color === 'string');
+  const colors = { ...REAL, ...Object.fromEntries(given.map(([k, v]) => [k, v.color])) };
+  const finish = Object.fromEntries(given.map(([k, v]) => [k, Object.fromEntries(['roughness', 'metalness'].filter(f => f in v).map(f => [f, v[f]]))]));
+  const c = (look && look.cladding) || LOOK.cladding;
+  const cladding = c.pattern === 'boards' ? { pattern: 'boards', angle_deg: [0, 45, 90].includes(c.angle_deg) ? c.angle_deg : 45 } : LOOK.cladding;
+  const trims = { ...LOOK.trims, ...Object.fromEntries(Object.entries((look && look.trims) || {}).filter(([k]) => Object.hasOwn(LOOK.trims, k)).map(([k, v]) => [k, v === true])) };
+  return { colors, finish, look: { cladding, trims } };
+}
+
+export function createKit(THREE, style = 'simple', look) {
   const C = Object.fromEntries(Object.entries(COLORS).map(([k, v]) => [k, new THREE.Color(v)]));
+  const { colors, finish, look: resolved } = resolveLook(look);
   const disposables = [];
   const keep = x => (disposables.push(x), x);
   // real style only: a new lit material on every call, so a floor tints alone and a fade on
   // one group never reaches another's surfaces; o overrides, e.g. { transparent: true } for
   // what fades (the lift, the car)
-  // what differs from a matt surface: the standing seam and whatever is polished take the sky's
-  // sheen, the sofa's fabric none, and the sheer lets the window through
+  // what differs from a matt surface: whatever is polished takes the sky's sheen, the sofa's
+  // fabric none, and the sheer lets the window through; a look's own roughness and metalness win
   const FINISH = {
     glass: { transparent: true, opacity: GLASS_OPACITY, roughness: 0.15, side: THREE.DoubleSide },
-    roof: { roughness: 0.7, metalness: 0.1 },
     kitchenTop: { roughness: 0.32 },
     sofa: { roughness: 1 },
     blackGlass: { roughness: 0.12 },
@@ -94,7 +109,7 @@ export function createKit(THREE, style = 'simple') {
     sheer: { transparent: true, opacity: SHEER_OPACITY, side: THREE.DoubleSide, depthWrite: false, forceSinglePass: true }
   };
   const surface = style === 'real'
-    ? (name, o = {}) => keep(new THREE.MeshStandardMaterial({ color: new THREE.Color(REAL[name]), roughness: 0.85, metalness: 0, ...FINISH[name], ...o }))
+    ? (name, o = {}) => keep(new THREE.MeshStandardMaterial({ color: new THREE.Color(colors[name]), roughness: 0.85, metalness: 0, ...FINISH[name], ...finish[name], ...o }))
     : undefined;
   const basic = o => keep(new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, ...o }));
   const lineMat = o => keep(new THREE.LineBasicMaterial({ transparent: true, ...o }));
@@ -141,16 +156,18 @@ export function createKit(THREE, style = 'simple') {
     return tex;
   }
 
-  // real style: [front, back], the board texture as seen on a wall's local +z face and its
-  // mirror for the -z face, so the boards rise to the right on both; one pair per mount. A
-  // DataTexture, not a canvas: the engine tests run without a DOM
+  // real style: [front, back], the board texture at the look's angle as seen on a wall's local +z
+  // face and its mirror for the -z face, so diagonal boards rise to the right on both; one pair per
+  // mount. A DataTexture, not a canvas: the engine tests run without a DOM
   let boardPair;
   function boards() {
     if (boardPair) return boardPair;
-    const S = BOARD_PX;
-    // i - j counts across the boards and wraps with the tile; one shade, a thin groove between
+    const S = BOARD_PX, angle = resolved.cladding.angle_deg;
+    // across counts across the boards and wraps with the tile (i - j at 45, j rows at 0, i
+    // columns at 90); one shade, a thin groove between
+    const across = angle === 45 ? (i, j) => ((i - j + S) * BOARDS) / S : (i, j) => ((angle === 0 ? j : i) * BOARDS_SQUARE) / S;
     const front = tileTexture(S, BOARD_TILE, (i, j) => {
-      const t = ((i - j + S) * BOARDS) / S, v = (t - Math.floor(t) < GROOVE ? 0.72 : 1) * 255;
+      const t = across(i, j), v = (t - Math.floor(t) < GROOVE ? 0.72 : 1) * 255;
       return [v, v, v, 255];
     });
     const back = keep(front.clone());
@@ -332,5 +349,5 @@ export function createKit(THREE, style = 'simple') {
     return out;
   }
 
-  return { C, style, REAL, disposables, keep, basic, lineMat, mats, edges, box, prism, canvasTexture, applyFade, nightTint, near, spans, surface, solid, flatShape, boards, pavers, planks, tiles, splashTiles, wireMesh, bars };
+  return { C, style, REAL: colors, look: resolved, disposables, keep, basic, lineMat, mats, edges, box, prism, canvasTexture, applyFade, nightTint, near, spans, surface, solid, flatShape, boards, pavers, planks, tiles, splashTiles, wireMesh, bars };
 }

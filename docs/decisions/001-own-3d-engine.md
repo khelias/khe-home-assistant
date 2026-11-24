@@ -1,7 +1,7 @@
 # ADR-001: The 3D view is our own three.js engine over the measured house model
 
 - **Status:** Accepted (2026-11-24)
-- **Related:** [estate ADR-001](https://github.com/khelias/khe-architecture/blob/main/decisions/001-repo-per-product.md), [estate ADR-012](https://github.com/khelias/khe-architecture/blob/main/decisions/012-estate-architecture-is-public.md)
+- **Related:** [estate ADR-001](https://github.com/khelias/khe-architecture/blob/main/decisions/001-repo-per-product.md), [estate ADR-012](https://github.com/khelias/khe-architecture/blob/main/decisions/012-estate-architecture-is-public.md), [estate ADR-043](https://github.com/khelias/khe-architecture/blob/main/decisions/043-household-parts-are-public-source-built-into-khe-sites.md)
 
 ## Context
 
@@ -59,6 +59,22 @@ JSON:
    nothing in the estate, so the engine stays here and this is no estate
    decision; moving the engine to a repo of its own stays one (estate
    ADR-001) for the day a second estate repo needs it.
+6. **A house's look is model data** (amended 2026-11-24). The real style's
+   finishes are the model's `look` in its geometry layer: colours and
+   finishes of the engine's named surfaces, the cladding's pattern (plain,
+   or boards at 0, 45 or 90 degrees) and which trims are drawn (opening
+   trims, corner boards, the base strip). Without one the engine draws a
+   light, matt architectural model with plain walls and no trims, so a
+   house never wears another house's look. The geometry layer, not a layer
+   of its own: the look is as shareable as the geometry and both shells
+   need it. It follows estate ADR-043 point 2: the public engine carries a
+   neutral default and a house's own values come from its model. A real
+   house's finishes come from its drawings' finish list (the explanatory
+   note and the facade sheets) and from Maa- ja Ruumiamet open data (the
+   former Maa-amet: LOD2 3D buildings for the roof shapes, orthophotos for
+   the roof colour), cited as its open-data licence asks, by the source, the
+   dataset and its date. Never from Google Maps, Earth or Street View: the
+   Maps Platform terms forbid building 3D models from their content.
 
 ## Alternatives considered
 

@@ -301,7 +301,7 @@ export default function build({ THREE, kit, C, model, style }) {
     });
   }
 
-  // real style: a planter is a box in the frame anthracite or the cladding, a thuja a column
+  // real style: a planter is a box in the frame's colour or the cladding, a thuja a column
   // above it, a low plant a box on it
   function planters() {
     const fin = { frame: kit.surface('frame'), cladding: kit.surface('cladding') };

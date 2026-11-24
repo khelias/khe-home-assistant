@@ -5,7 +5,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { E, seasonOn, seasonWindow, card, model, futureItem } from './engine-harness.mjs';
+import { E, seasonOn, seasonWindow, model, futureItem } from './engine-harness.mjs';
+
+const card = await import(new URL('house3d-card.js', E));
 
 test('card: importRetry tries again on a new URL after a failure', async () => {
   const urls = [], waits = [];

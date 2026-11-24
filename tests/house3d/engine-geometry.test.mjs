@@ -7,8 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { THREE, buildAll, options } from './engine-harness.mjs';
+import { THREE, buildAll, options, checkBaseline } from './engine-harness.mjs';
 
 const BASELINE = new URL('./geometry-baseline.json', import.meta.url);
 const LAYERS = ['building', 'interior', 'winter', 'future'];
@@ -43,13 +42,5 @@ function geometry() {
 }
 
 test('the roof-reading layers stand where the baseline has them, in both styles', () => {
-  const snap = geometry();
-  if (process.env.UPDATE_BASELINE === '1' || !existsSync(BASELINE)) {
-    writeFileSync(BASELINE, JSON.stringify(snap, null, 1) + '\n');
-    if (process.env.UPDATE_BASELINE !== '1') assert.fail('no baseline yet: wrote one, check it in and rerun');
-    return;
-  }
-  const want = JSON.parse(readFileSync(BASELINE, 'utf-8'));
-  assert.deepEqual(Object.keys(snap).sort(), Object.keys(want).sort());
-  for (const k of Object.keys(want)) assert.deepEqual(snap[k], want[k], k);
+  checkBaseline(BASELINE, geometry());
 });
