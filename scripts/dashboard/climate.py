@@ -136,9 +136,41 @@ def soojuspump():
                         foot="Küte oma elektrit ei mõõda; kogu maja on Energias.",
                         grid_options={"columns": "full"},
                     ),
+                    heading("Hinnajuhtimine"),
+                    wide(
+                        tile(
+                            E.SHADOW_OFFSET,
+                            "Kütte varjuplaan",
+                            icon="thermometer",
+                            color="orange",
+                            active=[],
+                            state_text=[{"entity": E.SHADOW_OFFSET}, {"attribute": "pohjus"}],
+                            history=MEAN,
+                        )
+                    ),
+                    wide(
+                        tile(
+                            E.DHW_AUTO,
+                            "Boileri hinnajuhtimine",
+                            icon="drop",
+                            color="blue",
+                            switch=True,
+                            state_text=[
+                                {"entity": E.SHADOW_DHW, "label": "Siht"},
+                                {"entity": E.SHADOW_DHW, "attribute": "reziim"},
+                                when(E.DHW_RULE, "viimati", ON, attribute="last_triggered"),
+                            ],
+                            history={
+                                "entity": E.SHADOW_DHW,
+                                **MEAN,
+                                "unit": "°C",
+                                "title": "Boileri soovitatav siht",
+                            },
+                        )
+                    ),
                     settings_row(
                         E.HEATING,
-                        "Küte välja, kütte režiim, boileri siht",
+                        "Küte välja, kütte režiim, boileri siht, teavitused",
                         "/lovelace/soojuspump-seaded",
                     ),
                 ]

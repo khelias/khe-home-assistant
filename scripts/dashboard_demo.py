@@ -377,6 +377,27 @@ entry("sensor.kutte_reziim", "sensor.demo_heating_mode_label", "Küte", "Kütte 
 entry("sensor.boileri_vee_temperatuur", "sensor.demo_boiler_water", "51.0", "Boileri vesi", **TEMP)
 entry("sensor.boiler_energy_today", "sensor.demo_boiler_today", "2", "Boiler täna", **KWH)
 entry("sensor.boiler_energy_month", "sensor.demo_boiler_month", "46", "Boiler sel kuul", **KWH)
+entry(
+    dc.SHADOW_OFFSET,
+    "sensor.demo_shadow_offset",
+    "0",
+    "Kütte soovitatav nihe",
+    unit_of_measurement="°C",
+    state_class="measurement",
+    pohjus="tavaline",
+)
+entry(
+    dc.SHADOW_DHW,
+    "sensor.demo_shadow_dhw",
+    "52",
+    "Boileri soovitatav siht",
+    state_class="measurement",
+    reziim="tavaline",
+    **TEMP,
+)
+entry(dc.SHADOW_NOTIFY, "input_boolean.demo_shadow_notify", "off", "Varjuplaani teavitused")
+entry(dc.DHW_AUTO, "input_boolean.demo_dhw_auto", "off", "Boileri hinnajuhtimine")
+entry(dc.DHW_RULE, "automation.demo_dhw_price_control", "on", "Boiler: hinnajuhtimine")
 
 # ventilation: the unit's power switch is the fixture's fan
 entry(dc.MODE, "select.demo_vent_mode", "normal", "Ventilatsiooni režiim", options=VENT_MODES)
@@ -971,6 +992,8 @@ def demo_recorder():
         ids[dc.HUMIDITY]: _wave_profile(41, 3, 20, 2.0, 0),
         ids[dc.PANEL_TEMP]: _wave_profile(21.2, 0.5, 18, 0.2),
         ids[dc.BOILER_TEMP]: _wave_profile(51, 3, 7, 1.0, 0),
+        ids[dc.SHADOW_OFFSET]: _wave_profile(0, 2, 4, 0.5, 0),
+        ids[dc.SHADOW_DHW]: _wave_profile(52, 4, 3, 1.0, 0),
         ids[dc.LEAVING]: _wave_profile(32.5, 2.5, 5, 1.5),
         consumption: _counter(0.9, 0.45, 19),
         cost: {"kind": "cost", "of": consumption, "price": price},
@@ -1057,7 +1080,11 @@ def demo_recorder():
             ],
         },
         # each rule's last run, the last time the clock read its [hour, minute] in the zone
-        "rules": {ids[dc.RAIN_RULE]: [14, 19], ids[dc.SUNSET_RULE]: [15, 45]},
+        "rules": {
+            ids[dc.RAIN_RULE]: [14, 19],
+            ids[dc.SUNSET_RULE]: [15, 45],
+            ids[dc.DHW_RULE]: [14, 0],
+        },
     }
 
 
@@ -1198,7 +1225,7 @@ def demo_states_en(model):
         if "options" in a:
             a["options"] = [_word(o) for o in a["options"]]
         for k, v in a.items():
-            if k in ("tekst", "hinnang"):
+            if k in ("tekst", "hinnang", "pohjus", "reziim"):
                 if v not in en.ATTRS:
                     raise KeyError(f"no English for the {k} text {v!r} (add it to en.ATTRS)")
                 a[k] = en.ATTRS[v]

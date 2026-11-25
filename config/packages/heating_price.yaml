@@ -1,9 +1,11 @@
-# Phase 6 shadow mode: what a price-aware heating curve offset and DHW target
-# would be each hour, on top of sensor.elektri_hinna_prognoos. Writes nothing to
-# the Daikin; the recommendations are kept as statistics beside the live offset
-# and tank target, so the rule can be judged against what the house did.
+# Phase 6 price-aware heating and DHW package, on top of sensor.elektri_hinna_prognoos.
+# Space heating stays shadow-only (writes nothing to Daikin); its recommendations are kept
+# as statistics beside the live offset so the rule can be judged against what the house did.
+# DHW target control is opt-in behind input_boolean.boileri_hinnajuhtimine: when on, it writes
+# 45-55 C to the tank over LAN, skips off/performance modes and any active anti-legionella
+# cycle (target >= 60 C), and restores 55 C when turned off or if prices are missing for 15 min.
 #
-# Envelope the recommendation keeps, so it can later be applied as is:
+# Envelope the recommendation keeps, so space heating can later be applied as is:
 # - a flat day keeps the base offset: under ~3 c/kWh or 15 % from the day's mean
 #   the COP loss of a warmer slab (~2-2.5 % per K) eats the spread;
 # - at most 4 reduced hours in a row, then one at base, so a long daytime price
@@ -15,11 +17,14 @@ input_boolean:
   kutte_varjuteavitused:
     name: "Kütte varjuplaani teavitused"
     icon: mdi:bell-outline
+  boileri_hinnajuhtimine:
+    name: "Boileri hinnajuhtimine"
+    icon: mdi:water-boiler-auto
 
 template:
   - triggers:
       - trigger: time_pattern
-        minutes: "5"
+        minutes: "0"
       - trigger: state
         entity_id:
           - sensor.elektri_hinna_prognoos
@@ -262,3 +267,86 @@ automation:
                 tag: kutte_varjuplaan
                 clickAction: /lovelace/soojuspump
                 url: /lovelace/soojuspump
+
+  # Opt-in DHW price control (45-55 C): skips off/performance (Kiirsoojendus) and
+  # Daikin's weekly 60 C anti-legionella cycle, and writes only when the target changes.
+  - alias: "Boiler: hinnajuhtimine"
+    id: khe_dhw_price_control
+    description: "Seab boileri sihttemperatuuri (45-55 °C) elektrihinna soovituse järgi, kui hinnajuhtimine on sisse lülitatud."
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: state
+        entity_id: sensor.boileri_soovitatav_siht
+      - trigger: state
+        entity_id: input_boolean.boileri_hinnajuhtimine
+        to: "on"
+      - trigger: state
+        entity_id: water_heater.hot_water_tank_domestic_hot_water_tank
+        to: "on"
+      - trigger: homeassistant
+        event: start
+    conditions:
+      - condition: state
+        entity_id: input_boolean.boileri_hinnajuhtimine
+        state: "on"
+      - condition: state
+        entity_id: water_heater.hot_water_tank_domestic_hot_water_tank
+        state: "on"
+      - condition: template
+        value_template: >
+          {% set rec = states('sensor.boileri_soovitatav_siht') %}
+          {% set cur = state_attr('water_heater.hot_water_tank_domestic_hot_water_tank', 'temperature') %}
+          {% if not (rec | is_number) or not (cur | is_number) %}
+            false
+          {% else %}
+            {% set cur_f = cur | float(60) %}
+            {% set tgt = [[rec | int(55), 55] | min, 45] | max %}
+            {{ cur_f < 60 and tgt != (cur_f | round(0) | int) }}
+          {% endif %}
+    actions:
+      - action: water_heater.set_temperature
+        target:
+          entity_id: water_heater.hot_water_tank_domestic_hot_water_tank
+        data:
+          temperature: "{{ [[states('sensor.boileri_soovitatav_siht') | int(55), 55] | min, 45] | max }}"
+
+  # Fallback: restore normal 55 C when price control is switched off or prices disappear.
+  - alias: "Boiler: taasta 55 °C"
+    id: khe_dhw_price_restore
+    description: "Taastab boileri tavalise 55 °C sihttemperatuuri, kui hinnajuhtimine lülitatakse välja või hinnaandmed kaovad."
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.boileri_hinnajuhtimine
+        from: "on"
+        to: "off"
+        id: turned_off
+      - trigger: state
+        entity_id: sensor.boileri_soovitatav_siht
+        to:
+          - "unavailable"
+          - "unknown"
+        for: "00:15:00"
+        id: missing
+    conditions:
+      - condition: or
+        conditions:
+          - condition: trigger
+            id: turned_off
+          - condition: state
+            entity_id: input_boolean.boileri_hinnajuhtimine
+            state: "on"
+      - condition: state
+        entity_id: water_heater.hot_water_tank_domestic_hot_water_tank
+        state: "on"
+      - condition: template
+        value_template: >
+          {% set cur = state_attr('water_heater.hot_water_tank_domestic_hot_water_tank', 'temperature') %}
+          {{ (cur | is_number) and (cur | float(55)) < 55 }}
+    actions:
+      - action: water_heater.set_temperature
+        target:
+          entity_id: water_heater.hot_water_tank_domestic_hot_water_tank
+        data:
+          temperature: 55

@@ -87,6 +87,11 @@ HEATING_FAULT = "binary_sensor.space_heating_unit_state"
 TANK_FAULT = "binary_sensor.hot_water_tank_state"
 # The boiler's legionella floor, °C.
 DHW_FLOOR = 45
+SHADOW_OFFSET = "sensor.kutte_soovitatav_nihe"
+SHADOW_DHW = "sensor.boileri_soovitatav_siht"
+SHADOW_NOTIFY = "input_boolean.kutte_varjuteavitused"
+DHW_AUTO = "input_boolean.boileri_hinnajuhtimine"
+DHW_RULE = "automation.boiler_hinnajuhtimine"
 
 MODE = "select.komfovent_operation_mode"
 MODE_LABEL = "sensor.ventilatsiooni_reziim"

@@ -445,6 +445,13 @@ soojuspump_seaded = {
                 *dhw_boost_stock(),
             ],
         ),
+        stock_section(
+            "Hinnajuhtimine",
+            [
+                stock_tile(E.DHW_AUTO, "Boileri hinnajuhtimine"),
+                stock_tile(E.SHADOW_NOTIFY, "Varjuplaani teavitused"),
+            ],
+        ),
     ],
 }
 

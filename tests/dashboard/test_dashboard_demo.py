@@ -197,15 +197,17 @@ class DemoConfig(unittest.TestCase):
         rec = dd.demo_recorder()
         self.assertEqual(rec["weather"]["entity"], dd.CATALOGUE[dc.WEATHER]["id"])
         self.assertEqual(
-            set(rec["rules"]), {dd.CATALOGUE[e]["id"] for e in (dc.RAIN_RULE, dc.SUNSET_RULE)}
+            set(rec["rules"]),
+            {dd.CATALOGUE[e]["id"] for e in (dc.RAIN_RULE, dc.SUNSET_RULE, dc.DHW_RULE)},
         )
         # the scenario player finds a rule by its alias
-        for e, alias in (
-            (dc.RAIN_RULE, "Pergola: vihm sulgeb katuse"),
-            (dc.SUNSET_RULE, "Pergola: valgustus loojangul"),
+        for e, alias, pkg in (
+            (dc.RAIN_RULE, "Pergola: vihm sulgeb katuse", "pergola.yaml"),
+            (dc.SUNSET_RULE, "Pergola: valgustus loojangul", "pergola.yaml"),
+            (dc.DHW_RULE, "Boiler: hinnajuhtimine", "heating_price.yaml"),
         ):
             self.assertEqual(dd.CATALOGUE[e]["attributes"]["friendly_name"], alias)
-            self.assertIn(f'alias: "{alias}"', (ROOT / "config/packages/pergola.yaml").read_text())
+            self.assertIn(f'alias: "{alias}"', (ROOT / "config/packages" / pkg).read_text())
 
 
 class DemoEnglish(unittest.TestCase):

@@ -95,6 +95,16 @@ EN = {
     "Küte sees": "Heating on",
     "Küte seisab": "Heating stopped",
     "Küte välja, kütte režiim, boileri siht": "Heating off, heating mode, boiler target",
+    "Küte välja, kütte režiim, boileri siht, teavitused": (
+        "Heating off, heating mode, boiler target, notifications"
+    ),
+    "Hinnajuhtimine": "Price control",
+    "Kütte varjuplaan": "Heating shadow plan",
+    "Kütte soovitatav nihe": "Recommended heating offset",
+    "Boileri hinnajuhtimine": "Water heater price control",
+    "Boileri soovitatav siht": "Recommended boiler target",
+    "Varjuplaani teavitused": "Shadow plan notifications",
+    "Boiler: hinnajuhtimine": "Water heater: price control",
     "Küte väljas": "Heating off",
     "Odavaim aken pesu": "Cheapest laundry window",
     "Odavaim aken saun": "Cheapest sauna window",
@@ -598,6 +608,7 @@ TEXTS_EN = {}
 
 # the sentences the house's templates write into tekst and hinnang, keyed by the demo's Estonian
 ATTRS = {
+    "tavaline": "normal",
     "Praegu alla päeva keskmise": "Below the day's average now",
     "Praegu päeva keskmise lähedal": "Near the day's average now",
     "Praegu üle päeva keskmise": "Above the day's average now",

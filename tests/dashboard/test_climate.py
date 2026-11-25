@@ -45,6 +45,10 @@ class Soojuspump(unittest.TestCase):
             D.BOILER_TODAY,
             D.BOILER_MONTH,
             D.MONTH,
+            D.SHADOW_OFFSET,
+            D.SHADOW_DHW,
+            D.DHW_AUTO,
+            D.DHW_RULE,
         }
         self.assertLessEqual(expected, ids(without_sheets(SOOJUSPUMP)))
         self.assertLessEqual({"/lovelace/soojuspump-seaded", "/lovelace/energia"}, links(SOOJUSPUMP))
@@ -85,6 +89,20 @@ class Soojuspump(unittest.TestCase):
             if isinstance(h, dict):
                 with self.subTest(card=c.get("name")):
                     self.assertIn(h["source"], ("statistics", "history"))
+
+    def test_price_control_tiles_match_heating_price_package(self):
+        (shadow,) = tiles_of(SOOJUSPUMP, D.SHADOW_OFFSET)
+        self.assertEqual(
+            shadow["state_text"], [{"entity": D.SHADOW_OFFSET}, {"attribute": "pohjus"}]
+        )
+        self.assertEqual(shadow["history"], D.MEAN)
+        (dhw,) = [c for c in walk(SOOJUSPUMP) if c.get("switch")]
+        self.assertEqual(dhw["entity"], D.DHW_AUTO)
+        self.assertEqual(dhw["history"]["entity"], D.SHADOW_DHW)
+        yaml = (ROOT / "config/packages/heating_price.yaml").read_text()
+        aliases = re.findall(r'alias: "(Boiler: [^"]+)"', yaml)
+        slug = {re.sub(r"[^a-z0-9]+", "_", a.lower()).strip("_") for a in aliases}
+        self.assertIn(D.DHW_RULE.split(".")[1], slug)
 
 
 class Ventilatsioon(unittest.TestCase):
@@ -256,7 +274,7 @@ class Pergola(unittest.TestCase):
         self.assertEqual(light["modes_entity"], D.TONE)
         yaml = (ROOT / "config/packages/pergola.yaml").read_text()
         block = yaml.split(D.TONE.split(".")[1] + ":", 1)[1].split("options:", 1)[1]
-        options = re.findall(r"^\s+- (\S+)$", block.split("\n\n", 1)[0], re.M)
+        options = re.findall(r"^\s+- (\S+)$", block.split("\n\n", 1)[0], re.MULTILINE)
         self.assertEqual([m["option"] for m in light["modes"]], options)
         self.assertEqual(light["slider"], {"attribute": "brightness"})
 

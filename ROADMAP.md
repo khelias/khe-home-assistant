@@ -6,12 +6,12 @@ Direction and priorities for the house automation, beyond current state.
 
 - **House automation** — the active work since 2026-09-08 and the only area
   with its own plan: phases, dashboard and the energy work are in the private
-  `khe-meta` repo under `house/`. Heating and ventilation are
-  read-only today; only the pergola package acts (rain closes the roof,
-  evening light). The next step that changes the house is phase 6
-  (spot-price-aware heating), which also forces an update of khe-homelab's
-  `SECURITY.md` because it gives the host write access to the heat pump and
-  ventilation.
+  `khe-meta` repo under `house/`. Space heating and ventilation are
+  read-only today; the pergola package acts (rain closes the roof,
+  evening light), and Phase 6 runs shadow-mode heating recommendations with
+  opt-in DHW price control behind a toggle (`heating_price.yaml`, 45-55 °C,
+  documented in khe-homelab's `SECURITY.md`). The next step that changes
+  space heating is moving the heating-curve offset from shadow mode to writes.
 
 ## Ambitions
 

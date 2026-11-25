@@ -380,8 +380,22 @@ behind every value and device. It replaced the Bubble Card trial of
   writes once its taps settle. Kodu's two boost tiles sit full width under
   Soe vesi. The days card shows `boiler_energy_today`'s daily `change` for
   16 days, today lighter and out of the average, with Täna, Sel kuul (its
-  share of `maja_sel_kuul`) and last month as cells. Kodu's 24-month boiler
-  chart is not carried. The settings subview is still Kodu's.
+  share of `maja_sel_kuul`) and last month as cells. Under Hinnajuhtimine sit
+  the shadow heating plan tile (`kutte_soovitatav_nihe` with its `pohjus`
+  attribute) and the opt-in DHW price control switch (`boileri_hinnajuhtimine`,
+  showing `boileri_soovitatav_siht` and its `reziim`, and opening its hourly
+  history). Kodu's 24-month boiler chart is not carried. The settings subview
+  is still Kodu's, with the DHW price control and shadow-plan notification
+  switches added under Hinnajuhtimine.
+
+**DHW price control (`config/packages/heating_price.yaml`).** Opt-in behind
+`input_boolean.boileri_hinnajuhtimine` (starts `off`). While `on`,
+`Boiler: hinnajuhtimine` sets the tank target between 45 and 55 °C from
+`sensor.boileri_soovitatav_siht` at each hour boundary (`:00`), skipping when
+the tank is `off` or in `performance` (Kiirsoojendus) or while Daikin's weekly
+60 °C anti-legionella cycle is active (`temperature >= 60`). Turning the switch
+off, or losing `boileri_soovitatav_siht` for 15 minutes while it is on, runs
+`Boiler: taasta 55 °C` to restore 55 °C. Space heating stays shadow-only.
 - **Ventilatsioon:** the status line on the unit's power switch, its fault
   and warning as red chips and `status_flow_down` as a neutral chip while on
   (ECO lowers the airflow on an ordinary sauna evening, so it is a state,
