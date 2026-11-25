@@ -63,8 +63,8 @@ template:
                 {%- set mn = (rows | map(attribute='t') | min) -%}
                 {%- set mx = (rows | map(attribute='t') | max) -%}
                 {%- set spread = mx - mn -%}
-                {#- Cheapest contiguous 2 h window for DHW pre-heating -#}
-                {%- set dw = namespace(best=none, avg=none) -%}
+                {#- Cheapest contiguous 2 h window overall, and daytime pre-evening (11:00-18:00) -#}
+                {%- set dw = namespace(best=none, avg=none, day_best=none, day_avg=none) -%}
                 {%- for i in range(rows | count - 1) -%}
                   {%- if rows[i + 1].s - rows[i].s == 3600 -%}
                     {%- set a = (rows[i].t + rows[i + 1].t) / 2 -%}
@@ -72,12 +72,21 @@ template:
                       {%- set dw.avg = a -%}
                       {%- set dw.best = rows[i].s -%}
                     {%- endif -%}
+                    {%- set h0 = rows[i].s | timestamp_custom('%H', true) | int -%}
+                    {%- if h0 >= 11 and h0 <= 16 and (dw.day_avg is none or a < dw.day_avg) -%}
+                      {%- set dw.day_avg = a -%}
+                      {%- set dw.day_best = rows[i].s -%}
+                    {%- endif -%}
                   {%- endif -%}
                 {%- endfor -%}
+                {%- set pre_ok = dw.day_best is not none and dw.day_avg <= avg + 0.03 -%}
                 {#- Walk the day's hours applying spread thresholds, frost guard and max-4h trim cap -#}
                 {%- set st = namespace(streak=0, boost=[], trim=[]) -%}
                 {%- for r in rows -%}
                   {%- set p = r.t -%}
+                  {%- set hr = r.s | timestamp_custom('%H', true) | int -%}
+                  {%- set is_we = (r.s | timestamp_custom('%w', true) | int) in [0, 6] -%}
+                  {%- set protected = (hr >= 19 and hr <= 21) or (is_we and hr >= 8 and hr <= 11) -%}
                   {%- if not heating_on -%}
                     {%- set d = 0 -%}
                     {%- set why = 'küte väljas' -%}
@@ -116,13 +125,18 @@ template:
                   {%- endif -%}
                   {%- if d > 0 -%}{%- set st.boost = st.boost + [r.s | timestamp_custom('%H', true)] -%}{%- endif -%}
                   {%- if d < 0 -%}{%- set st.trim = st.trim + [r.s | timestamp_custom('%H', true)] -%}{%- endif -%}
-                  {#- DHW hourly target: 55 C in cheapest 2 h window, 45 C on expensive peaks, 52 C otherwise (55 C on flat days) -#}
+                  {#- DHW hourly target: 55 C in cheapest 2 h window and daytime pre-evening window (11-18, if <= avg+3 s),
+                      52 C in household draw windows (daily 19-22, weekends 08-12), 45 C on expensive peaks outside them,
+                      52 C otherwise (55 C on flat days) -#}
                   {%- if spread < 0.05 -%}
                     {%- set dhw_t = 55 -%}
                     {%- set dhw_m = 'tavaline' -%}
-                  {%- elif dw.best is not none and (r.s == dw.best or r.s == dw.best + 3600) -%}
+                  {%- elif (dw.best is not none and (r.s == dw.best or r.s == dw.best + 3600)) or (pre_ok and (r.s == dw.day_best or r.s == dw.day_best + 3600)) -%}
                     {%- set dhw_t = 55 -%}
                     {%- set dhw_m = 'eelküte' -%}
+                  {%- elif protected -%}
+                    {%- set dhw_t = 52 -%}
+                    {%- set dhw_m = 'pesuaeg' -%}
                   {%- elif p >= avg + 0.04 and p >= avg * 1.20 -%}
                     {%- set dhw_t = 45 -%}
                     {%- set dhw_m = 'ootel' -%}
@@ -139,7 +153,8 @@ template:
                     {%- set out.cur_dhw_mode = dhw_m -%}
                     {%- set out.cur_spread = (spread * 100) | round(1) -%}
                     {%- if dw.best is not none -%}
-                      {%- set out.cur_dhw_win = (dw.best | timestamp_custom('%H:%M', true)) ~ '-' ~ ((dw.best + 7200) | timestamp_custom('%H:%M', true)) ~ ' (' ~ (('%.1f' | format(dw.avg * 100)).replace('.', ',')) ~ ' s/kWh)' -%}
+                      {%- set pre_win = ('; päeval ' ~ (dw.day_best | timestamp_custom('%H:%M', true)) ~ '-' ~ ((dw.day_best + 7200) | timestamp_custom('%H:%M', true)) ~ ' (' ~ (('%.1f' | format(dw.day_avg * 100)).replace('.', ',')) ~ ' s/kWh)') if pre_ok and dw.day_best != dw.best else '' -%}
+                      {%- set out.cur_dhw_win = (dw.best | timestamp_custom('%H:%M', true)) ~ '-' ~ ((dw.best + 7200) | timestamp_custom('%H:%M', true)) ~ ' (' ~ (('%.1f' | format(dw.avg * 100)).replace('.', ',')) ~ ' s/kWh)' ~ pre_win -%}
                     {%- endif -%}
                   {%- endif -%}
                 {%- endfor -%}
@@ -148,10 +163,14 @@ template:
                     '; ' ~
                     ('sääst kl ' ~ (st.trim | join(', ')) if st.trim else 'säästutunde pole') ~ '.'
                   )) -%}
+                {%- set pre_extra = (
+                    ' ja ' ~ (dw.day_best | timestamp_custom('%H:%M', true)) ~ '-' ~ ((dw.day_best + 7200) | timestamp_custom('%H:%M', true)) ~ ' (' ~ (('%.1f' | format(dw.day_avg * 100)).replace('.', ',')) ~ ' s/kWh)'
+                    if pre_ok and dw.day_best != dw.best else ''
+                  ) -%}
                 {%- set dhw_sum = (
                     'Boiler püsib tavalisel 55 °C (hinnavahe ' ~ (('%.1f' | format(spread * 100)).replace('.', ',')) ~ ' s/kWh).'
                     if spread < 0.05 or dw.best is none else
-                    'Boileri eelküte ' ~ (dw.best | timestamp_custom('%H:%M', true)) ~ '-' ~ ((dw.best + 7200) | timestamp_custom('%H:%M', true)) ~ ' (' ~ (('%.1f' | format(dw.avg * 100)).replace('.', ',')) ~ ' s/kWh).'
+                    'Boileri eelküte ' ~ (dw.best | timestamp_custom('%H:%M', true)) ~ '-' ~ ((dw.best + 7200) | timestamp_custom('%H:%M', true)) ~ ' (' ~ (('%.1f' | format(dw.avg * 100)).replace('.', ',')) ~ ' s/kWh)' ~ pre_extra ~ '.'
                   ) -%}
                 {%- if day_idx == 0 -%}
                   {%- set out.today_text = summary -%}

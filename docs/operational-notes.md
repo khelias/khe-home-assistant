@@ -391,11 +391,17 @@ behind every value and device. It replaced the Bubble Card trial of
 **DHW price control (`config/packages/heating_price.yaml`).** Opt-in behind
 `input_boolean.boileri_hinnajuhtimine` (starts `off`). While `on`,
 `Boiler: hinnajuhtimine` sets the tank target between 45 and 55 °C from
-`sensor.boileri_soovitatav_siht` at each hour boundary (`:00`), skipping when
-the tank is `off` or in `performance` (Kiirsoojendus) or while Daikin's weekly
-60 °C anti-legionella cycle is active (`temperature >= 60`). Turning the switch
-off, or losing `boileri_soovitatav_siht` for 15 minutes while it is on, runs
-`Boiler: taasta 55 °C` to restore 55 °C. Space heating stays shadow-only.
+`sensor.boileri_soovitatav_siht` at each hour boundary (`:00`): 55 °C in the
+day's cheapest 2 h window and in the cheapest daytime 2 h window (11:00-18:00,
+when its mean is at most 3 c/kWh above the day's mean), 52 °C during the
+household's draw windows (`pesuaeg`: daily 19:00-22:00 and weekends
+08:00-12:00, never reduced to 45 °C), 45 °C on expensive peaks outside those
+windows, and 52 °C otherwise (55 °C all day on flat days under 5 c/kWh spread).
+It skips when the tank is `off` or in `performance` (Kiirsoojendus) or while
+Daikin's weekly 60 °C anti-legionella cycle is active (`temperature >= 60`).
+Turning the switch off, or losing `boileri_soovitatav_siht` for 15 minutes
+while it is on, runs `Boiler: taasta 55 °C` to restore 55 °C. Space heating
+stays shadow-only.
 - **Ventilatsioon:** the status line on the unit's power switch, its fault
   and warning as red chips and `status_flow_down` as a neutral chip while on
   (ECO lowers the airflow on an ordinary sauna evening, so it is a state,
