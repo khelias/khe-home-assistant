@@ -12,13 +12,14 @@
 // tint from their own colour, a house room's floor reaching the faces of the walls it runs along,
 // and the lift on materials of its own, so its fade never reaches the lower walls. With the look's
 // trims (kit.look.trims), its exterior walls also carry opening trims with lined reveals and sill
-// flashings, corner boards on every outer and inner corner and a base strip, in the frame's
-// colour; the roofs have an edge, the carport roof a fascia and soffit, in the same colour. At night (ctx.state.night) a room with a light on, or with a marker
+// flashings, corner boards on every outer and inner corner and a base strip (the plinth, as high
+// as kit.base has it), in the frame's colour, the strip in the base surface when the look names
+// it; the roofs have an edge, the carport roof a fascia and soffit, in the same colour. At night (ctx.state.night) a room with a light on, or with a marker
 // carrying glow (recent motion), glows: its floor and its windows, each pane tagged with its room
 // at build, take a warm emissive scaled by the light's level or the glow; there are no real-time
-// lights.
+// lights. The chimneys (roof.chimneys) are upright blocks after the walls, cut at the ceiling like
+// a wall up to a roof, the part above in lift on a material of its own.
 const FRAME = 0.06, FRAME_D = 0.1; // real style: an opening's frame width and depth
-const BASE_H = 0.12; // real style: the strip along an exterior wall's foot
 // real style: an opening's trim and a corner board, both standing PROUD off the face, and a
 // sill's metal flashing; common cladding-trim sizes
 const TRIM = 0.1, CORNER = 0.12, PROUD = 0.025, REVEAL = 0.015;
@@ -125,18 +126,21 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
       return roomGlass.get(room);
     };
     const frame = kit.surface('frame'), panel = kit.surface('frame', two), door = kit.surface('door');
+    const plinth = kit.surface(kit.base.surface);
     cladLeaf = kit.surface('cladding');
     const boarded = { ...clad(two), inner };
     // the lift's inner faces are never seen, so they keep the cladding's colour without boards
     const lifted = clad(fades);
-    mR = { boarded: { ...lifted, inner: lifted.edge }, roof: kit.surface('roof', fades), panel: kit.surface('frame', fades), frame: kit.surface('frame', fades), inner: kit.surface('interior', fades), door: kit.surface('door', fades) };
+    const rMap = kit.roofMap(), roofMat = kit.surface('roof', fades);
+    const roofPitched = rMap ? kit.surface('roof', { ...fades, map: rMap }) : roofMat;
+    mR = { boarded: { ...lifted, inner: lifted.edge }, roof: roofMat, roofPitched, panel: kit.surface('frame', fades), frame: kit.surface('frame', fades), inner: kit.surface('interior', fades), door: kit.surface('door', fades) };
     // a panel (the carport's walls and posts) is in the frame's colour; else exterior is thick or
     // running up to a roof, and only it gets the cladding, the trims and the base strip
     wallMats = w => {
-      if (w.finish === 'panel') return { wall: panel, glass, frame, base: false };
+      if (w.finish === 'panel') return { wall: panel, glass, frame, base: null };
       const outside = w.t >= 0.3 || typeof w.top === 'string';
       // an interior wall's frames and door leaves are in the door's colour
-      return outside ? { boarded, glass, frame, base: true } : { wall: inner, glass, frame: door, base: false };
+      return outside ? { boarded, glass, frame, base: plinth } : { wall: inner, glass, frame: door, base: null };
     };
   } else {
     mH = mats();
@@ -235,9 +239,9 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     const d = side ? 0.02 : w.t + 0.02, zc = side * (w.t / 2 + 0.01);
     // it runs the wall's length and over its corner fillers, broken by every opening that
     // reaches the ground, and meets the opening's trims
-    const pad = trims ? TRIM : 0, [lo, hi] = w.strip || [0, L];
-    const gaps = ops.filter(o => (o.sill || 0) < BASE_H).map(o => [o.c - o.w / 2 - pad, o.c + o.w / 2 + pad]).sort((p, q) => p[0] - q[0]);
-    kit.spans(lo, hi, gaps, 0.01).forEach(([a, b]) => { bar(a, b, 0, BASE_H, d).position.z = zc; });
+    const pad = trims ? TRIM : 0, [lo, hi] = w.strip || [0, L], h = kit.base.height;
+    const gaps = ops.filter(o => (o.sill || 0) < h).map(o => [o.c - o.w / 2 - pad, o.c + o.w / 2 + pad]).sort((p, q) => p[0] - q[0]);
+    kit.spans(lo, hi, gaps, 0.01).forEach(([a, b]) => { bar(a, b, 0, h, d, m.base).position.z = zc; });
   }
 
   // the room a pane at c along wall w looks into: a point just inside the wall from the pane's
@@ -404,6 +408,24 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     buildWall(lift, { ...base, openings: [], bot: roof.flat(cut) }, lifted(w));
   });
 
+  // a chimney from its level's floor to its top: on the ground floor in group up to the ceiling and
+  // the rest in lift, an upper storey's in lift whole; the real style's lift part on a material of
+  // its own, so its fade stays off the lower part
+  const chimneys = roof.chimneys || [], chimneyMeshes = [];
+  const mC = !chimneys.length ? null : real ? { group: kit.surface('chimney'), lift: kit.surface('chimney', { transparent: true }) } : { group: mH, lift: mR };
+  chimneys.forEach(c => {
+    const parts = c.cut ? [[group, 0, c.cut], [lift, c.cut, c.top]] : [[c.level > 0 ? lift : group, levels[c.level], c.top]];
+    parts.forEach(([parent, a, b]) => {
+      const m = parent === lift ? mC.lift : mC.group;
+      const mesh = real ? kit.solid(parent, m, c.rect, [a, b]) : box(parent, m.wall, m.edge, c.rect, [a, b]);
+      if (real) mesh.castShadow = mesh.receiveShadow = true;
+      else mesh.renderOrder = 2;
+      mesh.userData.part = 'chimney';
+      mesh.userData.chimney = c.id;
+      chimneyMeshes.push(mesh);
+    });
+  });
+
   // a board or filler is split at the wall's cut like the wall, the upper part in lift; a filler
   // is cladding with the wall face's metre UVs, so the boards run on from the face
   const cornerGroups = new Map();
@@ -517,61 +539,82 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   }
 
   const roofMeshes = [];
-  function shedRoof(points, h, thick) {
+  function shedRoof(id, points, h, thick) {
     const shape = new THREE.Shape(points.map(([x, z]) => new THREE.Vector2(x, z)));
     const geo = new THREE.ExtrudeGeometry(shape, { depth: thick, bevelEnabled: false });
-    const p = geo.attributes.position;
+    const p = geo.attributes.position, uv = geo.attributes.uv;
+    const a = h(1, 0) - h(0, 0), s = a >= 0 ? 1 : -1, scale = Math.hypot(1, Math.abs(a));
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), z = p.getY(i), d = p.getZ(i);
       p.setXYZ(i, x, h(x, z) - roof.gap + d, z);
+      uv.setXY(i, s * z, s * x * scale);
     }
+    uv.needsUpdate = true;
     geo.computeVertexNormals();
-    addRoof(geo);
+    addRoof(geo, id, true);
   }
-  function addRoof(geo) {
+  function addRoof(geo, id, pitched) {
     if (real) {
       // the extrusion's first group is the top and underside, the second the edge band
-      const mesh = new THREE.Mesh(geo, [mR.roof, mR.frame]);
+      const mesh = new THREE.Mesh(geo, [pitched ? mR.roofPitched : mR.roof, mR.frame]);
       mesh.castShadow = mesh.receiveShadow = true;
+      mesh.userData.roof = id;
       roofMeshes.push(mesh);
       return lift.add(mesh);
     }
     const mesh = new THREE.Mesh(geo, mR.wall);
+    mesh.userData.roof = id;
     roofMeshes.push(mesh);
     mesh.renderOrder = 4;
     lift.add(mesh, edges(geo, mR.edge, 20));
   }
   // a wing roof (hip, gable, flat): its faces as a slab, the top and underside in the first group
   // and the band along the outer outline in the second, as a shed roof's extrusion has them
-  function wingRoof({ faces, edges: outer }, thick) {
-    const caps = [], band = [];
+  function wingRoof(id, { faces, edges: outer }, thick, pitched) {
+    const caps = [], capUv = [], band = [], bandUv = [];
     const at = ([a, b, c], [x, z], d) => [x, a * x + b * z + c - roof.gap + d, z];
+    const uvAt = ([a, b], [x, z]) => {
+      const g = Math.hypot(a, b);
+      if (g <= 1e-6) return [x, z];
+      const gx = a / g, gz = b / g;
+      return [x * -gz + z * gx, (x * gx + z * gz) * Math.hypot(1, g)];
+    };
     // a triangle wound so its normal points up (up true) or down
-    const tri = (out, p, q, r, up) => {
+    const tri = (p, q, r, upP, upQ, upR, up) => {
       const ny = (q[2] - p[2]) * (r[0] - p[0]) - (q[0] - p[0]) * (r[2] - p[2]);
-      out.push(...(ny > 0 === up ? [...p, ...q, ...r] : [...p, ...r, ...q]));
+      if (ny > 0 === up) {
+        caps.push(...p, ...q, ...r);
+        capUv.push(...upP, ...upQ, ...upR);
+      } else {
+        caps.push(...p, ...r, ...q);
+        capUv.push(...upP, ...upR, ...upQ);
+      }
     };
     faces.forEach(({ poly, plane }) => {
+      const uv0 = uvAt(plane, poly[0]);
       for (let i = 1; i + 1 < poly.length; i++) {
-        tri(caps, at(plane, poly[0], thick), at(plane, poly[i], thick), at(plane, poly[i + 1], thick), true);
-        tri(caps, at(plane, poly[0], 0), at(plane, poly[i], 0), at(plane, poly[i + 1], 0), false);
+        const uvi = uvAt(plane, poly[i]), uvj = uvAt(plane, poly[i + 1]);
+        tri(at(plane, poly[0], thick), at(plane, poly[i], thick), at(plane, poly[i + 1], thick), uv0, uvi, uvj, true);
+        tri(at(plane, poly[0], 0), at(plane, poly[i], 0), at(plane, poly[i + 1], 0), uv0, uvi, uvj, false);
       }
     });
     outer.forEach(([p, q, plane]) => {
       const a = at(plane, p, 0), b = at(plane, q, 0), c = at(plane, q, thick), d = at(plane, p, thick);
       band.push(...a, ...b, ...c, ...a, ...c, ...d);
+      bandUv.push(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     });
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute([...caps, ...band], 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute([...capUv, ...bandUv], 2));
     geo.addGroup(0, caps.length / 3, 0);
     geo.addGroup(caps.length / 3, band.length / 3, 1);
     geo.computeVertexNormals();
-    addRoof(geo);
+    addRoof(geo, id, pitched);
   }
   for (const [id, r] of Object.entries(model.roofs || {})) {
     const faces = roof.faces(id);
-    if (faces) wingRoof(faces, r.thick);
-    else shedRoof(r.outline, roof.fns[id], r.thick);
+    if (faces) wingRoof(id, faces, r.thick, r.kind !== 'flat');
+    else shedRoof(id, r.outline, roof.fns[id], r.thick);
   }
   (model.roof_steps || []).forEach(s => {
     const low = model.roofs[s.bot];
@@ -588,13 +631,14 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   }
   // the nearest wall face from (x, y, z) within reach along the horizontal normal (nx, nz), looked
   // for both ways: { d, s }, its distance and side (1 along the normal, -1 against), or null. A
-  // wall is any of this layer's meshes but the floors and the roofs, the list made on first use.
+  // wall is any of this layer's meshes but the floors, the roofs and the chimneys, the list made on
+  // first use.
   // It reads the walls where they stand, so it answers for the rest pose only: call it at build
   let walls = null;
   const probe = new THREE.Raycaster(), from = new THREE.Vector3(), dir = new THREE.Vector3();
   function wallBehind(x, y, z, nx, nz, reach) {
     if (!walls) {
-      const skip = new Set([...floorMeshes, ...roofMeshes]);
+      const skip = new Set([...floorMeshes, ...roofMeshes, ...chimneyMeshes]);
       walls = [];
       [group, lift].forEach(g => { g.updateMatrixWorld(true); g.traverse(o => { if (o.isMesh && !skip.has(o)) walls.push(o); }); });
     }

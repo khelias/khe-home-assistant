@@ -7,7 +7,7 @@
 // simple style or without the building. Caps, skirting and shade are one InstancedMesh each, the
 // furniture one per material, so the interior costs a handful of draw calls; every mesh carries
 // userData.part, the furniture userData.items (the item index of each instance) and the caps
-// userData.walls (the wall index of each). A run of fitted units draws its fronts in order from
+// userData.walls (the wall index of each, or the id of a chimney cut at the ceiling). A run of fitted units draws its fronts in order from
 // the low end of its along axis, in the item's finish (the kitchen's blue-grey under a brown worktop
 // without one), a stack of drawers about DRAWER_H a drawer. A splashback and a curtain are each
 // one mesh of their own, part 'splashback' or 'curtain'. With the roof fully on, the cut walls'
@@ -132,6 +132,12 @@ export default function build({ THREE, kit, model, roof, state, style, layer }) 
     const y = top(0), lo = -endReach(f, w.a, [-ux, -uz]), hi = L + endReach(f, w.b, [ux, uz]);
     const gaps = (w.openings || []).filter(o => (o.sill || 0) + o.h > y - 0.01).map(o => [o.c - o.w / 2, o.c + o.w / 2]).sort((a, b) => a[0] - b[0]);
     kit.spans(lo, hi, gaps, 0.01).forEach(([a, b]) => (cut ? capCut : capUncut).push([i, inWall(f, (a + b) / 2, y + CAP_LIFT + CAP_H / 2, 0, b - a, CAP_H, w.t - 2 * CAP_INSET)]));
+  });
+  // a ground floor chimney cut at the ceiling is capped like a cut wall
+  (roof.chimneys || []).forEach(c => {
+    if (!c.cut) return;
+    const [x0, z0, x1, z1] = c.rect;
+    capCut.push([c.id, new THREE.Matrix4().compose(p.set((x0 + x1) / 2, c.cut + CAP_LIFT + CAP_H / 2, (z0 + z1) / 2), q.identity(), sc.set(x1 - x0 - 2 * CAP_INSET, CAP_H, z1 - z0 - 2 * CAP_INSET))]);
   });
   // the cut walls' caps last, so hiding them is a shorter count
   const capList = [...capUncut, ...capCut];

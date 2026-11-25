@@ -135,11 +135,12 @@ const STYLE = `
 ` + OVERLAY_STYLE;
 
 /**
- * modelFrame(model) -> { roof: { fns, flat, under, topFn, gap, top, faces, kinks }, frame: { lotBox, wallBox, ext, E, lotCx, lotCz } }
+ * modelFrame(model) -> { roof: { fns, flat, under, topFn, gap, top, faces, kinks, chimneys }, frame: { lotBox, wallBox, ext, E, lotCx, lotCz } }
  * The model's roof height functions (x, z) -> y and its framing boxes, as ctx carries them;
  * roof.top(id) is roofTop() for that roof, roof.faces(id) roofFaces() of it (null for a shed
  * roof), roof.kinks(id) the plan segments where its faces meet or end, for the wall tops, and
- * roof.clip(poly, [a, b, c]) a convex plan polygon cut to where a x + b z + c <= 0.
+ * roof.clip(poly, [a, b, c]) a convex plan polygon cut to where a x + b z + c <= 0, and
+ * roof.chimneys chimneysOf() the model, which rise with the roofs.
  */
 export function modelFrame(model) {
   const site = model.site || {};
@@ -163,7 +164,7 @@ export function modelFrame(model) {
     }));
     return [...seen.values()];
   })());
-  const roof = { fns, flat, under, topFn, gap: ROOF_GAP, faces, kinks, clip: clipHalf };
+  const roof = { fns, flat, under, topFn, gap: ROOF_GAP, faces, kinks, clip: clipHalf, chimneys: chimneysOf(model) };
   roof.top = id => roofTop(roof, model, id);
 
   // the lot sets the scale, the fog and the shadow box; homeBox() frames the home view
@@ -295,6 +296,29 @@ export function roofFaces(r) {
 }
 
 /**
+ * chimneysOf(model) -> [{ id, rect, top, level, cut }]: geometry.chimneys with level 0 filled in
+ * and cut, the ceiling where a ground floor chimney runs above it, else 0; the card's model is
+ * not validated, so an entry without a name, or not a rect on a level of the model with its top
+ * above that floor, is left out rather than drawn.
+ */
+export function chimneysOf(model) {
+  const levels = model.levels || [0], ceiling = model.ceiling || 0;
+  return (Array.isArray(model.chimneys) ? model.chimneys : []).filter(Boolean)
+    .map(c => ({ id: c.id, rect: c.rect, top: c.top, level: c.level ?? 0 }))
+    .filter(({ id, rect: r, top, level }) => typeof id === 'string' && id && Array.isArray(r) && r.length === 4 && r.every(Number.isFinite) && r[0] < r[2] && r[1] < r[3]
+      && Number.isInteger(level) && level >= 0 && level < levels.length && Number.isFinite(top) && top > levels[level])
+    .map(c => ({ ...c, cut: c.level === 0 && c.top > ceiling ? ceiling : 0 }));
+}
+
+/**
+ * houseTop(model) -> the highest of the ceiling, the roofs with their thickness and the
+ * chimneys' tops (0 without any).
+ */
+export function houseTop(model) {
+  return Math.max(model.ceiling || 0, ...Object.values(model.roofs || {}).map(r => roofPeak(r) + (r.thick || 0)), ...chimneysOf(model).map(c => c.top));
+}
+
+/**
  * roofPeak(r) -> the highest point of roof r's line: a shed roof's high_y, a flat roof's y, a
  * hip or gable roof's highest wing ridge (the eave plus the slope over half the wing's span
  * across it).
@@ -418,15 +442,15 @@ export function guardLayer(L, off) {
 /**
  * homeBox(model) -> [x0, z0, x1, z1, top]: the plan box of the house rooms (every room but a
  * paved one, the carport, as the building layer's inRoom() decides; the walls' box without
- * rooms) with the roofs' overhang, and the height of the highest roof or the ceiling.
+ * rooms) with the roofs' overhang and the chimneys, and houseTop().
  */
 export function homeBox(model) {
   const rects = (model.rooms || []).filter(r => r.floor !== 'paving').flatMap(r => r.rects);
   const pts = (rects.length ? rects.flatMap(([x0, z0, x1, z1]) => [[x0, z0], [x1, z1]]) : (model.walls || []).flatMap(w => [w.a, w.b]))
-    .concat(Object.values(model.roofs || {}).flatMap(r => (roofKind(r) === 'shed' ? r.outline || [] : r.rects.flatMap(([x0, z0, x1, z1]) => [[x0, z0], [x1, z1]]))));
+    .concat(Object.values(model.roofs || {}).flatMap(r => (roofKind(r) === 'shed' ? r.outline || [] : r.rects.flatMap(([x0, z0, x1, z1]) => [[x0, z0], [x1, z1]]))))
+    .concat(chimneysOf(model).flatMap(({ rect: [x0, z0, x1, z1] }) => [[x0, z0], [x1, z1]]));
   const b = pts.reduce((a, [x, z]) => [Math.min(a[0], x), Math.min(a[1], z), Math.max(a[2], x), Math.max(a[3], z)], [Infinity, Infinity, -Infinity, -Infinity]);
-  const top = Math.max(model.ceiling || 0, ...Object.values(model.roofs || {}).map(r => roofPeak(r) + (r.thick || 0)));
-  return [...b, top || 3];
+  return [...b, houseTop(model) || 3];
 }
 
 /**
@@ -877,9 +901,9 @@ export function mount(element, model, options = {}) {
     })));
     scene.add(glow);
   }
-  // the shadow camera holds the lot from the ground to the highest roof or tree
+  // the shadow camera holds the lot from the ground to the highest roof, chimney or tree
   const msite = model.site || {};
-  const shadowTop = 0.5 + Math.max(model.ceiling || 0, ...Object.values(model.roofs || {}).map(r => roofPeak(r) + (r.thick || 0)),
+  const shadowTop = 0.5 + Math.max(houseTop(model),
     ...(msite.trees || []).map(t => t.height), msite.garage_roof && msite.garage_roof.y ? msite.garage_roof.y[1] : 0,
     msite.pergola ? msite.pergola.height : 0);
   // the sky texture: the horizon colour up to SKY_HORIZON of the view, blending to the zenith's at

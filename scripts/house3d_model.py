@@ -39,9 +39,17 @@ Look: geometry.look (optional) is the house's finishes in the real style; withou
 draws a light, matt architectural model. surfaces maps an engine surface name (SURFACES) to
 "#rrggbb" or {"color": "#rrggbb", "roughness": 0..1, "metalness": 0..1}; cladding is
 {"pattern": "plain"} or {"pattern": "boards", "angle_deg": 0, 45 or 90} (0 horizontal);
+roof is {"pattern": "plain" | "seam" | "tile"} (plain by default, on pitched roofs only);
 trims {"openings", "corners", "base"} are booleans for the opening trims with their reveals and
-sill flashings, the corner boards and the base strip, each off by default. The simple style
-ignores it.
+sill flashings, the corner boards and the base strip (the plinth), each off by default; base may
+instead be {"height": h}, 0.05 <= h <= 1.0 above floor 0 (true is 0.12). The base strip is in the
+frame's surface unless surfaces names base. The simple style ignores it.
+
+Chimneys: geometry.chimneys (optional) is a list of {"id", "rect": [x0, z0, x1, z1], "top": y,
+"level": 0}, upright blocks from levels[level] to top, which runs at least 0.5 above that floor.
+A ground floor chimney above the ceiling is cut there like a wall up to a roof, the part above
+rising and fading with the roofs; an upper storey's rises whole. The real style draws them in the
+chimney surface.
 
 Usage:  house3d_model.py --check FILE
         house3d_model.py --layers geometry,rooms,showcase FILE   (or --layers all)
@@ -133,7 +141,7 @@ PANEL_GAP = 0.02
 FUTURE_FACTS, FACT_CHARS = 6, 80
 # the real style's surface names, every key of the engine's kit.js REAL (a test compares them)
 SURFACES = (
-    "cladding", "roof", "frame", "unit", "glass", "interior", "door", "floor", "tile", "deck",
+    "cladding", "roof", "frame", "base", "chimney", "unit", "glass", "interior", "door", "floor", "tile", "deck",
     "paving", "lawn", "outside", "hedge", "crown", "trunk", "fence", "car", "neighbour", "road",
     "timber", "sand", "slide", "nest", "pad", "mat", "net", "mesh", "stone", "cut", "skirting",
     "linen", "fabric", "oak", "worktop", "cabinet", "furniture", "kitchen", "kitchenTop",
@@ -144,7 +152,11 @@ SURFACES = (
 )  # fmt: skip
 CLADDING_PATTERNS = ("plain", "boards")
 BOARD_ANGLES = (0, 45, 90)
+ROOF_PATTERNS = ("plain", "seam", "tile")
 TRIMS = ("openings", "corners", "base")
+BASE_HEIGHT = (0.05, 1.0)  # a look's trims.base {"height": h}: the plinth's range above floor 0
+CHIMNEY_KEYS = ("id", "rect", "top", "level")
+CHIMNEY_MIN = 0.5  # how far a chimney's top stands at least above its level's floor
 HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 BLOCK = re.compile(r"^```json house3d:(\w+)[ \t]*\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
 
@@ -546,6 +558,27 @@ def validate(layers):
         bad(f"{where}: level {lv!r} is not an index into levels (0..{len(levels) - 1})")
         return 0
 
+    chimneys = model.get("chimneys", [])
+    if not isinstance(chimneys, list):
+        bad("geometry: chimneys is not a list")
+        chimneys = []
+    for i, c in enumerate(chimneys):
+        where = f"chimneys[{i}]"
+        if not isinstance(c, dict):
+            bad(f"{where}: is not a JSON object")
+            continue
+        for k in sorted(set(c) - set(CHIMNEY_KEYS)):
+            bad(f"{where}: unknown key {k!r}")
+        if not (isinstance(c.get("id"), str) and c["id"]):
+            bad(f"{where}: id is not a name")
+        rect(where, c.get("rect"))
+        lv = level_of(where, c)
+        if not _num(c.get("top")) or c["top"] < levels[lv] + CHIMNEY_MIN:
+            bad(
+                f"{where}: top {c.get('top')!r} is not {CHIMNEY_MIN} or more above its floor {levels[lv]}"
+            )
+    ids("chimneys", [c.get("id") for c in chimneys if isinstance(c, dict)])
+
     for i, w in enumerate(model.get("walls", [])):
         where = f"walls[{i}]"
         if not (_point(w.get("a")) and _point(w.get("b"))):
@@ -879,11 +912,11 @@ def _validate_edges(where, f, bad):
 
 
 def _validate_look(look, bad):
-    """geometry.look: the surfaces' finishes, the cladding's pattern and which trims are drawn."""
+    """geometry.look: the surfaces' finishes, the cladding and roof patterns, and which trims are drawn."""
     if not isinstance(look, dict):
         bad("look: is not a JSON object")
         return
-    for k in sorted(set(look) - {"surfaces", "cladding", "trims"}):
+    for k in sorted(set(look) - {"surfaces", "cladding", "roof", "trims"}):
         bad(f"look: unknown key {k!r}")
     surfaces = look.get("surfaces", {})
     if not isinstance(surfaces, dict):
@@ -921,6 +954,15 @@ def _validate_look(look, bad):
             a = c.get("angle_deg", 45)
             if c["pattern"] == "boards" and not (_num(a) and a in BOARD_ANGLES):
                 bad(f"look.cladding: angle_deg {a!r} is not one of 0, 45, 90")
+    if "roof" in look:
+        r = look["roof"]
+        if not isinstance(r, dict):
+            bad("look.roof: is not a JSON object")
+        elif r.get("pattern") not in ROOF_PATTERNS:
+            bad(f"look.roof: pattern {r.get('pattern')!r} is not one of {', '.join(ROOF_PATTERNS)}")
+        else:
+            for k in sorted(set(r) - {"pattern"}):
+                bad(f"look.roof: unknown key {k!r}")
     if "trims" in look:
         t = look["trims"]
         if not isinstance(t, dict):
@@ -929,8 +971,18 @@ def _validate_look(look, bad):
             for k, v in t.items():
                 if k not in TRIMS:
                     bad(f"look.trims: unknown key {k!r}")
+                elif k == "base" and isinstance(v, dict):
+                    h = v.get("height")
+                    if set(v) != {"height"} or not (
+                        _num(h) and BASE_HEIGHT[0] <= h <= BASE_HEIGHT[1]
+                    ):
+                        bad(
+                            f'look.trims.base: {v!r} is not {{"height": h}} with '
+                            f"{BASE_HEIGHT[0]} <= h <= {BASE_HEIGHT[1]}"
+                        )
                 elif not isinstance(v, bool):
-                    bad(f"look.trims.{k}: {v!r} is not true or false")
+                    what = 'true, false or {"height": h}' if k == "base" else "true or false"
+                    bad(f"look.trims.{k}: {v!r} is not {what}")
 
 
 def _validate_festive(festive, lot, bad):
