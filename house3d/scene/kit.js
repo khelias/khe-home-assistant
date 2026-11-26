@@ -31,13 +31,16 @@ const COLORS = {
 // The bar fence and the gates are dark bars (bars()), the other fences a dark wire mesh
 // (wireMesh()). The play area is stained timber with a sand box, a mint slide and a dark nest
 // seat; the trampoline a green edge pad on a black mat with a black net.
-// The car and surroundings are plain stand-ins; outside the lot is a light base, like an
-// architectural model's. Snow (the winter layer) is a cool white.
+// The garden is a muted green family: a mottled lawn (lawn()), a darker clipped hedge, crowns in
+// between on brown trunks, a birch's on white bark. The car and surroundings are plain stand-ins,
+// the neighbours light with a dark roof on the gabled ones, the street asphalt (asphalt());
+// outside the lot is a light base, like an architectural model's. Snow (the winter layer) is a
+// cool white.
 const REAL = {
   cladding: '#e6e4df', roof: '#6e7377', frame: '#f0f0ed', base: '#8e8c87', trim: '#ebebe7', chimney: '#a9a7a1', unit: '#e4e4e0',
   glass: '#9fb8c4', interior: '#e4e3df', door: '#f2f1ed', floor: '#cdbfa8', tile: '#9a9690', deck: '#8a8178', paving: '#c4c0b8',
-  lawn: '#64904a', outside: '#d8d6cc', hedge: '#355a32', crown: '#4f7a3a', trunk: '#5b4636',
-  fence: '#5a5d60', car: '#2f3336', neighbour: '#b9b6ae', road: '#6b6b68',
+  lawn: '#7b9860', outside: '#d8d6cc', hedge: '#44633d', crown: '#5d7c4b', trunk: '#5b4636', bark: '#e3ddd2',
+  fence: '#5a5d60', car: '#2f3336', neighbour: '#cfcac0', neighbourRoof: '#6f6b66', road: '#6b6b68',
   timber: '#8a6a4c', sand: '#d6c6a0', slide: '#9ed8c2', nest: '#3d4a5c', pad: '#3f8a4b', mat: '#202325',
   net: '#151719', mesh: '#2c2f31', stone: '#56595b',
   cut: '#2a2d30', skirting: '#c9a67c', linen: '#ecebe6', fabric: '#7d8792', oak: '#d6c2a2', worktop: '#3b3b3b',
@@ -74,6 +77,12 @@ const PAVER_TILE = 0.9, STONE = 0.225, ROW = 0.1125, WAVE = 0.012, JOINT = 0.005
 // tile; a faint veil between them so the mipmapped fence still reads from far off
 const MESH_TILE = 0.2, MESH_X = 0.05, WIRE = 0.004, MESH_PX = 256, MESH_VEIL = 26;
 const BAR_STEP = 0.12, BAR = 0.02, RAIL = 0.04;
+// the lawn's mottle and the road's asphalt: smooth value noise on a NOISE_TILE m tile, a share
+// of [cells across the tile, weight] per octave, shading the surface's colour from 1 down by its
+// DEPTH; grey shades only, so the snow's white lerp still whitens a snowed lawn
+const NOISE_TILE = 6, NOISE_PX = 256;
+const LAWN_OCTAVES = [[3, 0.55], [12, 0.3], [48, 0.15]], LAWN_DEPTH = 0.16;
+const ASPHALT_OCTAVES = [[4, 0.4], [96, 0.6]], ASPHALT_DEPTH = 0.12;
 // the oak floor: rows of planks about PLANK wide along world z, each row of planks one of
 // PLANK_LENS long from a staggered start, all dividing the FLOOR_TILE m tile; a plank's shade
 // varies PLANK_VAR either way, the joint between them darker
@@ -261,6 +270,68 @@ export function createKit(THREE, style = 'simple', look) {
     const h = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453;
     return h - Math.floor(h);
   };
+  // a stable pseudo-random sequence 0..1 (mulberry32, as winter.js has for its flakes) from a
+  // string key, for what varies tree by tree or building by building yet draws the same on every
+  // mount
+  function seeded(key) {
+    let a = 2166136261;
+    for (const ch of key) a = Math.imul(a ^ ch.codePointAt(0), 16777619);
+    return () => {
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  // smooth value noise over the tile, octave by octave on n x n cells that wrap so the tile's
+  // edges meet, as grey shades from 1 down by depth
+  function noiseTexture(octaves, depth) {
+    const S = NOISE_PX, sum = new Float32Array(S * S);
+    octaves.forEach(([n, w], k) => {
+      const lattice = Float32Array.from({ length: n * n }, (_, c) => hash((c % n) + (k + 1) * 131, Math.floor(c / n) + (k + 1) * 71));
+      const at = (a, b) => lattice[(b % n) * n + (a % n)], ease = f => f * f * (3 - 2 * f);
+      for (let j = 0; j < S; j++) {
+        const y = (j / S) * n, b = Math.floor(y), sy = ease(y - b);
+        for (let i = 0; i < S; i++) {
+          const x = (i / S) * n, a = Math.floor(x), sx = ease(x - a);
+          const top = at(a, b) + (at(a + 1, b) - at(a, b)) * sx, bot = at(a, b + 1) + (at(a + 1, b + 1) - at(a, b + 1)) * sx;
+          sum[j * S + i] += w * (top + (bot - top) * sy);
+        }
+      }
+    });
+    return tileTexture(S, NOISE_TILE, (i, j) => {
+      const g = Math.round((1 - depth * sum[j * S + i]) * 255);
+      return [g, g, g, 255];
+    });
+  }
+  // real style: the lawn's mottle and the road's asphalt, one texture each per mount
+  let lawnTex, asphaltTex;
+  const lawn = () => (lawnTex ||= noiseTexture(LAWN_OCTAVES, LAWN_DEPTH));
+  const asphalt = () => (asphaltTex ||= noiseTexture(ASPHALT_OCTAVES, ASPHALT_DEPTH));
+
+  // geometries as one, unindexed, with the attributes they all have, for a shape drawn in one
+  // mesh; the inputs are disposed
+  function merge(geos) {
+    if (!geos.length) return new THREE.BufferGeometry();
+    const flat = geos.map(g => (g.index ? g.toNonIndexed() : g)), out = new THREE.BufferGeometry();
+    Object.keys(flat[0].attributes).filter(name => flat.every(g => g.attributes[name])).forEach(name => {
+      const arr = new Float32Array(flat.reduce((n, g) => n + g.attributes[name].array.length, 0));
+      let at = 0;
+      for (const g of flat) { arr.set(g.attributes[name].array, at); at += g.attributes[name].array.length; }
+      out.setAttribute(name, new THREE.BufferAttribute(arr, flat[0].attributes[name].itemSize));
+    });
+    new Set([...geos, ...flat]).forEach(g => g.dispose());
+    return out;
+  }
+  // a colour attribute of grey shades from f(x, y, z, i) per vertex, so a lit surface keeps its
+  // own colour and only darkens where f is under 1 (the material needs vertexColors)
+  function shade(geo, f) {
+    const p = geo.attributes.position, c = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) c.fill(f(p.getX(i), p.getY(i), p.getZ(i), i), i * 3, i * 3 + 3);
+    geo.setAttribute('color', new THREE.BufferAttribute(c, 3));
+    return geo;
+  }
+
   const inJoint = (t, step, joint) => Math.min(t % step, step - (t % step)) < joint / 2;
 
   // real style: the paving's stones, one texture per mount
@@ -429,5 +500,5 @@ export function createKit(THREE, style = 'simple', look) {
     return out;
   }
 
-  return { C, style, REAL: colors, look: resolved, base, trim, disposables, keep, basic, lineMat, mats, edges, box, prism, canvasTexture, applyFade, nightTint, near, spans, surface, solid, strut, flatShape, boards, roofMap, pavers, planks, tiles, splashTiles, wireMesh, bars };
+  return { C, style, REAL: colors, look: resolved, base, trim, disposables, keep, basic, lineMat, mats, edges, box, prism, canvasTexture, applyFade, nightTint, near, spans, surface, solid, strut, flatShape, boards, roofMap, pavers, planks, tiles, splashTiles, wireMesh, bars, lawn, asphalt, seeded, merge, shade };
 }

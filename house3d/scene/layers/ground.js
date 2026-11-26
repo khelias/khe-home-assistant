@@ -1,15 +1,15 @@
-// The ground: a soft glow under the lot and the metre grid. The real style lays a lawn over the
-// lot and a neutral plane round it, both taking shadows, and no grid; the plane darkens to
-// OUT_NIGHT of its colour with the night, so the lot stays the lit place. api.snow(amount), from
-// the winter layer, blends both towards the snow's colour, 0 none to 1 all; the night's darkening
-// works on top of it.
+// The ground: a soft glow under the lot and the metre grid. The real style lays a mottled lawn
+// (kit.lawn()) over the lot and a neutral plane round it, both taking shadows, and no grid; the
+// plane darkens to OUT_NIGHT of its colour with the night, so the lot stays the lit place.
+// api.snow(amount), from the winter layer, blends both towards the snow's colour, 0 none to 1
+// all; the night's darkening works on top of it.
 const OUT_NIGHT = 0.22;
 export default function build({ THREE, kit, C, frame, model, style, state }) {
   const { ext, lotCx, lotCz } = frame;
   const group = new THREE.Group();
   if (style === 'real') {
     const lot = (model.site || {}).lot, [x0, z0, x1, z1] = frame.lotBox;
-    const lawn = new THREE.Mesh(kit.flatShape(lot && lot.length >= 3 ? lot : [[x0, z0], [x1, z0], [x1, z1], [x0, z1]]), kit.surface('lawn'));
+    const lawn = new THREE.Mesh(kit.flatShape(lot && lot.length >= 3 ? lot : [[x0, z0], [x1, z0], [x1, z1], [x0, z1]]), kit.surface('lawn', { map: kit.lawn() }));
     // under the floors and paving by enough not to flicker at a distance
     lawn.position.y = -0.02;
     const out = new THREE.Mesh(new THREE.PlaneGeometry(ext * 8, ext * 8).rotateX(-Math.PI / 2), kit.surface('outside'));

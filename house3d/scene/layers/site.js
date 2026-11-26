@@ -9,6 +9,10 @@
 // (the net, the mesh) do neither.
 const FENCE_H = 1.2, POST_STEP = 2.5;
 const HEDGE_H = 1.6, HEDGE_W = 0.8;
+// a clipped hedge in the real style: a box cut every HEDGE_STEP along and in HEDGE_ROWS up, its
+// sides pushed in by up to HEDGE_JITTER, its long top edges rounded in by HEDGE_ROUND, the top's
+// middle level at HEDGE_H (the winter cap's seat), shaded down to HEDGE_FOOT at the ground
+const HEDGE_STEP = 0.4, HEDGE_ROWS = 4, HEDGE_JITTER = 0.05, HEDGE_ROUND = 0.12, HEDGE_FOOT = 0.7;
 // a thuja's outline over its planter, [radius, height] from the foot up: a column that narrows to
 // a point, turned round its axis
 const THUJA = [[0, 0], [0.26, 0], [0.3, 0.25], [0.29, 0.7], [0.23, 1.1], [0.13, 1.4], [0.04, 1.58], [0, 1.62]];
@@ -92,9 +96,12 @@ export default function build({ THREE, kit, C, model, style }) {
   }
   const hedgeM = real ? kit.surface('hedge') : basic({ color: C.hedge, opacity: 0.2 });
   const hedgeE = lineMat({ color: C.teal, opacity: 0.28 });
-  (site.hedges || []).forEach(([[xa, za], [xb, zb]]) => {
-    const geo = new THREE.BoxGeometry(Math.hypot(xb - xa, zb - za), HEDGE_H, HEDGE_W);
-    const m = new THREE.Mesh(geo, hedgeM);
+  // real style: the hedges' own material, for their vertex shades; the plants keep hedgeM
+  const hedgeBoxM = real ? kit.surface('hedge', { vertexColors: true }) : hedgeM;
+  (site.hedges || []).forEach(([[xa, za], [xb, zb]], k) => {
+    const L = Math.hypot(xb - xa, zb - za);
+    const geo = real ? clipped(L, kit.seeded(`hedge ${k}`)) : new THREE.BoxGeometry(L, HEDGE_H, HEDGE_W);
+    const m = new THREE.Mesh(geo, hedgeBoxM);
     m.position.set((xa + xb) / 2, HEDGE_H / 2, (za + zb) / 2);
     m.rotation.y = -Math.atan2(zb - za, xb - xa);
     if (!real) m.add(edges(geo, hedgeE));
@@ -300,5 +307,28 @@ export default function build({ THREE, kit, C, model, style }) {
         group.add(shade(t, true));
       } else if (p.plant === 'low') shade(kit.solid(group, hedgeM, [x0 + 0.08, z0 + 0.08, x1 - 0.08, z1 - 0.08], [top, top + 0.25]), true);
     });
+  }
+
+  // real style: a hedge len long as a segmented BoxGeometry (so it keeps its parameters), its
+  // side vertices moved in by a seeded amount per column and row, the long top edges rounded
+  function clipped(len, rand) {
+    const cols = Math.max(1, Math.round(len / HEDGE_STEP)), geo = new THREE.BoxGeometry(len, HEDGE_H, HEDGE_W, cols, HEDGE_ROWS, 2);
+    const p = geo.attributes.position, hw = HEDGE_W / 2, hh = HEDGE_H / 2;
+    // one push per lattice point, so the faces that share an edge move it alike
+    const push = new Map(), at = (x, y, side) => {
+      const key = `${Math.round(x * 1000)} ${Math.round(y * 1000)} ${side}`;
+      if (!push.has(key)) push.set(key, HEDGE_JITTER * rand());
+      return push.get(key);
+    };
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i), side = Math.sign(z);
+      if (Math.abs(Math.abs(z) - hw) > 1e-6) continue;
+      // a vertex on a long side: at the top it rounds in and down, the same on every face that
+      // shares it; below, in by its push
+      if (y >= hh - 1e-6) p.setXYZ(i, x, hh - HEDGE_ROUND / 3, side * (hw - HEDGE_ROUND));
+      else p.setZ(i, side * (hw - at(x, y, side)));
+    }
+    geo.computeVertexNormals();
+    return kit.shade(geo, (_, y) => HEDGE_FOOT + (1 - HEDGE_FOOT) * Math.min(1, (y + hh) / (HEDGE_H * 0.8)));
   }
 }

@@ -677,8 +677,9 @@ export function stageLayers(style, stage) {
  *                    [[x, y, z], [x, y, z]] segments. path is [[x, z], ...]; the car drives a
  *                    smooth curve through it and parks at the last point, facing along the last leg.
  *   surroundings     { buildings: [{ outline: [[x, z], ...], height }], roads: [{ outline, holes? }] }:
- *                    the neighbouring buildings as flat-topped boxes and the street as a flat
- *                    surface, faint, never tapped
+ *                    the neighbouring buildings and the street as a flat surface, faint, never
+ *                    tapped; the simple style draws a building as a box, the real style gives a
+ *                    house-sized rectangular one a gable (surroundings.js)
  * snapshot(maxWidth): the scene as it stands, without the markers, as a JPEG data URL at most
  *   maxWidth pixels wide, or null (not framed yet, the WebGL context lost, no WebGL); the card
  *   keeps one as the next load's first picture.

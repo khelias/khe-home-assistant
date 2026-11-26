@@ -154,7 +154,7 @@ FUTURE_FACTS, FACT_CHARS = 6, 80
 # the real style's surface names, every key of the engine's kit.js REAL (a test compares them)
 SURFACES = (
     "cladding", "roof", "frame", "base", "trim", "chimney", "unit", "glass", "interior", "door", "floor", "tile", "deck",
-    "paving", "lawn", "outside", "hedge", "crown", "trunk", "fence", "car", "neighbour", "road",
+    "paving", "lawn", "outside", "hedge", "crown", "trunk", "bark", "fence", "car", "neighbour", "neighbourRoof", "road",
     "timber", "sand", "slide", "nest", "pad", "mat", "net", "mesh", "stone", "cut", "skirting",
     "linen", "fabric", "oak", "worktop", "cabinet", "furniture", "kitchen", "kitchenTop",
     "handle", "steel", "blackGlass", "screen", "rug", "sheer", "sofa", "anthracite", "white",

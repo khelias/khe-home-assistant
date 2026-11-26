@@ -40,7 +40,7 @@ const WASH_PROBE = [0.3, 1]; // the rays' depths below the cable: a wall must st
 const WASH_OFF = 0.01; // the wash's gap off the wall
 const WASH_EDGE = 0.03; // how far in from a segment's end its first ray goes
 const WASH_FLAT = 0.05; // how much the wall's distance may change across one piece
-const ROOF_SNOW = 0.08, ROOF_INSET = 0.05, CAP = 0.12, CAP_OUT = 0.04, TIP = 0.8;
+const ROOF_SNOW = 0.08, ROOF_INSET = 0.05, CAP = 0.12, CAP_OUT = 0.04, TIP = 0.8, LOBE_CAP = 0.95;
 const DUST_OPACITY = 0.5, DUST_LIFT = 0.004;
 const FLAKES = 1500, FLAKE_MARGIN = 4, FLAKE_TOP = 12, FLAKE_SIZE = 0.14, FLAKE_FALL = [0.5, 1], FLAKE_SWAY = 0.15, FLAKE_NIGHT = 0.45;
 
@@ -312,12 +312,7 @@ export default function build({ THREE, kit, model, options, style, state, roof, 
       for (let i = 0; i < a.length; i += 9) for (let k = 0; k < 3; k++) [a[i + 3 + k], a[i + 6 + k]] = [a[i + 6 + k], a[i + 3 + k]];
       return geo;
     });
-    let geo = parts[0];
-    if (parts.length > 1) {
-      geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(parts.flatMap(g => Array.from(g.attributes.position.array)), 3));
-      parts.forEach(g => g.dispose());
-    }
+    const geo = parts.length > 1 ? kit.merge(parts) : parts[0];
     geo.computeVertexNormals();
     const m = snowy(new THREE.Mesh(geo, roofSnowM), 'roof-snow');
     m.userData.roof = id;
@@ -373,14 +368,13 @@ export default function build({ THREE, kit, model, options, style, state, roof, 
     m.position.set(...pos);
     group.add(m);
   });
-  // the crown's upper third: a sphere cap down to a third of its height above the centre
+  // the crown's upper third: a cap on each of its lobes that reaches into it, in one mesh
   const dress = new THREE.Group();
   dress.userData.part = 'winter';
-  const capGeo = new THREE.SphereGeometry(1, 18, 8, 0, 2 * Math.PI, 0, Math.acos(1 / 3));
-  Object.values(treesApi.crowns ? treesApi.crowns() : {}).forEach(({ centre, radii }) => {
-    const m = snowy(new THREE.Mesh(capGeo, snowM), 'cap');
+  Object.values(treesApi.crowns ? treesApi.crowns() : {}).forEach(({ centre, radii, lobes }) => {
+    const m = snowy(new THREE.Mesh(lobeCaps(lobes, CAP_OUT / Math.min(...radii)), snowM), 'cap');
     m.position.set(...centre);
-    m.scale.set(...radii.map(v => v + CAP_OUT));
+    m.scale.set(...radii);
     dress.add(m);
   });
   if (treesApi.attach) treesApi.attach(dress);
@@ -447,4 +441,11 @@ export default function build({ THREE, kit, model, options, style, state, roof, 
       return moving;
     }
   };
+
+  // a cap LOBE_CAP from the top of each lobe [x, y, z, r] (in a crown's unit sphere) whose top
+  // reaches past a third of the sphere's height, out by out
+  function lobeCaps(lobes, out) {
+    return kit.merge(lobes.filter(([, y, , r]) => y + r > 1 / 3)
+      .map(([x, y, z, r]) => new THREE.SphereGeometry(r + out, 12, 5, 0, 2 * Math.PI, 0, LOBE_CAP).translate(x, y, z)));
+  }
 }
