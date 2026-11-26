@@ -579,7 +579,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   leaf cards on the crowns and hedges, the deciduous crowns bare in winter, a
   light tier on a device with few cores or little memory; its textures are
   the engine's `house3d/assets/`, loaded after the first frame, so khe.ee/ha
-  allows a `blob:` worker and WebAssembly for their decoder), chosen per
+  allows a `blob:` worker, WebAssembly and eval for their decoder), chosen per
   browser in the Kihid sheet and kept in `localStorage` under
   `house3d-style`. Switching remounts the engine with the roof mode, camera
   and fog kept. The lit styles have no bloom; their shadow map is 2048 px, 1024
