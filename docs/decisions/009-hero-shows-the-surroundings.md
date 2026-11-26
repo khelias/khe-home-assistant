@@ -1,6 +1,6 @@
 # ADR-009: The hero shows the surroundings and their credit
 
-- **Status:** Accepted (2026-11-12)
+- **Status:** Accepted (2026-11-12; amended 2026-11-27: the credit opens from an info button)
 - **Related:** [ADR-006](006-a3-front-page-live-hero.md), [ADR-001](001-own-3d-engine.md)
 
 ## Context
@@ -22,7 +22,8 @@ licence sets for that.
    stored (ADR-006 decision 2 otherwise holds: the real style with the live
    sun, no style row).
 2. **A hero shows the ETAK credit** top left, as the full view does, kept
-   clear of its corner button.
+   clear of its corner button. Since 2026-11-27 the line opens from an info
+   button there, so the picture is not under a caption.
 3. **At night the real style dims the surroundings**, so moonlit neighbours
    do not outshine the house.
 

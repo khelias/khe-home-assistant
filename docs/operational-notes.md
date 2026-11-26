@@ -958,8 +958,9 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   unless ETAK's house footprint matches the model's walls within 1 m and a
   street runs along the lot's front. The licence (Maa- ja Ruumiamet open
   data, 01.01.2025) asks for the licensor, the dataset and its date, which
-  the card shows top left, only for a layer whose source starts with `ETAK,`
-  (the test fixture's made-up layer gets no credit line), a hero included.
+  the card shows from an info button top left, only for a layer whose source
+  starts with `ETAK,` (the test fixture's made-up layer gets no credit
+  line), a hero included.
 
 ## HVAC integrations
 

@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 67;
+const HOUSE3D_VERSION = 68;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -50,6 +50,7 @@ export const TEXT = {
     date: 'Kuupäev',
     now: 'Praegu',
     credit: 'Ümbrus: Maa- ja Ruumiamet, ETAK',
+    source: 'Andmete allikas',
     missing: 'puudub',
     onPlan: (no, area) => `Plaanil ${no} · ${area} m²`,
     close: 'Sulge',
@@ -98,6 +99,7 @@ export const TEXT = {
     date: 'Date',
     now: 'Now',
     credit: 'Surroundings: Estonian Land and Spatial Development Board, ETAK',
+    source: 'Data source',
     missing: 'missing',
     onPlan: (no, area) => `Room ${no} on the plan · ${area} m²`,
     close: 'Close',
@@ -186,8 +188,8 @@ export function cameraRing(devices, id, centre = null) {
 
 // a still is fetched every CAM_STILL_MS while its panel shows, as Kaamerad's large still (ADR-016)
 const CAM_STILL_MS = 10e3, CAM_STALL_MS = 15e3;
-const CHEVRON = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
-const PREV = CHEVRON('M15 5l-7 7 7 7'), NEXT = CHEVRON('M9 5l7 7-7 7');
+const STROKE = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+const PREV = STROKE('M15 5l-7 7 7 7'), NEXT = STROKE('M9 5l7 7-7 7'), INFO = STROKE('M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 11v6M12 7.5v.01');
 
 // hh:mm of date in HA's time zone, else the browser's; one formatter per language and zone
 const CLOCKS = new Map();
@@ -488,7 +490,7 @@ const STYLE = `
 .poster.gone { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .view.loading { animation: none; } .poster { transition: none; } }
 /* glass: what stays still blurs what is under it; the moving markers are the engine's, unblurred */
-.bar, .sheet, .campanel { background: var(--glass); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+.bar, .sheet, .campanel, .credit span { background: var(--glass); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
   border: 0.5px solid var(--glass-edge); box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1); }
 .bar { position: absolute; top: 12px; right: 12px; display: flex; align-items: center; padding: 4px; border-radius: 999px; }
 .seg { display: flex; padding: 3px; gap: 2px; background: var(--row); border-radius: 999px; }
@@ -497,7 +499,7 @@ const STYLE = `
 .seg button[aria-pressed="true"], .now[aria-pressed="true"] { color: #10131a; background: var(--pressed); }
 .icon-btn { display: grid; place-items: center; width: 44px; padding: 0; color: rgba(255, 255, 255, 0.85); }
 .icon-btn svg { width: 20px; height: 20px; }
-button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+button:focus-visible, .credit summary:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .sheet[hidden] { display: none; }
 .sheet { position: absolute; top: 72px; right: 12px; width: 320px; max-height: calc(100% - 88px); overflow: auto;
   border-radius: 24px; display: grid; gap: 14px; padding: 16px; box-sizing: border-box; }
@@ -531,7 +533,14 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .msg { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 16px; color: var(--muted); text-align: center; background: var(--bg); }
 .msg small { font-size: 12px; opacity: .8; }
 .msg .now { justify-self: center; }
-.credit { position: absolute; top: 10px; left: 12px; max-width: calc(100% - 24px); font-size: 11px; line-height: 1.3; color: var(--ink); opacity: .85; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); pointer-events: none; }
+.credit { position: absolute; z-index: 0; top: 0; left: 0; max-width: 100%; display: flex; align-items: center; font-size: 11px; line-height: 1.3; color: var(--ink); }
+.credit summary { list-style: none; display: grid; place-items: center; width: 44px; height: 44px; flex: none; cursor: pointer; opacity: .75; border-radius: 999px; }
+.credit summary::-webkit-details-marker { display: none; }
+.credit summary svg { width: 18px; height: 18px; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7)); }
+.credit[open] summary, .credit summary:hover { opacity: 1; }
+.credit span { padding: 5px 10px; border-radius: 10px; box-shadow: none; pointer-events: none; }
+/* the controls stay above an open credit line */
+.bar, .sheet, .campanel { z-index: 1; }
 /* narrow follows the card's own width: a panel view on a wide screen can still be narrow */
 .narrow .bar { top: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: 50%; transform: translateX(50%); }
 /* a hero keeps its buttons in the corner and drops its sheet from them */
@@ -564,7 +573,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 :host([hero]) .campanel { left: 8px; right: 8px; bottom: 8px; width: auto; max-width: 420px; }
 :host([hero]) .campanel .pic { aspect-ratio: auto; height: min(236px, calc(var(--house3d-height, 480px) - 150px)); }
 @media (prefers-reduced-transparency: reduce) {
-  .bar, .sheet, .campanel { background: rgba(26, 30, 42, 0.97); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+  .bar, .sheet, .campanel, .credit span { background: rgba(26, 30, 42, 0.97); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 `;
 
 // the helpers above are imported by the Node tests, where there is no DOM to define the card in
@@ -948,14 +957,14 @@ export class House3dCard extends Base {
       <button type="button" class="now" data-act="now" aria-pressed="true">${t.now}</button>`;
   }
 
-  // the licence asks for the licensor, the dataset and its date; the bottom corners hold the
-  // phone's button bar, so the line sits top left. Only ETAK data is credited: a made-up
-  // surroundings layer (the demo's test house) names no licensor.
+  // the licence asks for the licensor, the dataset and its date: the line opens from an info
+  // button top left, since the bottom corners hold the phone's button bar. Only ETAK data is
+  // credited: a made-up surroundings layer (the demo's test house) names no licensor.
   _credit() {
     const sur = this._config.model.surroundings;
     if (!sur || !String(sur.source || '').startsWith('ETAK,')) return '';
     const d = /(\d{4})-(\d{2})-(\d{2})/.exec(sur.source || '');
-    return `<div class="credit">${this._t.credit}${d ? `, ${d[3]}.${d[2]}.${d[1]}` : ''}</div>`;
+    return `<details class="credit"><summary aria-label="${this._t.source}">${INFO}</summary><span>${this._t.credit}${d ? `, ${d[3]}.${d[2]}.${d[1]}` : ''}</span></details>`;
   }
 
   _push() {
