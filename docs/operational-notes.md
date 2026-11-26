@@ -515,7 +515,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   and chips, their CSS, the collision pass and the hover and tap
   rectangles), loaded with the kit and the sun and built by the core with
   what it reads passed in (`createOverlay(deps)`). The
-  interior layer is the real style's only and reads the building layer's
+  interior layer is the lit styles' only and reads the building layer's
   room probe and wall cut (`inRoom`, `cutOf`) through its `api`
   (`ctx.layer('building')`), so it comes after
   it in `LAYERS` and builds nothing without it. A new scene layer is a module there plus its
@@ -544,7 +544,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   one. khe-house3d's `fixture-twostorey.md` is the
   made-up house that exercises all of it, and its geometry baseline pins
   where the roof-reading layers stand on the main fixture.
-- **A house's look:** the real style's finishes are the model's
+- **A house's look:** the lit styles' finishes are the model's
   `geometry.look` ([khe-house3d ADR-001](https://github.com/khelias/khe-house3d/blob/main/docs/decisions/001-own-3d-engine.md) point 6, the
   fields in `scripts/house3d_model.py`'s docstring): surface colours and
   finishes by the kit's names, plain cladding or boards at 0, 45 or 90
@@ -599,12 +599,12 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   Sprites and transparent objects stay out of the pass's normals, so glass and
   sheers leave no halo. The shadows fade over 0.3 s as the roof opens and
   closes, and the render loop runs only during that fade.
-- **The sun** in the real style comes from HA's own location
+- **The sun** in the lit styles comes from HA's own location
   (`hass.config.latitude`/`longitude`, read at runtime, never stored in the
   card config) and the model's `georef.x_axis_bearing_deg`, the plan's
   L-EST97 grid bearing. Sun azimuths are from true north; `sun.js` turns them
   to grid azimuths with the projection's convergence, 0.854 x (lon - 24)
-  degrees. Without a location the real style uses a fixed afternoon sun. Its
+  degrees. Without a location the lit styles use a fixed afternoon sun. Its
   whole look per altitude is `realLight()` in `sun.js`, tuned by eye on
   renders of the real house on 12 November and 21 June (the round
   ADR-006 left open): a sky gradient from horizon to zenith, day above 8
@@ -637,12 +637,12 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   "ceiling" | "wall", "face"?: [dx, dz] }`, `face` the outward direction a
   wall light needs. A luminaire is a fixed part of the building like a
   window, so it is shareable geometry (ADR-001's split) and reaches the
-  standalone viewer. The `lights` layer draws each in the real style as a
+  standalone viewer. The `lights` layer draws each in the lit styles as a
   small anthracite fixture that glows warm whenever it is dark, with a halo
   and a pool of light on the ground (at 0.14 m, over the decks and the
   step), all scaled by the night; no real-time light, no shadow. It is a view
   effect of the dark, not the motion sensors: it follows no HA entity.
-- **Winter:** the `winter` layer (Kihid: Talv), the real style's alone (the
+- **Winter:** the `winter` layer (Kihid: Talv), the lit styles' alone (the
   simple style has no night, so there it is not listed), holds the Christmas
   lights and the snow. The lights are `site.festive` in the geometry layer,
   shareable decoration like `site.lights`, every key optional: `icicles`
@@ -728,7 +728,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   drag or pinch that changed it, or a wheel zoom, not a mere tap. A remount
   with a kept view counts as moved; Lähtesta vaade frames anew.
 - **Kihid:** the card's layers button opens a sheet. Its first row, Stiil,
-  picks the style; in the real style the Kellaaeg (quarter hours) and
+  picks the style; in the lit styles the Kellaaeg (quarter hours) and
   Kuupäev (days of this year) sliders scrub the sun, and Praegu returns to
   live, which moves on once a minute; the time is not stored. Below them the
   switches for the devices' markers and room chips (an alert always shows),
@@ -736,7 +736,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   gate stays shut), the neighbours and street, Tulevik (below, off until
   switched on) and Talv (on in its season, above); that choice is kept per browser in
   `localStorage` under `house3d-layers`, Talv's for its season window only. In the simple style a slider time
-  kept from the real style shows a Praegu button there too. Escape closes any sheet, and so
+  kept from a lit style shows a Praegu button there too. Escape closes any sheet, and so
   does a tap on empty canvas. Below 600 px of the card's own width (not the
   screen's) the bar moves to the bottom and a sheet opens just above it, so
   the bar's buttons stay in reach. A hero keeps its buttons in its top right
@@ -796,7 +796,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   `chair` (a black shell on wooden legs with a steel cross) or an
   `office_chair` its one `back` edge. A `plant` is a pot and a rounded crown,
   with `bloom: true` a vase of flowers; a `picture` is a framed canvas in
-  one of three palettes, its `art` 0 (the default) to 2. The real style draws an item by its kind inside its footprint
+  one of three palettes, its `art` 0 (the default) to 2. The lit styles draw an item by its kind inside its footprint
   and heights (a table's or desk's legs alone reach down to the floor),
   turning it to the nearest wall face and a bed's head to its headboard; a
   toilet's head and a washer's back go on whichever edge of the rect is
@@ -820,7 +820,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   more diffuse, 0.86 of it per kWp on the panel's tilt, never over 0.8 kW per
   kWp as the assessment found at this slope), following the minute tick and
   the sliders, and left out without a location. It is a ceiling, not a
-  forecast: no clouds, no shading. The sun is computed in both styles for
+  forecast: no clouds, no shading. The sun is computed in every style for
   it (`onSun`, the view's `sun`). The standalone viewer never gets the
   layer; the scan covers the items' positions.
 - **Placing devices, trees and future items:** khe-house3d's `scripts/house3d-place.py serve <model>`
