@@ -737,7 +737,7 @@ export function stageLayers(style, stage) {
  *   that starts on one orbits; a tap on the canvas tests the shown markers' and chips' rectangles
  *   first. Every frame a collision pass (scene/overlay.js's collide(), which gives the order)
  *   places the markers and chips, shrinks the crowded ones and hides what is left; an alert never
- *   hides. Showing and hiding fade over 0.2 s.
+ *   hides, and the pass never hides a camera, which keeps at least its dot. Showing and hiding fade over 0.2 s.
  * setRoomChips([{ room, parts: [{ icon, text?, label?, state? }], state: 'idle'|'on'|'alert', ids?: [id] }]):
  *   one chip per house room (not a paved one), at the room's label in place of it, with the roof
  *   off only. A chipped room's markers that are neither 'on' nor 'alert', and those in its ids,

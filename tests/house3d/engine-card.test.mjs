@@ -384,9 +384,10 @@ test('card: a camera with a look is drawn ahead on its fan, its pos stays the ca
   const cam = { entity: 'camera.a', type: 'camera', pos: [1, 2.6, 1], look: [1, 0] };
   const m = card.toMarker(cam, { state: 'idle' });
   assert.deepEqual(m.pos, [1, 2.6, 1]);
-  assert.deepEqual(m.at, [2.5, 2.6, 1]);
+  assert.deepEqual(m.at, [4, 2.6, 1]);
   assert.equal(card.toMarker({ ...cam, look: undefined }, { state: 'idle' }).at, undefined);
-  assert.deepEqual(card.toMarker({ ...cam, look: [0, 4] }, { state: 'idle' }).at, [1, 2.6, 2.5]);
+  assert.equal(card.toMarker({ ...cam, room: 'hall' }, { state: 'idle' }).at, undefined, 'an indoor camera stays at its device');
+  assert.deepEqual(card.toMarker({ ...cam, look: [0, 4] }, { state: 'idle' }).at, [1, 2.6, 4]);
   assert.deepEqual(card.toMarker({ ...cam, look: [0, 0] }, { state: 'idle' }).at, [1, 2.6, 1]);
   assert.equal(card.toMarker({ entity: 'light.a', type: 'light', pos: [1, 2, 1], look: [1, 0] }, { state: 'off' }).at, undefined);
 });

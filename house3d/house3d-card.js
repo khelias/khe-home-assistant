@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 66;
+const HOUSE3D_VERSION = 67;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -152,9 +152,9 @@ export function cameraStillUrl(st, t) {
   return pic ? `${pic}${pic.includes('?') ? '&' : '?'}t=${t}` : null;
 }
 
-// a camera's marker is drawn this far ahead along its look, on its view fan, so two cameras on
-// one corner looking apart are two markers; the fan itself starts at the camera
-const CAM_AHEAD = 1.5;
+// an outdoor camera's marker is drawn this far ahead along its look, on its view fan, so two
+// cameras on one corner looking apart are two markers; the fan itself starts at the camera
+const CAM_AHEAD = 3;
 function camAt(d) {
   const n = d.pos && d.look ? Math.hypot(d.look[0], d.look[1]) : 0;
   return n ? [d.pos[0] + d.look[0] / n * CAM_AHEAD, d.pos[1], d.pos[2] + d.look[1] / n * CAM_AHEAD] : d.pos;
@@ -328,7 +328,7 @@ export function toMarker(d, st, now = new Date(), lang = 'et') {
   const { nf1 } = formatsFor(lang);
   const m = { id: d.entity, pos: d.pos, icon: d.type, room: d.room, label: d.name, state: 'idle' };
   if (d.look) m.look = d.look;
-  if (d.type === 'camera' && d.look && d.pos) m.at = camAt(d);
+  if (d.type === 'camera' && d.look && d.pos && !d.room) m.at = camAt(d);
   if (d.role) m.role = d.role;
   if (!st || st.state === 'unavailable') { m.state = 'off'; return m; }
   const s = st.state, domain = d.entity.split('.')[0];

@@ -1,6 +1,6 @@
 {
  "repo": "khelias/khe-house3d",
- "commit": "4268b67d1279acd425570146b91506ddca8e4d4c",
+ "commit": "1082e089954eee9762cc366b02a503ad6e37596e",
  "include": [
   "house3d/",
   "scripts/house3d_model.py",
@@ -28,7 +28,7 @@
   "house3d/assets/sky-winter.ktx2": "53d8e5155101d38be6e7f147a887f16047f65b27f868ab8e26e2540d7cdd25fa",
   "house3d/assets/sources.json": "2d90af54465b0742654c4ec7545a0a715567513de1bb94b66f777e556c39e8e5",
   "house3d/assets/twig.ktx2": "dbb34a70a2767ef328fe1e8331a2ae22a79db4d16ffcc3a0623383b41ad2d6e0",
-  "house3d/house3d.js": "36008a5c4abf4f6131e752f9e0fd5b246a456143360f67f69ec8f4ee6bdeb79c",
+  "house3d/house3d.js": "ec5acf219b589d03fb1a8c35838fcd9c2ddc4d95e522318664fd0b76b8f07dde",
   "house3d/place.html": "5a3c88076886eddfde2730e2496383e4d10fcc3dee8df3c09e4cc94638b1a135",
   "house3d/scene/bake.js": "f97a2b47c40336dfe5a01ff6027605d9a32d98dac39f194c74b812a9bd5c2dce",
   "house3d/scene/kit.js": "50043471c2493d743ec2b4de234bc1a5ac9fa676cdd609384800eb7ae352da10",
@@ -46,7 +46,7 @@
   "house3d/scene/layers/trees.js": "409674712543f223fe212937d4f7f4e0e841a0a3af6a1d4984cda39d939df09c",
   "house3d/scene/layers/winter.js": "c583ab2e76df50e55676f2644863d1f00239fdbd5ae183377b822e113415e0a0",
   "house3d/scene/look.js": "672e4c173e6377c09984a1d441bdcdcd85bf35523c5d47a0aad51440aa3d7388",
-  "house3d/scene/overlay.js": "d7b0f0b4b7f01bd8bfbbaef8e1dee5be1a35233dcc8696d64bed7a0e81eb551b",
+  "house3d/scene/overlay.js": "3ed2abfce86fd2c36a9d0908c1b83b72f04f70465a01a6961761c74646b03494",
   "house3d/scene/photo.js": "3ac87124452db6fcac8445699d16b480c21dc34c288d2eec1e5be077dffb6287",
   "house3d/scene/sun.js": "638ed614a071c0a82393ccf5c72d24e067c0cc397c2a71116a5651dec79ff307",
   "house3d/vendor/three-0.187.0/LICENSE": "8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc",

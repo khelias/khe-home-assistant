@@ -74,7 +74,7 @@ export function hitRect(rects, x, y, pad = 0) {
 
 /**
  * collide(items, pad = 4) -> Map id -> level: the size index each item is drawn at, -1 hidden.
- * items: [{ id, kind: 'alert' | 'marker' | 'chip', chip?, x, y, dist, was, sizes: [[w, h, dx?, dy?], ...] }],
+ * items: [{ id, kind: 'alert' | 'marker' | 'chip', chip?, keep?, x, y, dist, was, sizes: [[w, h, dx?, dy?], ...] }],
  * centre in CSS pixels, dist from the camera, was whether it showed last frame, sizes from the
  * full one down, each optionally moved off the centre by (dx, dy). A chip's sizes are its full
  * form, then its compact form in one or more places; a marker's its full form, then a dot. A chip
@@ -83,7 +83,8 @@ export function hitRect(rects, x, y, pad = 0) {
  * marker at full size, a chip at its first compact size that fits, else its first compact size
  * anyway; every other chip at its first compact size that fits, so a room's summary survives a
  * crowd; markers at full size; each placed chip grown back to full where that fits; the markers
- * that did not fit at their smaller sizes; what is left hides. Within a pass nearest first, and
+ * that did not fit at their smaller sizes; then a keep marker that still did not fit at its dot
+ * even where that overlaps, after every other marker had its try; what is left hides. Within a pass nearest first, and
  * what showed last frame counts as 15% nearer, so a tie keeps last frame's winner. A size fits
  * when its rectangle, grown by pad, overlaps nothing placed.
  */
@@ -108,7 +109,8 @@ export function collide(items, pad = 4) {
   chips.forEach(it => { if (!fit(it, small(it))) out.set(it.id, -1); });
   const late = of('marker').filter(it => !fit(it, 0, 1));
   grow.forEach(it => { if (out.get(it.id) > 0 && free(box(it, 0), it.id)) put(it, 0); });
-  late.forEach(it => { if (!fit(it, 1)) out.set(it.id, -1); });
+  const forced = late.filter(it => !fit(it, 1));
+  forced.forEach(it => { if (it.keep) put(it, 1); else out.set(it.id, -1); });
   return out;
 }
 
@@ -323,7 +325,7 @@ export function createOverlay(deps) {
       rec.p = p;
       if (!p) continue;
       if (!rec.size) measure(rec);
-      items.push({ id: `m:${id}`, kind: m.state === 'alert' ? 'alert' : 'marker', x: p.x, y: p.y, dist: camera.position.distanceTo(v.set(...drawnAt(m))), was: rec.level >= 0, sizes: [rec.size, DOT] });
+      items.push({ id: `m:${id}`, kind: m.state === 'alert' ? 'alert' : 'marker', x: p.x, y: p.y, dist: camera.position.distanceTo(v.set(...drawnAt(m))), was: rec.level >= 0, keep: m.icon === 'camera', sizes: [rec.size, DOT] });
     }
     const levels = collide(items);
     let fading = false;

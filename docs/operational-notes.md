@@ -720,10 +720,11 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   tab shows, with the time it loaded in HA's zone, and previous, next, full
   screen and close. The arrows walk the cameras round the house as seen from
   above: the next is the one to the right of a viewer looking out through
-  the camera (clockwise), the previous the one to the left. A camera's
-  marker is drawn 1.5 m ahead along its look, at the start of its view fan
-  (the marker's `at`; the fan stays at the camera's `pos`), so two cameras
-  on one corner looking apart are two markers. Full screen opens the camera's own view
+  the camera (clockwise), the previous the one to the left. An outdoor
+  camera's marker is drawn 3 m ahead along its look, on its view fan (the marker's
+  `at`; the fan stays at the camera's `pos`), so two cameras on one corner
+  looking apart are two markers, and the collision pass never hides a
+  camera: crowded, it stays a dot. Full screen opens the camera's own view
   (`kaamera-<slug>`, the config's `views`). One sheet or panel is open at a
   time; the roof switch leaves the panel open, a room or Kihid closes it, and
   a demo scene's remount reopens it. The demo has no stills, so it shows
