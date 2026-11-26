@@ -6,7 +6,7 @@ const COLORS = {
   glass: '#5fd8ff', floor: '#0e1a3c', warm: '#6b4a1c', hover: '#24407f', sel: '#2b5aa0', amber: '#ffc56e',
   teal: '#47d9c4', hedge: '#123b45', furniture: '#7f9bff', gridMajor: '#2a4685', gridMinor: '#172a55',
   ink: '#e4ecff', alert: '#ff8b7b',
-  // the future layer's tint in both styles: a clear violet, apart from every other colour here
+  // the future layer's tint in every style: a clear violet, apart from every other colour here
   future: '#b37bff'
 };
 
