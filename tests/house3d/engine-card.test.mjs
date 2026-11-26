@@ -353,3 +353,37 @@ test('card: a poster reads back only as an image, and a failed write keeps the n
     delete globalThis.localStorage;
   }
 });
+
+test('card: cameraRing starts at the camera, then the rest nearest first, those without a place last', () => {
+  const devices = [
+    { entity: 'camera.a', pos: [0, 2, 0] },
+    { entity: 'light.x', pos: [1, 2, 0] },
+    { entity: 'camera.far', pos: [30, 2, 0] },
+    { entity: 'camera.loose' },
+    { entity: 'camera.near', pos: [3, 2, 4] },
+    { entity: 'camera.loose2' }
+  ];
+  assert.deepEqual(card.cameraRing(devices, 'camera.a'), ['camera.a', 'camera.near', 'camera.far', 'camera.loose', 'camera.loose2']);
+  assert.deepEqual(card.cameraRing(devices, 'camera.far'), ['camera.far', 'camera.near', 'camera.a', 'camera.loose', 'camera.loose2']);
+  assert.deepEqual(card.cameraRing(devices, 'camera.loose'), ['camera.loose', 'camera.a', 'camera.far', 'camera.near', 'camera.loose2']);
+  assert.deepEqual(card.cameraRing(devices, 'light.x'), []);
+  assert.deepEqual(card.cameraRing(devices, 'camera.gone'), []);
+  // the fixture's two cameras walk to each other
+  assert.deepEqual(card.cameraRing(model.devices, 'camera.test_garden'), ['camera.test_garden', 'camera.test_drive']);
+});
+
+test('card: cameraStillUrl adds a time to the picture, null without one', () => {
+  const st = pic => ({ state: 'idle', attributes: pic ? { entity_picture: pic } : {} });
+  assert.equal(card.cameraStillUrl(st('/api/camera_proxy/camera.a?token=x'), 5), '/api/camera_proxy/camera.a?token=x&t=5');
+  assert.equal(card.cameraStillUrl(st('/still.jpg'), 5), '/still.jpg?t=5');
+  assert.equal(card.cameraStillUrl(st(null), 5), null);
+  assert.equal(card.cameraStillUrl(undefined, 5), null);
+});
+
+test('card: the camera panel has its words in both languages', () => {
+  for (const lang of ['et', 'en']) {
+    const t = card.TEXT[lang];
+    for (const k of ['prevCamera', 'nextCamera', 'fullScreen', 'noStill']) assert.ok(t[k], `${lang} ${k}`);
+    assert.match(t.stillAt('14:32'), /14:32/);
+  }
+});

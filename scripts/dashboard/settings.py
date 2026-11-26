@@ -11,7 +11,7 @@ from .primitives import (
     stock_section,
     stock_tile,
 )
-from .security import cam_detect, camera_views
+from .security import cam_detect, camera_stills, camera_views
 
 
 def kaamerad_seaded(h):
@@ -462,5 +462,12 @@ def house3d_view(h, model):
         "path": E.HOUSE3D_PATH,
         "icon": "mdi:floor-plan",
         "type": "panel",
-        "cards": [{"type": "custom:house3d-card", "model": model, "views": camera_views(h)}],
+        "cards": [
+            {
+                "type": "custom:house3d-card",
+                "model": model,
+                "views": camera_views(h),
+                "stills": camera_stills(h),
+            }
+        ],
     }

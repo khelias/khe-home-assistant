@@ -149,13 +149,15 @@ export const roomArea = room => room.rects.reduce((a, q) => a + (q[2] - q[0]) * 
 
 const STYLE = `
 .h3d { position: relative; width: 100%; height: 100%; overflow: hidden;
-  --h3d-line: #6fe3ff; --h3d-ink: #e4ecff; --h3d-muted: #8a9bc2; --h3d-amber: #ffc56e; --h3d-alert: #ff8b7b;
+  --h3d-line: #6fe3ff; --h3d-ink: #fff; --h3d-muted: #8a9bc2; --h3d-amber: #ffd682; --h3d-alert: #ff5a4c;
   --h3d-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --h3d-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; --h3d-fill: rgba(22, 26, 38, 0.78);
   background: radial-gradient(ellipse at 50% 55%, #0c1631 0%, #060c1b 70%) #060c1b; }
 .h3d-stage { position: absolute; inset: 0; }
 .h3d-stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .h3d-fallback { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
-  color: var(--h3d-muted); text-align: center; font: 14px/1.45 system-ui, sans-serif; }
+  color: var(--h3d-muted); text-align: center; font: 14px/1.45 var(--h3d-ui); }
+@media (prefers-reduced-transparency: reduce) { .h3d { --h3d-fill: rgba(22, 26, 38, 0.95); } }
 ` + OVERLAY_STYLE;
 
 /**
@@ -741,7 +743,8 @@ export function stageLayers(style, stage) {
  *   keeps its parts and drops the room name, and one without parts hides. A tap on a chip calls onRoom(room).
  * focusRoom(id | null): frames that room (0.6 s; at once under reduced motion), shows all its
  *   markers and selects its floor; null returns to the overview and leaves the camera. The card
- *   uses this; setSelection(id) marks a room's floor or a marker by id and is the viewer's.
+ *   uses this; setSelection(id) marks a room's floor or a marker by id: the viewer's selection,
+ *   and the card's open camera. The two share one selection, so focusRoom() replaces it.
  *   A marker whose room is a house room shows only with the roof off, unless its state is
  *   'alert'; state 'on' warms that room's floor unless warm is false. In the lit styles at night a
  *   room glows from its brightest 'on' light's level or any of its markers' glow, whatever its

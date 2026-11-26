@@ -1,7 +1,7 @@
 // The marker and label overlay over the 3D view: the markers, the room labels and the room
 // chips, their DOM and CSS, the collision pass that places them every frame, and the hover and
-// tap rectangles. createOverlay(deps) makes one mount's overlay; collide(), inChip() and hitRect()
-// are pure and exported for the tests.
+// tap rectangles. createOverlay(deps) makes one mount's overlay; collide(), inChip(), hitRect(),
+// markerClass() are pure and exported for the tests.
 //
 // The core (house3d.js) owns everything else and passes in what the overlay reads, the deps
 // createOverlay() lists. The overlay's CSS reads the --h3d-* variables the core sets on .h3d,
@@ -10,38 +10,42 @@
 export const OVERLAY_STYLE = `
 .h3d-overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; touch-action: none; }
 .h3d-marker { position: absolute; left: 0; top: 0; pointer-events: none;
-  display: flex; align-items: center; justify-content: center; gap: 5px;
-  height: 32px; min-width: 32px; padding: 0 7px; box-sizing: border-box; border-radius: 16px;
-  border: 1px solid rgba(111, 227, 255, 0.35); background: rgba(8, 16, 36, 0.88); color: var(--h3d-line);
-  font: 500 12px/1 var(--h3d-mono); font-variant-numeric: tabular-nums; cursor: pointer;
-  box-shadow: 0 0 14px rgba(111, 227, 255, 0.18);
-  transition: background-color .2s, color .2s, box-shadow .2s, border-color .2s; will-change: transform; }
-.h3d-marker svg { width: 16px; height: 16px; flex: none; }
-.h3d-marker.round { width: 32px; padding: 0; }
-.h3d-marker.on { color: #1c1406; background: var(--h3d-amber); border-color: var(--h3d-amber); box-shadow: 0 0 22px rgba(255, 197, 110, 0.55); }
-.h3d-marker.alert { color: #200806; background: var(--h3d-alert); border-color: var(--h3d-alert); box-shadow: 0 0 22px rgba(255, 139, 123, 0.6); }
-.h3d-marker.off { filter: grayscale(1); border-style: dashed; box-shadow: none; }
-.h3d-marker.sel { outline: 2px solid var(--h3d-ink); outline-offset: 2px; }
-.h3d-marker.pulse::after { content: ""; position: absolute; inset: -6px; border-radius: 22px;
-  border: 1px solid var(--h3d-amber); animation: h3d-ring 1.2s ease-out infinite; }
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  height: 40px; min-width: 40px; padding: 0 12px 0 10px; box-sizing: border-box; border-radius: 20px;
+  border: 0.5px solid rgba(255, 255, 255, 0.3); background: var(--h3d-fill); color: var(--h3d-ink);
+  font: 600 13px/1 var(--h3d-ui); font-variant-numeric: tabular-nums; cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  transition: background-color .2s, color .2s; will-change: transform; }
+.h3d-marker svg { width: 19px; height: 19px; flex: none; }
+.h3d-marker.round { width: 40px; padding: 0; }
+.h3d-marker.cam { border-radius: 13px; color: #10131a; background: rgba(255, 255, 255, 0.92); border-color: #fff; }
+.h3d-marker.on { color: #2b1d00; background: var(--h3d-amber); border-color: rgba(255, 255, 255, 0.6); box-shadow: 0 4px 18px rgba(255, 190, 90, 0.45); }
+.h3d-marker.alert { color: #280500; background: var(--h3d-alert); border-color: rgba(255, 255, 255, 0.6); box-shadow: 0 4px 18px rgba(255, 90, 76, 0.5); }
+.h3d-marker.off { color: rgba(255, 255, 255, 0.55); background: var(--h3d-fill); border: 1px dashed rgba(255, 255, 255, 0.45); box-shadow: none; }
+.h3d-marker.sel { outline: 3px solid var(--h3d-line); outline-offset: 2px; }
+.h3d-marker.pulse::after { content: ""; position: absolute; inset: -6px; border-radius: 26px;
+  border: 1.5px solid var(--h3d-amber); animation: h3d-ring 1.2s ease-out infinite; }
+.h3d-marker.cam.pulse::after { border-radius: 19px; }
 .h3d-marker.alert.pulse::after { border-color: var(--h3d-alert); }
 .h3d-marker:focus-visible { outline: 2px solid var(--h3d-amber); outline-offset: 2px; }
 @keyframes h3d-ring { from { opacity: .9; transform: scale(.85); } to { opacity: 0; transform: scale(1.35); } }
-.h3d-marker.hover { border-color: var(--h3d-ink); }
+.h3d-marker.hover { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4); }
 @media (prefers-reduced-motion: reduce) { .h3d-marker.pulse::after { animation: none; opacity: .6; } }
 .h3d-label { position: absolute; left: 0; top: 0; font: 500 10px/1 var(--h3d-mono); letter-spacing: 0.16em;
   text-transform: uppercase; color: var(--h3d-muted); white-space: nowrap; pointer-events: none; will-change: transform; }
 .h3d.h3d-narrow .h3d-label { display: none !important; }
-.h3d-marker.dot { width: 10px; min-width: 10px; height: 10px; padding: 0; border-radius: 5px; font-size: 0; gap: 0; }
+.h3d-marker.dot { width: 12px; min-width: 12px; height: 12px; padding: 0; border: 2px solid var(--h3d-ink); border-radius: 6px; font-size: 0; gap: 0; transition: none; }
 .h3d-marker.dot > * { display: none; }
-.h3d-marker.dot.pulse::after { inset: -4px; border-radius: 9px; }
+.h3d-marker.dot.off { border: 2px dashed rgba(255, 255, 255, 0.45); }
+.h3d-marker.dot.pulse::after { inset: -5px; border-radius: 11px; }
 .h3d-chip { position: absolute; left: 0; top: 0; pointer-events: none; display: flex; align-items: center; gap: 7px;
-  height: 28px; padding: 0 9px; box-sizing: border-box; border-radius: 14px; white-space: nowrap; cursor: pointer;
-  border: 1px solid rgba(111, 227, 255, 0.28); background: rgba(8, 16, 36, 0.8); color: var(--h3d-line);
-  font: 500 11px/1 var(--h3d-mono); font-variant-numeric: tabular-nums; will-change: transform; transition: border-color .2s; }
-.h3d-chip .nm { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--h3d-muted); }
+  height: 32px; padding: 0 12px; box-sizing: border-box; border-radius: 16px; white-space: nowrap; cursor: pointer;
+  border: 0.5px solid rgba(255, 255, 255, 0.28); background: var(--h3d-fill); color: var(--h3d-ink);
+  font: 600 12px/1 var(--h3d-ui); font-variant-numeric: tabular-nums; will-change: transform; transition: border-color .2s;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); }
+.h3d-chip .nm { color: rgba(255, 255, 255, 0.65); }
 .h3d-chip .pt { display: flex; align-items: center; gap: 3px; }
-.h3d-chip svg { width: 14px; height: 14px; flex: none; }
+.h3d-chip svg { width: 15px; height: 15px; flex: none; }
 .h3d-chip.on { border-color: var(--h3d-amber); }
 .h3d-chip.on .pt.on { color: var(--h3d-amber); }
 .h3d-chip.alert { border-color: var(--h3d-alert); }
@@ -108,6 +112,25 @@ export function collide(items, pad = 4) {
   return out;
 }
 
+const hasValue = m => m.value !== undefined && m.value !== null && m.value !== '';
+
+/**
+ * markerClass(m, selected) -> a marker's class list: round without a value, its state, pulse,
+ * cam for a camera (drawn apart, since its tap opens a picture) and sel while selected.
+ */
+export function markerClass(m, selected = false) {
+  const c = ['h3d-marker'];
+  if (!hasValue(m)) c.push('round');
+  if (m.icon === 'camera') c.push('cam');
+  if (m.state === 'on' || m.state === 'alert' || m.state === 'off') c.push(m.state);
+  if (m.pulse) c.push('pulse');
+  if (selected) c.push('sel');
+  return c.join(' ');
+}
+
+// a crowded marker's dot as drawn, and as tapped: a whole marker
+const DOT = [12, 12], DOT_HIT = [40, 40];
+
 /**
  * inChip(m, chip, focus) -> true when marker m is counted in its room's chip instead of drawn
  * alone. chip is the setRoomChips entry of m's room, or null when that room shows no chip (the
@@ -155,28 +178,19 @@ export function createOverlay(deps) {
   const markers = new Map(); // id -> { data, el }
   const isIndoor = m => !!(m.room && roomById[m.room]);
 
-  function markerClass(m) {
-    const c = ['h3d-marker'];
-    if (m.value === undefined || m.value === null || m.value === '') c.push('round');
-    if (m.state === 'on' || m.state === 'alert' || m.state === 'off') c.push(m.state);
-    if (m.pulse) c.push('pulse');
-    if (deps.selection() === m.id) c.push('sel');
-    return c.join(' ');
-  }
   // a change of class or content can change the size, which is measured again on the next frame
   // that shows the marker (a hidden one measures 0)
   function renderMarker(rec) {
     const m = rec.data;
-    const cls = markerClass(m);
+    const cls = markerClass(m, deps.selection() === m.id);
     if (rec.cls !== cls) { rec.el.className = cls + (rec.hover ? ' hover' : ''); rec.cls = cls; rec.size = null; }
-    const html = icon(m.icon) + (m.value !== undefined && m.value !== null && m.value !== '' ? `<span>${esc(m.value)}</span>` : '');
+    const html = icon(m.icon) + (hasValue(m) ? `<span>${esc(m.value)}</span>` : '');
     if (rec.html !== html) { rec.el.innerHTML = html; rec.html = html; rec.size = null; }
     const label = m.label || m.id, aria = m.stateText ? `${label}, ${m.stateText}` : label;
     if (rec.aria !== aria) { rec.el.setAttribute('aria-label', aria); rec.el.title = aria; rec.aria = aria; }
   }
   // the markers on screen now, as hitRect() takes them; a marker fading in or out under the roof
   // takes taps only once it is mostly there; a dot is drawn small but tapped as a whole marker
-  const DOT = [10, 10], DOT_HIT = [32, 32];
   const shownRects = () => {
     const out = [];
     for (const [id, rec] of markers) if (rec.shown && rec.size && rec.op >= 0.5) { const [w, h] = rec.level === 1 ? DOT_HIT : rec.size; out.push({ id: `m:${id}`, x: rec.sx, y: rec.sy, w, h }); }

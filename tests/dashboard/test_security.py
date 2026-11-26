@@ -206,6 +206,16 @@ class Kaamerad(unittest.TestCase):
             self.assertEqual(c["tap_action"]["navigation_path"], "/lovelace/kaamera-" + slug)
             self.assertIn(c["tap_action"]["navigation_path"], views)
 
+    def test_every_3d_card_takes_its_camera_stills_from_the_substreams(self):
+        house3d = [c for c in walk(OVERVIEW) if c.get("type") == "custom:house3d-card"]
+        self.assertTrue(house3d)
+        subs = {"camera." + slug: "camera." + slug + "_alamvoog" for slug, _ in H.cams}
+        views = {"/lovelace/" + p for p in paths(OVERVIEW)}
+        for card in house3d:
+            self.assertEqual(card["stills"], subs)
+            self.assertEqual(set(card["views"]), set(subs))
+            self.assertLessEqual(set(card["views"].values()), views)
+
     def test_salvestised_only_with_the_nvr_app(self):
         url = [d for d in walk(CAMERAS) if d.get("action") == "url"]
         self.assertEqual(url, [{"action": "url", "url_path": HOUSE["nvr_app_url"]}])

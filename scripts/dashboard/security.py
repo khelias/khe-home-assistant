@@ -42,8 +42,14 @@ def cam_detect(slug):
 
 
 def camera_views(h):
-    """Where a camera tap in the 3D card goes: that camera's full screen (cam_view)."""
+    """Where the full-screen button of the 3D card's camera panel goes: that camera's full
+    screen (cam_view)."""
     return {"camera." + s: "/lovelace/" + cam_path(s) for s, _ in h.cams}
+
+
+def camera_stills(h):
+    """Where the 3D card's camera panel takes a camera's still from: its substream (ADR-016)."""
+    return {"camera." + s: cam_sub(s) for s, _ in h.cams}
 
 
 def camera_positions(model):

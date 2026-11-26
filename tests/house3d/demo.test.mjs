@@ -50,7 +50,9 @@ test("the shipped data: the house's Overview, A3 first and 3D last, on the demo 
   const cams = Object.fromEntries(dashboard.views.filter(v => v.path.startsWith('kaamera-')).map(v => [v.path.replace('kaamera-', 'camera.'), `/lovelace/${v.path}`]));
   const [first, last] = [dashboard.views[0], dashboard.views.at(-1)];
   assert.deepEqual([first.path, last.path], ['kodu', 'maja-3d']);
-  assert.deepEqual(last.cards, [{ type: 'custom:house3d-card', views: cams }]);
+  // the demo has one entity per camera, so a still comes from the camera itself
+  const stills = Object.fromEntries(Object.keys(cams).map(id => [id, id]));
+  assert.deepEqual(last.cards, [{ type: 'custom:house3d-card', views: cams, stills }]);
   assert.equal(typed(first).filter(c => c.type === 'custom:house3d-card').length, 3, 'the hero of each layout');
   assert.ok(first.background && first.sections[0].row_span === 2 && first.sections[1].row_span === 3);
   for (const p of ['energia', 'soojuspump', 'ventilatsioon', 'pergola', 'valve', 'kaamerad', 'teler']) assert.ok(dashboard.views.some(v => v.path === p), p);

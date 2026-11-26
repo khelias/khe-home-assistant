@@ -27,7 +27,7 @@ export const { createLook } = await import(new URL('scene/look.js', E));
 export const { photoLook } = await import(new URL('scene/photo.js', E));
 export const BUILDERS = await Promise.all(LAYERS.map(id => import(new URL(`scene/layers/${id}.js`, E))));
 export const { modelFrame, seasonOn, seasonWindow, buildLayer, guardLayer, syncCamera, toScreen, releaseVelocity, coast, homeBox, homeDir, homeView, pvNow, roofNormal, roofTop, tapAction, aoWanted, resolveStyle, autoQuality } = await import(new URL('house3d.js', E));
-export const { collide, inChip, hitRect } = await import(new URL('scene/overlay.js', E));
+export const { collide, inChip, hitRect, markerClass } = await import(new URL('scene/overlay.js', E));
 export const { OrbitControls } = await import(new URL('vendor/three-0.187.0/examples/jsm/controls/OrbitControls.js', E));
 export const { sunPosition, gridBearing, sunDirection, sunGlow, realLight } = await import(new URL('scene/sun.js', E));
 export const { cornerBoards } = await import(new URL('scene/layers/building.js', E));

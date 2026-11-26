@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 63;
+const HOUSE3D_VERSION = 64;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -75,7 +75,12 @@ export const TEXT = {
     smoke: 'suitsuandur annab häiret',
     smokes: n => `${n} suitsuandurit annab häiret`,
     alarm: 'häire',
-    armed: 'valve on peal'
+    armed: 'valve on peal',
+    prevCamera: 'Eelmine kaamera',
+    nextCamera: 'Järgmine kaamera',
+    fullScreen: 'Täisekraan',
+    noStill: 'Pilti pole',
+    stillAt: hhmm => `Pilt kell ${hhmm}`
   },
   en: {
     locale: 'en-GB',
@@ -118,7 +123,12 @@ export const TEXT = {
     smoke: 'smoke alarm going off',
     smokes: n => `${n} smoke alarms going off`,
     alarm: 'alarm',
-    armed: 'armed'
+    armed: 'armed',
+    prevCamera: 'Previous camera',
+    nextCamera: 'Next camera',
+    fullScreen: 'Full screen',
+    noStill: 'No picture',
+    stillAt: hhmm => `Picture at ${hhmm}`
   }
 };
 const FORMATS = Object.fromEntries(Object.entries(TEXT).map(([lang, { locale }]) => [lang, {
@@ -132,6 +142,45 @@ const formatsFor = lang => FORMATS[langOf(lang)];
 
 const esc = s => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
 const num = v => (v === null || v === undefined || v === '' || isNaN(Number(v)) ? null : Number(v));
+
+// cameraStillUrl(st, t) -> a camera's still: the state's entity_picture (camera_proxy with its
+// rotating token, so read from the current state at each load) with a time parameter so no cache
+// answers; null without a picture. The twin of cards/parts/media.js cameraUrl, which this card,
+// deployed apart from the cards, cannot import.
+export function cameraStillUrl(st, t) {
+  const pic = st && st.attributes && st.attributes.entity_picture;
+  return pic ? `${pic}${pic.includes('?') ? '&' : '?'}t=${t}` : null;
+}
+
+// cameraRing(devices, id) -> the camera entities the panel's arrows walk from id: id first, then
+// the other cameras nearest first by plan position (as the camera subviews order them), those
+// without a position last in config order; [] when id is not a camera device.
+export function cameraRing(devices, id) {
+  const cams = devices.filter(d => d.entity.startsWith('camera.'));
+  const here = cams.find(d => d.entity === id);
+  if (!here) return [];
+  const dist = d => (here.pos && d.pos ? Math.hypot(...d.pos.map((v, i) => v - here.pos[i])) : Infinity);
+  const rest = cams.filter(d => d !== here).map((d, i) => ({ id: d.entity, i, k: dist(d) }));
+  return [id, ...rest.sort((a, b) => a.k - b.k || a.i - b.i).map(r => r.id)];
+}
+
+// a still is fetched every CAM_STILL_MS while its panel shows, as Kaamerad's large still (ADR-016)
+const CAM_STILL_MS = 10e3, CAM_STALL_MS = 15e3;
+const CHEVRON = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+const PREV = CHEVRON('M15 5l-7 7 7 7'), NEXT = CHEVRON('M9 5l7 7-7 7');
+
+// hh:mm of date in HA's time zone, else the browser's; one formatter per language and zone
+const CLOCKS = new Map();
+function clockIn(date, lang, tz) {
+  const key = `${langOf(lang)} ${tz || ''}`;
+  if (!CLOCKS.has(key)) {
+    const opts = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }, locale = textFor(lang).locale;
+    let fmt;
+    try { fmt = new Intl.DateTimeFormat(locale, { ...opts, timeZone: tz || undefined }); } catch { fmt = new Intl.DateTimeFormat(locale, opts); }
+    CLOCKS.set(key, fmt);
+  }
+  return CLOCKS.get(key).format(date);
+}
 
 // The car drives in once per arrival per browser: the last arrival key seen is stored per entity.
 // Storage can throw (private mode, blocked site data), so a module-level copy keeps a remount from
@@ -406,8 +455,9 @@ const STYLE = `
 :host([hero]:not([panel])) canvas { touch-action: pan-y !important; }
 .wrap { display: block; position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: var(--ha-card-border-radius, 12px);
   --ink: #e4ecff; --muted: #8a9bc2; --line: #6fe3ff; --amber: #ffc56e; --alert: #ff8b7b; --bg: #060c1b;
-  --panel: rgba(10, 18, 38, 0.9); --edge: rgba(111, 227, 255, 0.18); --chip: rgba(111, 227, 255, 0.08);
-  color: var(--ink); font: 14px/1.45 var(--paper-font-body1_-_font-family, system-ui, sans-serif); }
+  --glass: rgba(26, 30, 42, 0.62); --glass-edge: rgba(255, 255, 255, 0.2); --row: rgba(255, 255, 255, 0.08); --pressed: rgba(255, 255, 255, 0.92);
+  --blur: blur(16px);
+  color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", var(--paper-font-body1_-_font-family, system-ui), sans-serif; }
 :host([panel]) .wrap { border-radius: 0; }
 .view { position: absolute; inset: 0; }
 .view.loading { background: linear-gradient(100deg, transparent 35%, rgba(111, 227, 255, 0.06) 50%, transparent 65%) 0 0 / 300% 100%;
@@ -416,45 +466,47 @@ const STYLE = `
 .poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; transition: opacity 0.3s ease; }
 .poster.gone { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .view.loading { animation: none; } .poster { transition: none; } }
-.bar { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; align-items: center; }
-.seg { display: flex; padding: 3px; gap: 2px; background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; }
-.seg button, .icon-btn { font: inherit; font-size: 13px; font-weight: 500; line-height: 1; color: var(--muted); background: transparent; border: 0; border-radius: 7px; padding: 9px 12px; cursor: pointer; white-space: nowrap; }
-.seg button[aria-pressed="true"] { color: var(--bg); background: var(--line); }
-.icon-btn { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; }
-.icon-btn svg { width: 18px; height: 18px; }
+/* glass: what stays still blurs what is under it; the moving markers are the engine's, unblurred */
+.bar, .sheet, .campanel { background: var(--glass); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  border: 0.5px solid var(--glass-edge); box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1); }
+.bar { position: absolute; top: 12px; right: 12px; display: flex; align-items: center; padding: 4px; border-radius: 999px; }
+.seg { display: flex; padding: 3px; gap: 2px; background: var(--row); border-radius: 999px; }
+.bar .seg { padding: 0; background: transparent; }
+.seg button, .icon-btn { font: inherit; font-size: 14px; font-weight: 600; line-height: 1; color: rgba(255, 255, 255, 0.75); background: transparent; border: 0; border-radius: 999px; padding: 0 16px; height: 44px; cursor: pointer; white-space: nowrap; }
+.seg button[aria-pressed="true"], .now[aria-pressed="true"] { color: #10131a; background: var(--pressed); }
+.icon-btn { display: grid; place-items: center; width: 44px; padding: 0; color: rgba(255, 255, 255, 0.85); }
+.icon-btn svg { width: 20px; height: 20px; }
 button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .sheet[hidden] { display: none; }
-.sheet { position: absolute; top: 64px; right: 12px; width: 320px; max-height: calc(100% - 80px); overflow: auto;
-  background: var(--panel); border: 1px solid var(--edge); border-radius: 14px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-  display: grid; gap: 14px; padding: 16px; box-sizing: border-box; }
+.sheet { position: absolute; top: 72px; right: 12px; width: 320px; max-height: calc(100% - 88px); overflow: auto;
+  border-radius: 24px; display: grid; gap: 14px; padding: 16px; box-sizing: border-box; }
 .head { display: grid; grid-template-columns: 1fr 40px; gap: 12px; align-items: start; }
 .head h2 { margin: 0; font-size: 19px; font-weight: 600; line-height: 1.2; }
 .head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
-.close { width: 40px; height: 40px; margin: -6px -6px 0 0; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.close { width: 40px; height: 40px; margin: -6px -6px 0 0; border-radius: 20px; border: 0; background: var(--row); color: var(--ink); cursor: pointer; display: grid; place-items: center; }
 .close svg { width: 18px; height: 18px; }
 .list { display: grid; gap: 6px; }
-.list button { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; text-align: left; width: 100%;
-  font: inherit; font-size: 14px; line-height: 1.2; color: var(--ink); background: var(--chip); border: 1px solid transparent; border-radius: 9px; padding: 9px 10px; cursor: pointer; }
-.list button svg { width: 18px; height: 18px; color: var(--line); }
+.list button { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; text-align: left; width: 100%; min-height: 44px;
+  font: inherit; font-size: 14px; line-height: 1.2; color: var(--ink); background: var(--row); border: 0; border-radius: 14px; padding: 10px 12px; cursor: pointer; }
+.list button svg { width: 18px; height: 18px; color: rgba(255, 255, 255, 0.8); }
 .list button.on svg { color: var(--amber); }
 .list button.alert svg { color: var(--alert); }
 .list .st { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .empty { color: var(--muted); }
-.pv { margin: 0; padding: 9px 10px; border-radius: 9px; background: var(--chip); font-variant-numeric: tabular-nums; }
+.pv { margin: 0; padding: 10px 12px; border-radius: 14px; background: var(--row); font-variant-numeric: tabular-nums; }
 .facts { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
 .list.switches button { grid-template-columns: 1fr auto; }
-.sw { position: relative; width: 34px; height: 20px; border-radius: 10px; background: rgba(138, 155, 194, 0.25); transition: background-color .15s; }
-.sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: transform .15s, background-color .15s; }
-[aria-checked="true"] .sw { background: rgba(111, 227, 255, 0.35); }
-[aria-checked="true"] .sw::after { transform: translateX(14px); background: var(--line); }
+.sw { position: relative; width: 44px; height: 26px; border-radius: 13px; background: rgba(255, 255, 255, 0.16); transition: background-color .15s; }
+.sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: transform .15s; }
+[aria-checked="true"] .sw { background: var(--line); }
+[aria-checked="true"] .sw::after { transform: translateX(18px); }
 @media (prefers-reduced-motion: reduce) { .sw, .sw::after { transition: none; } }
 .row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
-.sheet .seg button { padding: 7px 12px; }
+.sheet .seg button { height: 34px; padding: 0 12px; font-size: 13px; }
 .slider { display: grid; gap: 6px; }
 .slider output { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.slider input { width: 100%; margin: 0; accent-color: var(--line); }
-.now { justify-self: start; font: inherit; font-size: 13px; line-height: 1; color: var(--ink); background: var(--chip); border: 1px solid var(--edge); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
-.now[aria-pressed="true"] { color: var(--bg); background: var(--line); border-color: var(--line); }
+.slider input { width: 100%; margin: 0; accent-color: #fff; }
+.now { justify-self: start; font: inherit; font-size: 13px; font-weight: 600; line-height: 1; color: var(--ink); background: var(--row); border: 0; border-radius: 999px; padding: 0 14px; height: 34px; cursor: pointer; }
 .msg { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 16px; color: var(--muted); text-align: center; background: var(--bg); }
 .msg small { font-size: 12px; opacity: .8; }
 .msg .now { justify-self: center; }
@@ -462,13 +514,36 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 /* narrow follows the card's own width: a panel view on a wide screen can still be narrow */
 .narrow .bar { top: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: 50%; transform: translateX(50%); }
 /* a hero keeps its buttons in the corner and drops its sheet from them */
-:host([hero]) .credit { max-width: calc(100% - 76px); }
-:host([hero]) .to-full .credit { max-width: calc(100% - 124px); }
+:host([hero]) .credit { max-width: calc(100% - 84px); }
+:host([hero]) .to-full .credit { max-width: calc(100% - 132px); }
 :host([hero]) .narrow .bar { top: 12px; bottom: auto; right: 12px; transform: none; }
-:host([hero]) .narrow .sheet { top: 60px; bottom: 8px; max-height: none; }
+:host([hero]) .narrow .sheet { top: 68px; bottom: 8px; max-height: none; }
 /* the sheet ends above the bar, so its buttons stay in reach */
-.narrow .sheet { top: auto; left: 8px; right: 8px; bottom: calc(66px + env(safe-area-inset-bottom, 0px)); width: auto;
-  max-height: calc(100% - 82px - env(safe-area-inset-bottom, 0px)); }
+.narrow .sheet { top: auto; left: 8px; right: 8px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); width: auto;
+  max-height: calc(100% - 92px - env(safe-area-inset-bottom, 0px)); }
+/* a camera's picture: bottom left, above the bar when narrow, across the bottom of a hero */
+.campanel[hidden] { display: none; }
+.campanel { position: absolute; left: 12px; bottom: 12px; width: 360px; max-width: calc(100% - 24px); box-sizing: border-box; padding: 8px; border-radius: 26px; }
+.campanel .pic { position: relative; aspect-ratio: 16 / 9; border-radius: 18px; overflow: hidden; background: rgba(0, 0, 0, 0.35); }
+.campanel .pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.campanel .pic img:not([src]) { display: none; }
+.campanel .pic.stale img { opacity: 0.45; }
+.campanel .ph { position: absolute; inset: 0; display: none; place-items: center; color: var(--muted); font-size: 13px; }
+.campanel .pic.none .ph { display: grid; }
+.campanel .foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 2px 2px 10px; }
+.campanel .txt { min-width: 0; }
+.campanel .nm { font-size: 17px; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.campanel .sub { margin-top: 2px; font-size: 13px; color: rgba(255, 255, 255, 0.6); font-variant-numeric: tabular-nums; }
+.campanel .sub:empty { display: none; }
+.campanel .acts { display: flex; gap: 6px; flex: none; }
+.campanel .acts button { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 20px; background: var(--row); color: var(--ink); cursor: pointer; }
+.campanel .acts button[hidden] { display: none; }
+.campanel .acts svg { width: 18px; height: 18px; }
+.narrow .campanel { left: 8px; right: 8px; width: auto; max-width: none; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+:host([hero]) .campanel { left: 8px; right: 8px; bottom: 8px; width: auto; max-width: 420px; }
+:host([hero]) .campanel .pic { aspect-ratio: auto; height: min(236px, calc(var(--house3d-height, 480px) - 150px)); }
+@media (prefers-reduced-transparency: reduce) {
+  .bar, .sheet, .campanel { background: rgba(26, 30, 42, 0.97); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 `;
 
 // the helpers above are imported by the Node tests, where there is no DOM to define the card in
@@ -583,6 +658,9 @@ export class House3dCard extends Base {
       const from = ev.composedPath()[0];
       if (ev.key === 'Escape' && this._sheet && (ev.composedPath().includes(this) || from === document.body || from === document.documentElement)) this._closeAny();
     });
+    // back on a hidden tab, an open camera's still is fetched at once
+    this._onVisible = this._onVisible || (() => { if (this._cam) this._runStill(); });
+    document.addEventListener('visibilitychange', this._onVisible);
     window.addEventListener('resize', this._onResize);
     window.addEventListener('keydown', this._onKey);
     if (window.visualViewport) window.visualViewport.addEventListener('resize', this._onResize);
@@ -591,6 +669,7 @@ export class House3dCard extends Base {
   }
   // leaving the view and coming back (HA disconnects the card) starts from the same camera and roof
   disconnectedCallback() {
+    document.removeEventListener('visibilitychange', this._onVisible);
     window.removeEventListener('resize', this._onResize);
     window.removeEventListener('keydown', this._onKey);
     if (window.visualViewport) window.visualViewport.removeEventListener('resize', this._onResize);
@@ -616,6 +695,7 @@ export class House3dCard extends Base {
   }
 
   _unmount() {
+    this._stopStill();
     this._glowTick(false);
     if (this._seasonTimer) { clearInterval(this._seasonTimer); this._seasonTimer = null; }
     if (this._view) { this._view.dispose(); this._view = null; }
@@ -640,8 +720,9 @@ export class House3dCard extends Base {
         <button type="button" class="icon-btn" data-act="reset" aria-label="${t.resetView}" title="${t.resetView}"></button>`}${full ? `
         <button type="button" class="icon-btn" data-act="full" aria-label="${t.fullView}" title="${t.fullView}"></button>` : ''}
         <button type="button" class="icon-btn" data-act="layers" aria-label="${this._isHero ? t.view : t.layersTitle}" title="${this._isHero ? t.view : t.layersTitle}" aria-expanded="false"></button></div>
-      <aside class="sheet" hidden aria-live="polite"></aside>${this._credit()}</ha-card>`;
+      <aside class="sheet" hidden aria-live="polite"></aside><section class="campanel" hidden></section>${this._credit()}</ha-card>`;
     this._sheet = null;
+    this._cam = null;
     const wrap = sr.querySelector('.wrap');
     // a hero lets the wheel scroll the page, where OrbitControls on the canvas would zoom the house
     wrap.addEventListener('wheel', ev => { if (this.hasAttribute('hero') && !this.hasAttribute('panel')) ev.stopPropagation(); }, { capture: true });
@@ -672,8 +753,8 @@ export class House3dCard extends Base {
         onRoom: id => (id || this._sheet !== 'layers' ? this._openRoom(id) : this._closeSheet()),
         onMode: m => {
           sr.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
-          // the roof going on closes a room sheet; a future item's stays
-          if (m === 'roof' && this._sheet !== 'feature') this._openRoom(null);
+          // the roof going on closes a room sheet; a future item's and a camera's stay
+          if (m === 'roof' && this._sheet !== 'feature' && this._sheet !== 'camera') this._openRoom(null);
         },
         onFeature: id => this._openFeature(id),
         // the sun moves on once a minute and with the sliders; an open PV sheet follows it
@@ -718,6 +799,14 @@ export class House3dCard extends Base {
         }
         if (ev.target.closest('[data-act="close"]')) return this._sheet === 'layers' ? this._closeSheet() : this._openRoom(null);
       });
+      sr.querySelector('.campanel').addEventListener('click', ev => {
+        const b = ev.target.closest('[data-cam]'), cam = this._cam;
+        if (!b || !cam) return;
+        const step = { prev: -1, next: 1 }[b.dataset.cam], i = cam.ring.indexOf(cam.id), n = cam.ring.length;
+        if (step) this._openCamera(cam.ring[(i + step + n) % n], cam.ring);
+        else if (b.dataset.cam === 'full') this._go(cam.id);
+        else this._closeCamera();
+      });
       sr.querySelector('.sheet').addEventListener('input', ev => { if (ev.target.closest('[data-time]')) this._setTime(this._sliderTime()); });
       this._states.clear();
       this._pushed = false;
@@ -727,6 +816,7 @@ export class House3dCard extends Base {
       if (this._time) this._view.setTime(this._time);
       if (this._hass) this.hass = this._hass;
       if (keep.layers) this._openLayers();
+      if (keep.camera) this._openCamera(keep.camera.id, keep.camera.ring);
     }).catch(err => {
       // a newer render or a disconnect owns the card now; a mount that threw has cleared the token
       if ((this._mounting && this._mounting !== token) || !this.isConnected) return;
@@ -784,7 +874,7 @@ export class House3dCard extends Base {
   }
 
   _remount() {
-    if (this._view) this._keep = { mode: this._view.mode, view: this._view.view, layers: this._sheet === 'layers' };
+    if (this._view) this._keep = { mode: this._view.mode, view: this._view.view, layers: this._sheet === 'layers', camera: this._cam };
     this._unmount();
     this._render();
   }
@@ -899,13 +989,102 @@ export class House3dCard extends Base {
     });
   }
 
-  // config.views maps an entity to the view a tap opens instead of more-info. A camera's full
-  // screen shows a still while the live stream starts and steps to the next camera, so two
-  // cameras drawn on top of each other are one tap and one arrow apart
+  // a camera opens its picture over the view, so two cameras drawn on top of each other are one
+  // tap and one arrow apart; anything else goes where _go() sends it
   _open(entityId) {
+    if (entityId.startsWith('camera.') && cameraRing(this._devices, entityId).length) this._openCamera(entityId);
+    else this._go(entityId);
+  }
+
+  // config.views maps an entity to the view it opens instead of more-info: a camera's full screen
+  _go(entityId) {
     const path = (this._config.views || {})[entityId];
     if (path) this._navigate(path);
     else this._moreInfo(entityId);
+  }
+
+  // a camera's picture over the view: config.stills maps it to the entity its still comes from
+  // (the substream, ADR-016), fetched now and every CAM_STILL_MS while the tab shows; ring is the
+  // order the arrows walk, kept while they walk it. One panel or sheet is open at a time, and the
+  // camera's marker is the engine's selection, which replaces a room's focus.
+  _openCamera(id, ring = cameraRing(this._devices, id)) {
+    if (!this._view || !this._mod || !ring.length) return;
+    const sec = this.shadowRoot.querySelector('.campanel');
+    // an arrow's step keeps the panel and its buttons, so keyboard focus stays on the arrow
+    if (this._sheet !== 'camera') {
+      this._closeAny();
+      const t = this._t, mod = this._mod;
+      const btn = (act, label, svg) => `<button type="button" data-cam="${act}" aria-label="${label}" title="${label}">${svg}</button>`;
+      sec.innerHTML = `<div class="pic"><img alt=""><div class="ph">${t.noStill}</div></div>
+        <div class="foot"><div class="txt"><div class="nm"></div><div class="sub"></div></div>
+          <div class="acts">${btn('prev', t.prevCamera, PREV)}${btn('next', t.nextCamera, NEXT)}${btn('full', t.fullScreen, mod.icon('expand'))}${btn('close', t.close, mod.icon('close'))}</div></div>`;
+      sec.hidden = false;
+    }
+    this._cam = { id, ring, loading: 0, shown: false };
+    this._sheet = 'camera';
+    this._view.setSelection(id);
+    const d = this._devices.find(x => x.entity === id), name = d.name || id, pic = sec.querySelector('.pic');
+    sec.setAttribute('aria-label', name);
+    sec.querySelector('.nm').textContent = name;
+    sec.querySelector('.sub').textContent = '';
+    sec.querySelectorAll('[data-cam="prev"], [data-cam="next"]').forEach(b => { b.hidden = ring.length < 2; });
+    pic.className = 'pic';
+    pic.querySelector('img').replaceWith(Object.assign(document.createElement('img'), { alt: '' }));
+    this._runStill();
+  }
+
+  // a still now and every CAM_STILL_MS while the tab shows; a hidden tab stops the timer and
+  // showing again starts it afresh, so no load follows another a moment later
+  _runStill() {
+    this._stopStill();
+    if (document.visibilityState !== 'visible') return;
+    this._loadStill();
+    this._camTimer = setInterval(() => this._loadStill(), CAM_STILL_MS);
+  }
+
+  // the still loads into its own Image and replaces the shown one only once decoded, so a failure
+  // keeps the last good one, dimmed as stale; with none yet, or no picture in the state, the panel
+  // says so. The URL is read from the state at each load, as its token rotates. A load that has
+  // not finished in CAM_STALL_MS no longer holds the next one back.
+  _loadStill() {
+    const cam = this._cam, now = Date.now();
+    if (!cam || !this._hass || (cam.loading && now - cam.loading < CAM_STALL_MS)) return;
+    const pic = () => this._cam === cam && this.shadowRoot.querySelector('.campanel .pic');
+    const url = cameraStillUrl(this._hass.states[(this._config.stills || {})[cam.id] || cam.id], now);
+    if (!url) { if (pic()) pic().className = cam.shown ? 'pic stale' : 'pic none'; return; }
+    cam.loading = now;
+    const img = new Image();
+    img.alt = '';
+    img.src = url;
+    // decoded before the swap, so a large still does not stall the frame that shows it
+    img.decode().then(() => {
+      const el = pic();
+      if (!el) return;
+      el.querySelector('img').replaceWith(img);
+      el.className = 'pic';
+      cam.shown = true;
+      el.closest('.campanel').querySelector('.sub').textContent = this._t.stillAt(clockIn(new Date(), this._lang, (this._hass.config || {}).time_zone));
+    }, () => {
+      if (pic()) pic().className = cam.shown ? 'pic stale' : 'pic none';
+    }).finally(() => { if (cam.loading === now) cam.loading = 0; });
+  }
+
+  _stopStill() {
+    if (this._camTimer) { clearInterval(this._camTimer); this._camTimer = null; }
+  }
+
+  _closeCamera() {
+    this._stopStill();
+    this._cam = null;
+    if (this._sheet === 'camera') this._sheet = null;
+    const sec = this.shadowRoot.querySelector('.campanel');
+    if (!sec) return;
+    // focus on the panel goes back to the bar, not to the page
+    const focused = sec.contains(this.shadowRoot.activeElement);
+    sec.hidden = true;
+    sec.innerHTML = '';
+    if (this._view) this._view.setSelection(null);
+    if (focused) this.shadowRoot.querySelector('[data-act="layers"]').focus();
   }
 
   _navigate(path) {
@@ -924,6 +1103,7 @@ export class House3dCard extends Base {
 
   _closeAny() {
     if (this._sheet === 'layers') this._closeSheet();
+    else if (this._sheet === 'camera') this._closeCamera();
     else this._openRoom(null);
   }
 
@@ -938,6 +1118,7 @@ export class House3dCard extends Base {
   // a room sheet and Kihid replace each other; a tap on empty space and the roof going on close
   // only a room sheet
   _openRoom(id) {
+    if (this._sheet === 'camera') this._closeCamera();
     const sheet = this.shadowRoot.querySelector('.sheet');
     const room = id && this._config.model.rooms.find(r => r.id === id);
     if (!room && this._sheet === 'layers') return;
@@ -964,6 +1145,7 @@ export class House3dCard extends Base {
   _openFeature(id) {
     const fut = this._config.model.future || {}, item = (fut.items || []).find(it => it.id === id);
     if (!item || !this._mod) return;
+    if (this._sheet === 'camera') this._closeCamera();
     const sheet = this.shadowRoot.querySelector('.sheet');
     this._room = null;
     if (this._view) this._view.focusRoom(null);
@@ -997,6 +1179,7 @@ export class House3dCard extends Base {
   }
 
   _openLayers() {
+    if (this._sheet === 'camera') this._closeCamera();
     const sheet = this.shadowRoot.querySelector('.sheet');
     this._room = null;
     if (this._view) this._view.focusRoom(null);

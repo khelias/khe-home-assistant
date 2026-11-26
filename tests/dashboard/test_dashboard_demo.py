@@ -69,6 +69,11 @@ def is_id(s):
 MODEL = demo_model()
 CONFIG = dd.demo_config(MODEL)
 DEMO_CAMERAS = dc.camera_views(dc.House(dd.DEMO_HOUSE, dd.DEMO_PEOPLE))
+# the demo has one entity per camera, so a still comes from the camera itself
+DEMO_STILLS = {
+    k: dd.CATALOGUE[v]["id"]
+    for k, v in dc.camera_stills(dc.House(dd.DEMO_HOUSE, dd.DEMO_PEOPLE)).items()
+}
 STATES = dd.demo_states(MODEL)["states"]
 SERIES = dd.demo_series()
 DEMO_IDS = {d["entity"] for d in MODEL["devices"]} | {MODEL["car"]["entity"]}
@@ -108,8 +113,8 @@ class DemoConfig(unittest.TestCase):
         self.assertEqual(
             house3d,
             [
-                *({**c, "views": DEMO_CAMERAS} for c in HEROES),
-                {"type": "custom:house3d-card", "views": DEMO_CAMERAS},
+                *({**c, "views": DEMO_CAMERAS, "stills": DEMO_STILLS} for c in HEROES),
+                {"type": "custom:house3d-card", "views": DEMO_CAMERAS, "stills": DEMO_STILLS},
             ],
         )
 
@@ -253,8 +258,16 @@ class DemoEnglish(unittest.TestCase):
         self.assertEqual(
             house3d,
             [
-                *({**c, "views": DEMO_CAMERAS, "language": "en"} for c in HEROES),
-                {"type": "custom:house3d-card", "views": DEMO_CAMERAS, "language": "en"},
+                *(
+                    {**c, "views": DEMO_CAMERAS, "stills": DEMO_STILLS, "language": "en"}
+                    for c in HEROES
+                ),
+                {
+                    "type": "custom:house3d-card",
+                    "views": DEMO_CAMERAS,
+                    "stills": DEMO_STILLS,
+                    "language": "en",
+                },
             ],
         )
 

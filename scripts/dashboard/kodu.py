@@ -30,7 +30,7 @@ from .primitives import (
     vent_tile,
     wide,
 )
-from .security import camera_views
+from .security import camera_stills, camera_views
 
 
 def tv_tile():
@@ -139,6 +139,7 @@ def kodu(h, model):
                 "type": "custom:house3d-card",
                 "model": model,
                 "views": camera_views(h),
+                "stills": camera_stills(h),
                 "height": HERO_HEIGHT,
                 "stretch": True,
                 "full_view": "/lovelace/" + E.HOUSE3D_PATH,

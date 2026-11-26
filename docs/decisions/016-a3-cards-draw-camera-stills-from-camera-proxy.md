@@ -1,6 +1,6 @@
 # ADR-016: A3 cards draw camera stills from camera_proxy
 
-- **Status:** Accepted (2026-11-13)
+- **Status:** Accepted (2026-11-13), amended 2026-11-27 (the 3D card's camera panel)
 - **Related:** extends [ADR-002](002-own-dashboard-cards.md) (the repo's own cards) and [ADR-005](005-a3-glass-cards-history-sheet.md) (A3's glass look); [ADR-012](012-the-demo-is-the-houses-overview.md) (the demo carries no house data)
 
 ## Context
@@ -37,6 +37,13 @@ flash it.
    keeps the last good still, dimmed with when it was loaded.
 4. **No camera image reaches the repo or the demo.** The demo's cameras have
    no `entity_picture` and draw a placeholder.
+5. **The 3D card draws a still the same way** in the panel a camera's marker
+   opens (2026-11-27): the substream its config's `stills` names, read from
+   the current state at each load, one still every 10 s while the panel
+   shows and the tab is visible, at once on becoming visible, swapped in only
+   once loaded. Its full-screen button opens the camera's own view. The
+   helper that builds the URL is a copy of the cards' `cameraUrl`, since the
+   3D card is deployed apart from them.
 
 ## Alternatives considered
 
@@ -58,5 +65,7 @@ flash it.
 - Each open Kaamerad tab asks the NVR through HA for one large still every
   10 s and the others every 30 s: with four cameras about 27 KB/s while the
   page is in front.
+  An open camera panel in the 3D card adds one still every 10 s, about
+  13 KB/s.
 - Camera motion is not on the page: it fires about every 30 s, rain or not.
   A "what happened at night" needs the cameras' smart detection first.

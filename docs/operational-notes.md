@@ -700,8 +700,11 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   room); then every chip as its first part alone, at its
   place or just above or below it, so a room's summary survives a crowd;
   then markers at full size; then each chip grown to full where there is
-  room; then the markers that did not fit as 10 px dots, which still take a
-  tap as a 32 px marker. Whatever still does not fit hides.
+  room; then the markers that did not fit as 12 px dots, which still take a
+  tap as a 40 px marker. Whatever still does not fit hides. Markers are 40 px
+  translucent discs (a camera's a white rounded square) and chips 32 px, so
+  a crowd folds into dots sooner than the 32 px markers did; they carry no
+  backdrop blur, since they move every frame.
   With the roof on, indoor markers hide unless in alert and there are no
   chips, as before.
 - **Focus:** a tap on a chip or a room floor opens the room's sheet and moves
@@ -709,12 +712,19 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   all its devices show; closing the sheet, Escape or a tap on empty ground
   returns to the overview with the camera left where it is (Lähtesta vaade
   frames home). The standalone viewer keeps the plain selection
-  (`setSelection`) for its rooms and feature markers.
-- **Camera taps:** a camera's marker or sheet row opens its full screen
-  (`kaamera-<slug>`, the card config's `views`), not more-info: it shows a
-  still while the stream starts and steps to the next camera, nearest
-  first, so two cameras on top of each other in the view are a tap and an
-  arrow apart.
+  (`setSelection`) for its rooms and feature markers; the card uses it to
+  ring an open camera's marker, and a room's focus replaces it.
+- **Camera taps:** a camera's marker or sheet row opens the camera panel over
+  the view, not more-info and not a page: its still (the substream the card
+  config's `stills` names, ADR-016) fetched at once and every 10 s while the
+  tab shows, with the time it loaded in HA's zone, and previous, next, full
+  screen and close. The arrows walk the other cameras nearest first from
+  the one tapped, so two cameras on top of each other in the view are a tap
+  and an arrow apart. Full screen opens the camera's own view
+  (`kaamera-<slug>`, the config's `views`). One sheet or panel is open at a
+  time; the roof switch leaves the panel open, a room or Kihid closes it, and
+  a demo scene's remount reopens it. The demo has no stills, so it shows
+  "Pilti pole".
 - **Markers and taps:** markers are drawn over the canvas but take no
   pointer, so a drag that starts on one orbits and never scrolls the page; a
   tap (no drag past 6 px) tests the shown markers' and chips' rectangles
@@ -733,7 +743,10 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   a phone turned) frames it again until the user has moved the camera: a
   drag or pinch that changed it, or a wheel zoom, not a mere tap. A remount
   with a kept view counts as moved; Lähtesta vaade frames anew.
-- **Kihid:** the card's layers button opens a sheet. Its first row, Stiil,
+- **Kihid:** the card's buttons sit in one frosted capsule (the roof switch,
+  Lähtesta vaade and Kihid, 44 px each), and the sheets and the camera panel
+  are frosted the same way; under reduced transparency they are opaque. The
+  layers button opens a sheet. Its first row, Stiil,
   picks the style; in the lit styles the Kellaaeg (quarter hours) and
   Kuupäev (days of this year) sliders scrub the sun, and Praegu returns to
   live, which moves on once a minute; the time is not stored. Below them the
