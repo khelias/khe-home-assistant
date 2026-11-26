@@ -807,10 +807,17 @@ MIRRORS = {
 # sample text for each templated markdown card, in the subset demo/cards.js renders
 TEXTS = {}
 
-# The demo has no sidebar: its view has four columns from 1408 px (demo/cards.js columnsFor), plus
-# up to 20 px of scrollbar, so ADR-018's wide layout starts there instead of at the house's 1716 px.
+# The demo has no sidebar: its view has three columns from 1056 px and four from 1408 px
+# (demo/cards.js columnsFor), plus up to 20 px of scrollbar, so ADR-018's layouts take the demo's
+# own widths instead of the house's, which allow for the sidebar.
 _FOUR = "(min-width: 1428px)"
-SCREENS = {dc.FOUR: _FOUR, dc.BELOW_FOUR: f"not all and {_FOUR}"}
+_THREE = "(min-width: 1076px) and (max-width: 1427px)"
+SCREENS = {
+    dc.FOUR: _FOUR,
+    dc.BELOW_FOUR: f"not all and {_FOUR}",
+    dc.THREE: _THREE,
+    dc.NOT_THREE: f"not all and {_THREE}",
+}
 
 
 def _walk(o, key=None):

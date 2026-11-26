@@ -287,7 +287,12 @@ behind every value and device. It replaced the Bubble Card trial of
   (`FOUR`, `BELOW_FOUR` in `scripts/dashboard/primitives.py`); HA drops a hidden card from
   the DOM and a section of hidden cards from the grid, so one canvas runs.
   From 1440 to 1715 px without the sidebar the view keeps ADR-010's four
-  columns. The demo, which has no sidebar, takes the left half from 1428 px
+  columns. From 1364 to 1439 px, three columns with or without the
+  sidebar, the hero is two columns wide, Elekter beside it, Kliima two
+  columns wide under it and Juhtimine beside Kliima (`THREE`,
+  `NOT_THREE`, ADR-018 decision 4); other three-column screens, a 1440 px
+  laptop with the sidebar open among them, keep ADR-010's. The demo, which has no sidebar, takes
+  that layout from 1076 px and the left half from 1428 px
   (`dashboard_demo.SCREENS`).
 - **The hero:** the 3D card's optional `height` (px) sets its height outside
   a panel view and its grid rows; with `stretch` too its grid rows are

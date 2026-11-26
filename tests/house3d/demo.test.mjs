@@ -51,26 +51,27 @@ test("the shipped data: the house's Overview, A3 first and 3D last, on the demo 
   const [first, last] = [dashboard.views[0], dashboard.views.at(-1)];
   assert.deepEqual([first.path, last.path], ['kodu', 'maja-3d']);
   assert.deepEqual(last.cards, [{ type: 'custom:house3d-card', views: cams }]);
-  assert.equal(typed(first).filter(c => c.type === 'custom:house3d-card').length, 2, 'the hero below and from four columns');
+  assert.equal(typed(first).filter(c => c.type === 'custom:house3d-card').length, 3, 'the hero of each layout');
   assert.ok(first.background && first.sections[0].row_span === 2 && first.sections[1].row_span === 3);
   for (const p of ['energia', 'soojuspump', 'ventilatsioon', 'pergola', 'valve', 'kaamerad', 'teler']) assert.ok(dashboard.views.some(v => v.path === p), p);
   assert.ok(dashboard.views.some(v => v.subview && v.path.startsWith('kaamera-')));
 });
 
-// HA's screen condition at a viewport width, for A3's min-width queries
+// HA's screen condition at a viewport width, for A3's min-width and min-max queries
 function atWidth(width, fn) {
   const was = globalThis.matchMedia;
   globalThis.matchMedia = q => {
-    const m = /^(not all and )?\(min-width: (\d+)px\)$/.exec(q);
+    const m = /^(not all and )?\(min-width: (\d+)px\)(?: and \(max-width: (\d+)px\))?$/.exec(q);
     assert.ok(m, q);
-    return { matches: !m[1] === width >= Number(m[2]) };
+    const inside = width >= Number(m[2]) && (!m[3] || width <= Number(m[3]));
+    return { matches: !m[1] === inside };
   };
   try { return fn(); } finally { globalThis.matchMedia = was; }
 }
 
-test('A3 shows one 3D hero at every width, the left half from the demo\'s four columns', () => {
+test('A3 shows one 3D hero at every width, the wide layouts at the demo\'s own column counts', () => {
   const kodu = dashboard.views[0];
-  for (const [width, stretch, spans] of [[1720, 'beside', [2, 1, 1, 2]], [1428, 'beside', [2, 1, 1, 2]], [1420, true, [1, 1, 1, 1]], [820, true, [1, 1, 1, 1]], [375, true, [1, 1, 1, 1]]]) {
+  for (const [width, stretch, spans] of [[1720, 'beside', [2, 1, 1, 2]], [1428, 'beside', [2, 1, 1, 2]], [1427, true, [2, 1, 2, 1]], [1280, true, [2, 1, 2, 1]], [1076, true, [2, 1, 2, 1]], [1075, true, [1, 1, 1, 1]], [820, true, [1, 1, 1, 1]], [375, true, [1, 1, 1, 1]]]) {
     atWidth(width, () => {
       const heroes = typed(kodu).filter(c => c.type === 'custom:house3d-card' && visible(c.visibility, data.states));
       assert.deepEqual(heroes.map(c => c.stretch), [stretch], `${width} px`);

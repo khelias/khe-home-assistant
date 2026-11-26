@@ -1,6 +1,6 @@
 # ADR-018: On four-column screens A3's hero covers the left half
 
-- **Status:** Accepted (2026-11-17); amended (2026-11-26): the demo takes B from its own four-column width
+- **Status:** Accepted (2026-11-17); amended (2026-11-26): the demo takes the layouts at its own column counts, and decision 4 adds a layout for three columns
 - **Related:** supersedes [ADR-010](010-a3-landscape-hero-beside-the-cards.md) decision 1 from 1716 px and extends its decision 3; [ADR-005](005-a3-glass-cards-history-sheet.md), [ADR-012](012-the-demo-is-the-houses-overview.md)
 
 ## Context
@@ -61,6 +61,16 @@ Read from HA frontend 20261028.5 (HA 2026.11):
    height is floored, so a section a fraction of a pixel taller than the
    rows it spans cannot grow them, and the sections beside it, step by
    step.
+4. **On three columns the hero is two columns wide and one row high**,
+   from 1364 to 1439 px, where the view has three columns whatever the
+   sidebar does (1088 px of content with the sidebar and the scrollbar,
+   under 1440 px without them). Elekter is beside it, Kliima two columns
+   wide under it and Juhtimine beside Kliima, so the grid has no hole
+   while B's order leaves one beside Juhtimine. Its hero keeps `stretch:
+   true` and grows to Elekter. Elekter is there twice, two rows high for
+   the other layouts and one row high here, and Kliima three times; this
+   layout's cards are under `THREE`, the rest of ADR-010's under
+   `NOT_THREE` too.
 
 ## Alternatives considered
 
@@ -97,10 +107,17 @@ Read from HA frontend 20261028.5 (HA 2026.11):
 - The demo's numbers (the hero 828 x 681 px at 1720 x 900, ending 24 px
   above the screen's bottom) come from the demo, which has no sidebar; with
   HA's sidebar open the hero is about 680 px wide.
-- The demo has no sidebar, so its view has four columns from 1408 px.
-  `dashboard_demo` rewrites the two screen conditions to 1428 px (1408 plus
-  the scrollbar), so a screen of 1428 to 1715 px gets B there
-  while the house's own dashboard keeps ADR-010's layout.
+- The demo has no sidebar, so its view has three columns from 1056 px and
+  four from 1408 px. `dashboard_demo` rewrites the screen conditions to
+  those widths plus 20 px of scrollbar, so a laptop gets decision 4's
+  layout from 1076 px and B from 1428 px. Without a scrollbar, from 1408 to
+  1427 px, the demo has four columns and decision 4's layout, the fourth
+  column empty.
+- In the house, decision 4 covers a band of 76 px. Other screens with
+  three columns keep ADR-010's layout: a 1440 to 1680 px laptop with the
+  sidebar open, and a 1180 px tablet with it collapsed.
+- Each hero carries the model inline, so the stored view holds it three
+  times; a hidden hero starts no WebGL view.
 - A section added later right of the hero, under Kliima, would pull the
   hero down to the screen's bottom too.
 - An HA bump checks, on a screen of at least 1716 px, that the hero still

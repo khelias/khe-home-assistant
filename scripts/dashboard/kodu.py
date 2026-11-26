@@ -11,7 +11,9 @@ from .primitives import (
     HERO_HEIGHT,
     MEAN,
     NARROW,
+    NOT_THREE,
     ONOFF,
+    THREE,
     WIDE,
     around,
     boost_tiles,
@@ -186,16 +188,19 @@ def kodu(h, model):
     ]
     elekter = [heading("Elekter", "/lovelace/energia"), price()]
     if hero:
-        # Below four columns ADR-010; from four columns ADR-018. HA has no span per width, so both
-        # layouts are emitted under screen visibility conditions.
+        # ADR-010 by default, ADR-018 from four columns and on three. HA has no span per
+        # width, so every layout is emitted under screen visibility conditions.
         title_chips = chips(h)
         left_half = around([{**c, "stretch": "beside"} for c in hero], title_chips)
         sections = [
-            section(screened(first(hero, title_chips), BELOW_FOUR), 1, 2),
+            section(screened(first(hero, title_chips), BELOW_FOUR, NOT_THREE), 1, 2),
             section(screened(left_half, FOUR), 2, 3),
-            section(elekter, rows=2),
+            section(screened(around(hero, title_chips), THREE), 2),
+            section(screened(elekter, NOT_THREE), rows=2),
+            section(screened(elekter, THREE)),
+            section(screened(climate, THREE), 2),
             section(controls),
-            section(screened(climate, BELOW_FOUR)),
+            section(screened(climate, BELOW_FOUR, NOT_THREE)),
             section(screened(climate, FOUR), 2),
         ]
         columns = COLUMNS

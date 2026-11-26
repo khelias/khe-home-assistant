@@ -143,58 +143,73 @@ class Layout(unittest.TestCase):
             [sec["column_span"] for sec in view["sections"][1:]], [1, 1, 1], "no span of two"
         )
         queries = {q for s in view["sections"] for c in s["cards"] for q in screens(c)}
-        self.assertFalse(queries & {D.FOUR, D.BELOW_FOUR})
+        self.assertFalse(queries & {D.FOUR, D.BELOW_FOUR, D.THREE, D.NOT_THREE})
 
-    def test_the_six_sections_and_their_spans(self):
+    def test_the_sections_and_their_spans(self):
         self.assertEqual(VIEW["max_columns"], 4)
         spans = [(s["column_span"], s.get("row_span", 1)) for s in VIEW["sections"]]
-        self.assertEqual(spans, [(1, 2), (2, 3), (1, 2), (1, 1), (1, 1), (2, 1)])
-        self.assertEqual(VIEW["sections"][2]["cards"][0]["heading"], "Elekter")
-        self.assertEqual(VIEW["sections"][3]["cards"][0]["heading"], "Juhtimine")
-        for n in (4, 5):
-            self.assertEqual(VIEW["sections"][n]["cards"][0]["heading"], "Kliima")
+        self.assertEqual(
+            spans, [(1, 2), (2, 3), (2, 1), (1, 2), (1, 1), (2, 1), (1, 1), (1, 1), (2, 1)]
+        )
+        headings = [s["cards"][0].get("heading") for s in VIEW["sections"]]
+        self.assertEqual(
+            headings[3:],
+            ["Elekter", "Elekter", "Kliima", "Juhtimine", "Kliima", "Kliima"],
+        )
         self.assertIn("var(--primary-background-color)", VIEW["background"])
 
-    def test_each_doubled_section_is_all_below_four_or_all_four(self):
-        below, half, _elekter, _controls, climate, climate_four = VIEW["sections"]
-        for sec, query in (
-            (below, D.BELOW_FOUR),
-            (climate, D.BELOW_FOUR),
-            (half, D.FOUR),
-            (climate_four, D.FOUR),
-        ):
-            for c in sec["cards"]:
-                self.assertIn(query, screens(c), c["type"])
-        for sec in VIEW["sections"][2:4]:
-            for c in sec["cards"]:
-                self.assertFalse({D.FOUR, D.BELOW_FOUR} & set(screens(c)), c["type"])
-        self.assertEqual(
-            [unscreened(c) for c in climate["cards"]], [unscreened(c) for c in climate_four["cards"]]
+    def test_each_doubled_section_belongs_to_one_layout(self):
+        below, half, three, elekter, elekter3, climate3, controls, climate, climate4 = VIEW[
+            "sections"
+        ]
+        layouts = (
+            ([below, climate], [D.BELOW_FOUR, D.NOT_THREE]),
+            ([half, climate4], [D.FOUR]),
+            ([three, elekter3, climate3], [D.THREE]),
+            ([elekter], [D.NOT_THREE]),
         )
+        for secs, queries in layouts:
+            for sec in secs:
+                for c in sec["cards"]:
+                    self.assertEqual(
+                        [q for q in screens(c) if q not in (D.WIDE, D.NARROW)], queries, c["type"]
+                    )
+        for c in controls["cards"]:
+            self.assertEqual(screens(c), [], c["type"])
+        for a, b in ((climate, climate4), (climate, climate3), (elekter, elekter3)):
+            self.assertEqual(
+                [unscreened(c) for c in a["cards"]], [unscreened(c) for c in b["cards"]]
+            )
 
-    def test_one_3d_card_on_each_side_of_four_columns(self):
+    def test_one_3d_card_per_layout(self):
         heroes = [c for c in walk(VIEW) if c.get("type") == "custom:house3d-card"]
-        self.assertEqual(len(heroes), 2)
-        below, four = heroes
-        self.assertEqual(screens(below), [D.BELOW_FOUR])
-        self.assertEqual(screens(four), [D.FOUR])
+        self.assertEqual(len(heroes), 3)
+        below, four, three = heroes
         self.assertIs(below["stretch"], True)
         self.assertEqual(four["stretch"], "beside")
+        self.assertIs(three["stretch"], True)
         self.assertEqual(below["height"], D.HERO_HEIGHT)
         self.assertEqual(below["model"], MODEL)
+        for other in (four, three):
+            self.assertEqual(
+                {k: v for k, v in below.items() if k not in ("stretch", "visibility")},
+                {k: v for k, v in other.items() if k not in ("stretch", "visibility")},
+            )
+
+    def test_on_three_columns_the_title_is_over_the_hero_and_the_chips_under_it(self):
+        title, hero, chips = VIEW["sections"][2]["cards"]
         self.assertEqual(
-            {k: v for k, v in below.items() if k not in ("stretch", "visibility")},
-            {k: v for k, v in four.items() if k not in ("stretch", "visibility")},
+            (title["part"], hero["type"], chips["part"]), ("title", "custom:house3d-card", "chips")
         )
 
     def test_below_four_the_first_section_puts_the_title_over_the_hero_on_wide_screens(self):
         title, hero, chips, narrow = VIEW["sections"][0]["cards"]
         self.assertEqual((title["part"], chips["part"]), ("title", "chips"))
         self.assertNotIn("part", narrow)
-        self.assertEqual(screens(title), [D.WIDE, D.BELOW_FOUR])
-        self.assertEqual(screens(chips), [D.WIDE, D.BELOW_FOUR])
-        self.assertEqual(screens(narrow), [D.NARROW, D.BELOW_FOUR])
-        self.assertEqual(screens(hero), [D.BELOW_FOUR])
+        self.assertEqual(screens(title), [D.WIDE, D.BELOW_FOUR, D.NOT_THREE])
+        self.assertEqual(screens(chips), [D.WIDE, D.BELOW_FOUR, D.NOT_THREE])
+        self.assertEqual(screens(narrow), [D.NARROW, D.BELOW_FOUR, D.NOT_THREE])
+        self.assertEqual(screens(hero), [D.BELOW_FOUR, D.NOT_THREE])
         strip = lambda c: {k: v for k, v in c.items() if k not in ("part", "visibility")}
         self.assertEqual(strip(title), strip(narrow))
         self.assertEqual(strip(chips), strip(narrow))

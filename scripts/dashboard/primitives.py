@@ -26,7 +26,11 @@ NARROW = "not all and (min-width: 736px)"
 # Four columns need 1440 px of content (four 320 px columns, three 32 px gaps, 32 px padding each
 # side) plus HA's 256 px sidebar and 20 px for the scrollbar.
 FOUR = "(min-width: 1716px)"
-BELOW_FOUR = "not all and (min-width: 1716px)"
+BELOW_FOUR = f"not all and {FOUR}"
+# Three columns whatever the sidebar does: 1088 px of content (three 320 px columns, two gaps, the
+# padding) with the 256 px sidebar and the scrollbar, and under 1440 px of content without them.
+THREE = "(min-width: 1364px) and (max-width: 1439px)"
+NOT_THREE = f"not all and {THREE}"
 
 MEAN = {"source": "statistics", "type": "mean"}
 ONOFF = {"source": "history"}
@@ -101,8 +105,11 @@ def around(hero, title_chips):
     return [{**title_chips, "part": "title"}, *hero, {**title_chips, "part": "chips"}]
 
 
-def screened(cards, query):
-    return [screen(c, query) for c in cards]
+def screened(cards, *queries):
+    """cards shown only on screens matching every one of queries."""
+    for q in queries:
+        cards = [screen(c, q) for c in cards]
+    return cards
 
 
 def walk(node):

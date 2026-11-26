@@ -72,7 +72,14 @@ def unscreened(c):
 
 def narrow_matches(query):
     """Whether a phone (under 736 px) matches one of A3's media queries."""
-    return {D.WIDE: False, D.NARROW: True, D.FOUR: False, D.BELOW_FOUR: True}[query]
+    return {
+        D.WIDE: False,
+        D.NARROW: True,
+        D.FOUR: False,
+        D.BELOW_FOUR: True,
+        D.THREE: False,
+        D.NOT_THREE: True,
+    }[query]
 
 
 def ids(node):

@@ -29,10 +29,11 @@ HERO = {
 }
 
 
-# ADR-010's hero below four columns, ADR-018's from four, at the demo's own four-column width
+# ADR-010's hero, and ADR-018's from four columns and on three, at the demo's own widths
 HEROES = [
-    a3.screen(HERO, dd.SCREENS[a3.BELOW_FOUR]),
+    *a3.primitives.screened([HERO], dd.SCREENS[a3.BELOW_FOUR], dd.SCREENS[a3.NOT_THREE]),
     a3.screen({**HERO, "stretch": "beside"}, dd.SCREENS[a3.FOUR]),
+    a3.screen(HERO, dd.SCREENS[a3.THREE]),
 ]
 
 
