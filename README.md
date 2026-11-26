@@ -1,21 +1,24 @@
 # khe-home-assistant
 
-The Home Assistant configuration of one house, public as a reference: the
-YAML packages, a generator for the dashboard, small tools for HA's API, and a
-3D view of the house that shows the devices in place.
+[![CI](https://github.com/khelias/khe-home-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/khelias/khe-home-assistant/actions/workflows/ci.yml)
+[![Deploy](https://github.com/khelias/khe-home-assistant/actions/workflows/deploy.yml/badge.svg)](https://github.com/khelias/khe-home-assistant/actions/workflows/deploy.yml)
 
-[![The 3D view of a made-up one-storey gable house under Home Assistant's top bar, roof off, with room chips, device markers, the pergola over the terrace, the car parked in the carport and the surroundings](docs/house3d.png)](https://khe.ee/ha/)
+The Home Assistant configuration of one house, public as a reference for
+anyone setting up their own: the YAML packages, a generator for the
+dashboard, small tools for HA's API, and a 3D view of the house that shows
+the devices in place. [Try the dashboard](https://khe.ee/ha/): the house's
+own dashboard, made by the same generator, on a made-up demo house with
+simulated devices and made-up history. It opens on home with the 3D house on
+top, then energy, heat pump, ventilation, pergola, alarm, cameras and TV,
+with the full 3D view last, in Estonian or English; tap a tile to control it
+as in Home Assistant, and watch the car drive in through the gate. The
+toolbar's scenarios play short stories on it, such as coming home, a
+break-in at night or rain on the pergola, and mark what the house's real
+automations do.
 
-**[Try the dashboard](https://khe.ee/ha/)**: the house's own dashboard,
-made by the same generator, on a made-up demo house with simulated devices
-and made-up history. It opens on home with the 3D house on top, then energy,
-heat pump, ventilation, pergola, alarm, cameras and TV, with the full 3D view
-last, in Estonian or English; tap a tile to control it as in Home Assistant,
-and watch the car drive in through the gate. The toolbar's
-scenarios play short stories on it, such as coming home, a break-in at night
-or rain on the pergola, and mark what the house's real automations do.
+[![The demo dashboard at khe.ee/ha: the made-up house in 3D with its device markers, beside the electricity price card](docs/screenshot.png)](https://khe.ee/ha/)
 
-## What is interesting here
+## How it works
 
 - **One package per device or concern.** The heat pump, ventilation, alarm,
   pergolas, energy prices and the TV each sit in their own file under
@@ -40,7 +43,19 @@ or rain on the pergola, and mark what the house's real automations do.
 The quirks behind each of these are in
 [docs/operational-notes.md](docs/operational-notes.md).
 
-## How it deploys
+## Run it
+
+The configuration runs only inside Home Assistant, which the deploy checks
+it against. The check of the scripts, the 3D view, the dashboard and the
+demo is:
+
+```bash
+bash scripts/check.sh
+```
+
+Its setup and the other commands are in [AGENTS.md](AGENTS.md).
+
+## Where it runs
 
 A push to `main` that changes the configuration, the 3D view or the
 dashboard's own cards runs a workflow on the homelab's own runner. It validates the configuration with
@@ -50,21 +65,17 @@ the new configuration live. HA's `.storage`, the recorder, the container and
 its backup stay on the server and in
 [khe-homelab](https://github.com/khelias/khe-homelab).
 
-## Checks
-
-```bash
-bash scripts/check.sh
-```
-
 ## More
 
 - [AGENTS.md](AGENTS.md) - layout, commands, rules and how HA is operated
 - [docs/operational-notes.md](docs/operational-notes.md) - integration quirks
   and the 3D view
+- [docs/decisions/](docs/decisions/) - this repo's decisions: the dashboard's
+  own cards, the demo, the A3 view
 - [ROADMAP.md](ROADMAP.md) - where the house automation is going
 - [khe-architecture](https://github.com/khelias/khe-architecture) - the
   estate this repo belongs to
 
-## License
+## Licence
 
-[MIT](LICENSE)
+MIT, see [LICENSE](LICENSE).
