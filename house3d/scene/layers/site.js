@@ -1,6 +1,6 @@
 // The lot: decks, paving, the porch and the entrance steps, the play area (sandpit, swing,
 // trampoline), the lot line, hedges, the mesh and bar fences, the outdoor units and the planters.
-// The simple style draws each as a box or lines. The real style draws the solids as lit surfaces
+// The simple style draws each as a box or lines. The lit styles draw the solids as lit surfaces
 // without outlines: the paving and porch in paving stones on metre UVs, a timber sandpit and
 // A-frame swing with a nest seat and, with a slide, a tower, climbing wall and chute, a
 // trampoline with its pad, mat, legs and a see-through net, the mesh fence as a wire texture on
@@ -9,7 +9,7 @@
 // (the net, the mesh) do neither.
 const FENCE_H = 1.2, POST_STEP = 2.5;
 const HEDGE_H = 1.6, HEDGE_W = 0.8;
-// a clipped hedge in the real style: a box cut every HEDGE_STEP along and in HEDGE_ROWS up, its
+// a clipped hedge in the lit styles: a box cut every HEDGE_STEP along and in HEDGE_ROWS up, its
 // sides pushed in by up to HEDGE_JITTER, its long top edges rounded in by HEDGE_ROUND, the top's
 // middle level at HEDGE_H (the winter cap's seat), shaded down to HEDGE_FOOT at the ground
 const HEDGE_STEP = 0.4, HEDGE_ROWS = 4, HEDGE_JITTER = 0.05, HEDGE_ROUND = 0.12, HEDGE_FOOT = 0.7;
@@ -20,34 +20,34 @@ const DECK_TOP = 0.12, PAVING_TOP = 0.02;
 
 const isTall = p => p.plant === 'thuja';
 
-export default function build({ THREE, kit, C, model, style }) {
+export default function build({ THREE, kit, C, model, look }) {
   const site = model.site || {};
   const { basic, lineMat, box, prism, edges, keep } = kit;
-  const real = style === 'real';
+  const lit = look.lit;
   const group = new THREE.Group();
-  const deckM = real ? kit.surface('deck') : basic({ color: C.teal, opacity: 0.04 });
+  const deckM = lit ? kit.surface('deck') : basic({ color: C.teal, opacity: 0.04 });
   const deckE = lineMat({ color: C.teal, opacity: 0.45 });
-  const plankM = real ? lineMat({ color: kit.REAL.fence, opacity: 0.5 }) : lineMat({ color: C.teal, opacity: 0.09 });
-  const pathM = real ? kit.surface('paving', { map: kit.pavers() }) : basic({ color: C.lineSoft, opacity: 0.05 });
+  const plankM = lit ? lineMat({ color: kit.REAL.fence, opacity: 0.5 }) : lineMat({ color: C.teal, opacity: 0.09 });
+  const pathM = lit ? look.material('paving') : basic({ color: C.lineSoft, opacity: 0.05 });
   const pathE = lineMat({ color: C.lineSoft, opacity: 0.45 });
   const shade = (m, cast) => {
-    if (real) { m.castShadow = cast; m.receiveShadow = !cast; }
+    if (lit) { m.castShadow = cast; m.receiveShadow = !cast; }
     return m;
   };
   // a deck or paving item is a rect [x0, z0, x1, z1] or an outline [[x, z], ...]
   const isOutline = v => Array.isArray(v[0]);
   const outlineOf = ([x0, z0, x1, z1]) => [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
   function slab(v, mat, emat, y) {
-    if (!isOutline(v)) return real ? kit.solid(group, mat, v, y) : box(group, mat, emat, v, y);
+    if (!isOutline(v)) return lit ? kit.solid(group, mat, v, y) : box(group, mat, emat, v, y);
     const geo = prism(v, y[0], y[1]);
     const m = new THREE.Mesh(geo, mat);
-    if (!real) m.add(edges(geo, emat));
+    if (!lit) m.add(edges(geo, emat));
     group.add(m);
     return m;
   }
-  // real style: paving stones run on metre UVs, which a prism has and a box has not
-  const paved = v => (real && !isOutline(v) ? outlineOf(v) : v);
-  // real style: kit.strut() in this layer's group
+  // lit styles: paving stones run on metre UVs, which a prism has and a box has not
+  const paved = v => (lit && !isOutline(v) ? outlineOf(v) : v);
+  // lit styles: kit.strut() in this layer's group
   const strut = (...a) => kit.strut(group, ...a);
   // an outline's planks run where each line z crosses it: an edge counts when its ends lie on
   // either side of z (one end exactly on z counts as below), so level edges never count and the
@@ -77,11 +77,11 @@ export default function build({ THREE, kit, C, model, style }) {
   (site.paving || []).forEach(v => shade(slab(paved(v), pathM, pathE, [0, PAVING_TOP]), false));
   if (site.porch) shade(slab(paved(site.porch), pathM, pathE, [0, 0.03]), false);
   if (site.sandpit) {
-    if (real) sandpit(site.sandpit);
+    if (lit) sandpit(site.sandpit);
     else slab(site.sandpit.rect, pathM, pathE, [0, site.sandpit.height]);
   }
   if (site.swing) {
-    if (real) swing(site.swing);
+    if (lit) swing(site.swing);
     else {
       const [x0, z0, x1, z1] = site.swing.rect, h = site.swing.height;
       [z0, z1].forEach(z => slab([x0, z - 0.05, x1, z + 0.05], pathM, pathE, [0, h]));
@@ -90,24 +90,25 @@ export default function build({ THREE, kit, C, model, style }) {
   }
   if (site.lot) {
     const lotLine = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(site.lot.map(([x, z]) => new THREE.Vector3(x, 0.03, z))),
-      keep(new THREE.LineDashedMaterial({ color: real ? kit.REAL.fence : C.roof, transparent: true, opacity: 0.6, dashSize: 0.6, gapSize: 0.4 })));
+      keep(new THREE.LineDashedMaterial({ color: lit ? kit.REAL.fence : C.roof, transparent: true, opacity: 0.6, dashSize: 0.6, gapSize: 0.4 })));
     lotLine.computeLineDistances();
     group.add(lotLine);
   }
-  const hedgeM = real ? kit.surface('hedge') : basic({ color: C.hedge, opacity: 0.2 });
+  const hedgeM = lit ? kit.surface('hedge') : basic({ color: C.hedge, opacity: 0.2 });
   const hedgeE = lineMat({ color: C.teal, opacity: 0.28 });
-  // real style: the hedges' own material, for their vertex shades; the plants keep hedgeM
-  const hedgeBoxM = real ? kit.surface('hedge', { vertexColors: true }) : hedgeM;
+  // lit styles: the hedges' own material, for their vertex shades; the plants keep hedgeM
+  const hedgeBoxM = lit ? kit.surface('hedge', { vertexColors: true }) : hedgeM;
   (site.hedges || []).forEach(([[xa, za], [xb, zb]], k) => {
     const L = Math.hypot(xb - xa, zb - za);
-    const geo = real ? clipped(L, kit.seeded(`hedge ${k}`)) : new THREE.BoxGeometry(L, HEDGE_H, HEDGE_W);
+    const geo = lit ? clipped(L, kit.seeded(`hedge ${k}`)) : new THREE.BoxGeometry(L, HEDGE_H, HEDGE_W);
     const m = new THREE.Mesh(geo, hedgeBoxM);
     m.position.set((xa + xb) / 2, HEDGE_H / 2, (za + zb) / 2);
     m.rotation.y = -Math.atan2(zb - za, xb - xa);
-    if (!real) m.add(edges(geo, hedgeE));
+    if (!lit) m.add(edges(geo, hedgeE));
     group.add(shade(m, true));
+    if (look.hedge) look.hedge({ group, mesh: m, material: hedgeBoxM, length: L, height: HEDGE_H, width: HEDGE_W, rand: kit.seeded(`cards hedge ${k}`) });
   });
-  if (real) fences();
+  if (lit) fences();
   else {
     const fenceE = lineMat({ color: C.lineSoft, opacity: 0.38 });
     [...(site.fences || []), ...(site.bar_fences || [])].forEach(([[xa, za], [xb, zb]]) => {
@@ -120,10 +121,10 @@ export default function build({ THREE, kit, C, model, style }) {
       group.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), fenceE));
     });
   }
-  const frameM = real ? kit.surface('unit') : basic({ color: C.wall, opacity: 0.35 });
+  const frameM = lit ? kit.surface('unit') : basic({ color: C.wall, opacity: 0.35 });
   const frameE = lineMat({ color: C.line, opacity: 0.75 });
   (site.outdoor_units || []).forEach(u => shade(slab(u.rect, frameM, frameE, u.y), true));
-  if (real) {
+  if (lit) {
     if (site.trampoline) trampoline(site.trampoline);
     const stoneM = kit.surface('stone');
     (site.steps || []).forEach(s => shade(kit.solid(group, stoneM, s.rect, [0, s.height]), false));
@@ -139,9 +140,9 @@ export default function build({ THREE, kit, C, model, style }) {
   const api = {
     // per hedge line: its ends [x, z], height and width
     hedges: () => (site.hedges || []).map(([a, b]) => ({ a, b, height: HEDGE_H, width: HEDGE_W })),
-    // per tall plant (a thuja; the real style's alone): its foot [x, y, z] and its outline
+    // per tall plant (a thuja; a lit style's alone): its foot [x, y, z] and its outline
     // [[radius, height], ...] from the foot up
-    planters: () => (real ? (site.planters || []).filter(isTall) : []).map(({ rect: [x0, z0, x1, z1], y }) => ({
+    planters: () => (lit ? (site.planters || []).filter(isTall) : []).map(({ rect: [x0, z0, x1, z1], y }) => ({
       pos: [(x0 + x1) / 2, y[1], (z0 + z1) / 2], profile: THUJA
     })),
     // every paving and deck item as an outline [[x, z], ...] with its top
@@ -150,7 +151,7 @@ export default function build({ THREE, kit, C, model, style }) {
   };
   return { id: 'site', group, api };
 
-  // real style: a frame of four boards 0.05 thick, a 0.15 wide ledge on top, the sand inset
+  // lit styles: a frame of four boards 0.05 thick, a 0.15 wide ledge on top, the sand inset
   // and 0.08 under the frame's top
   function sandpit({ rect: [x0, z0, x1, z1], height: h }) {
     const timber = kit.surface('timber'), T = 0.05, L = 0.15, LT = 0.03;
@@ -161,7 +162,7 @@ export default function build({ THREE, kit, C, model, style }) {
     shade(kit.solid(group, kit.surface('sand'), [x0 + T, z0 + T, x1 - T, z1 - T], [0, h - 0.08]), false).userData.part = 'sand';
   }
 
-  // real style: an A-frame swing along the rect's long axis with a nest seat; with slide, a tower
+  // lit styles: an A-frame swing along the rect's long axis with a nest seat; with slide, a tower
   // past the beam end nearer to it, with a climbing wall on its outer side and a chute to slide
   function swing({ rect: [x0, z0, x1, z1], height: h, slide }) {
     const timber = kit.surface('timber');
@@ -211,7 +212,7 @@ export default function build({ THREE, kit, C, model, style }) {
     });
   }
 
-  // real style: a rounded rect (semicircular ends) on the rect's long axis, a pad ring at height,
+  // lit styles: a rounded rect (semicircular ends) on the rect's long axis, a pad ring at height,
   // the mat inside it, six legs and six net poles, and the net as a see-through ribbon
   function trampoline({ rect: [x0, z0, x1, z1], height: h }) {
     const alongX = x1 - x0 >= z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
@@ -253,7 +254,7 @@ export default function build({ THREE, kit, C, model, style }) {
     group.add(net);
   }
 
-  // real style: the mesh fence as posts and a wire plane per segment, the bar fence as posts and
+  // lit styles: the mesh fence as posts and a wire plane per segment, the bar fence as posts and
   // bars per span; no post within 5 cm of a gate post (the gate draws its own) or of another post
   function fences() {
     const postM = kit.surface('fence');
@@ -294,7 +295,7 @@ export default function build({ THREE, kit, C, model, style }) {
     });
   }
 
-  // real style: a planter is a box in the frame's colour or the cladding, a thuja a column
+  // lit styles: a planter is a box in the frame's colour or the cladding, a thuja a column
   // above it, a low plant a box on it
   function planters() {
     const fin = { frame: kit.surface('frame'), cladding: kit.surface('cladding') };
@@ -309,7 +310,7 @@ export default function build({ THREE, kit, C, model, style }) {
     });
   }
 
-  // real style: a hedge len long as a segmented BoxGeometry (so it keeps its parameters), its
+  // lit styles: a hedge len long as a segmented BoxGeometry (so it keeps its parameters), its
   // side vertices moved in by a seeded amount per column and row, the long top edges rounded
   function clipped(len, rand) {
     const cols = Math.max(1, Math.round(len / HEDGE_STEP)), geo = new THREE.BoxGeometry(len, HEDGE_H, HEDGE_W, cols, HEDGE_ROWS, 2);

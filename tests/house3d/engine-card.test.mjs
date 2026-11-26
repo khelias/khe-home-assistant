@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { E, seasonOn, seasonWindow, model, futureItem } from './engine-harness.mjs';
+import { E, seasonOn, seasonWindow, resolveStyle, model, futureItem } from './engine-harness.mjs';
 
 const card = await import(new URL('house3d-card.js', E));
 
@@ -304,9 +304,33 @@ test('card: the hero rule lets vertical swipes scroll the page only outside a pa
 });
 
 test('card: a poster is kept per hero or full view and per style', () => {
-  const keys = [[true, 'real'], [true, 'simple'], [false, 'real'], [false, 'simple']].map(([h, s]) => card.posterKey(h, s));
-  assert.equal(new Set(keys).size, 4);
+  const keys = [true, false].flatMap(h => ['simple', 'real', 'photo'].map(s => card.posterKey(h, s)));
+  assert.equal(new Set(keys).size, 6);
   keys.forEach(k => assert.match(k, /^house3d-poster:/));
+});
+
+test('card: Foto is a stored, lit style the hero leaves for Päris, with its word in both languages', () => {
+  const store = new Map([['house3d-style', 'photo']]);
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  try {
+    let remounts = 0;
+    const el = Object.create(card.House3dCard.prototype);
+    Object.assign(el, { _isHero: false, _style: 'simple', _time: null, _mod: { resolveStyle }, _view: {}, _remount() { remounts++; } });
+    assert.equal(el._lit(), false);
+    // a scene's Päris gives way to the stored Foto when it ends
+    el.setScene({ style: 'real', time: '2026-06-21T12:00:00' });
+    assert.equal(el._style, 'real');
+    el.clearScene();
+    assert.equal(el._style, 'photo');
+    assert.equal(el._lit(), true, 'Foto has the sun and its sliders');
+    assert.equal(remounts, 2);
+    el._restyle('simple');
+    el._restyle('photo');
+    assert.equal(store.get('house3d-style'), 'photo');
+    assert.equal(card.heroMount(true, 'photo').style, 'real');
+    assert.equal(card.heroMount(false, 'photo').style, 'photo');
+    for (const lang of ['et', 'en']) assert.ok(card.TEXT[lang].photo, lang);
+  } finally { delete globalThis.localStorage; }
 });
 
 test('card: a poster reads back only as an image, and a failed write keeps the newer one in memory', () => {

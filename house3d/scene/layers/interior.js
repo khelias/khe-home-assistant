@@ -1,4 +1,4 @@
-// The real style's interior, drawn as an architectural model: a near-black section cap on every
+// A lit style's interior, drawn as an architectural model: a near-black section cap on every
 // wall's flat cut top, oak skirting and a soft shade on the floor along every wall face that
 // has a house room in front of it, and the furniture shaped by its kind (scripts/house3d_model.py
 // FURNITURE_KINDS; an item without one is a warm grey block; a chair's or sofa's back is on the
@@ -69,8 +69,8 @@ const STROKES = [
 // a washer's door and control strip; a stove's cage bars, their spacing and the stones' lumps
 const DOOR_R = 0.33, STRIP_H = 0.07, BAR_T = 0.012, BAR_STEP = 0.1, LUMPS = 3;
 
-export default function build({ THREE, kit, model, roof, state, style, layer }) {
-  if (style !== 'real') return null;
+export default function build({ THREE, kit, model, roof, state, look, layer }) {
+  if (!look.lit) return null;
   const building = layer('building');
   if (!building || !building.api) return null;
   const { inRoom, cutOf } = building.api;

@@ -2,6 +2,8 @@
 # A consumer's pinned copy of this engine (estate ADR-052 point 3). The script travels in the
 # copy and runs from the consumer's root, where house3d-engine.json lists what is copied:
 #   include  paths of khe-house3d to copy, a folder with a trailing slash; this script among them
+#   exclude  paths under an included folder that the consumer does not take (a folder with a
+#            trailing slash), e.g. house3d/assets/; optional
 #   own      the consumer's own files inside an included folder, never touched
 #   files    every copied file with its sha256, written by this script
 #
@@ -45,6 +47,15 @@ def rel(p):
 include = [(rel(e), e.endswith("/")) for e in manifest["include"]]
 folders = [p for p, is_folder in include if is_folder]
 own = {rel(p) for p in manifest.get("own", [])}
+exclude = [(rel(e), e.endswith("/")) for e in manifest.get("exclude", [])]
+
+
+def excluded(q):
+    return any(q == p or (is_folder and p in q.parents) for p, is_folder in exclude)
+
+
+if excluded(PurePosixPath(SELF)):
+    sys.exit(f"house3d-copy: {manifest_path} excludes {SELF}, which travels in the copy")
 
 
 def in_folder(q):
@@ -106,7 +117,7 @@ for p, is_folder in include:
         want.add(p)
     else:
         missing.append(str(p))
-want -= own
+want = {q for q in want - own if not excluded(q)}
 if links:
     sys.exit(f"house3d-copy: {commit[:12]} has symlinks ({', '.join(sorted(links))}); nothing was changed")
 if missing:

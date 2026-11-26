@@ -10,7 +10,7 @@ const COLORS = {
   future: '#b37bff'
 };
 
-// The real style's default surfaces, which a model's look (geometry.look) overrides by name: a
+// A lit style's default surfaces, which a model's look (geometry.look) overrides by name: a
 // light, matt architectural model. The walls are a plain light grey without trims, the roofs a
 // matt mid grey, and every frame, roof edge, the carport's panels and the pergola an off-white
 // (frame); the wall's base strip is in the frame's colour too unless the look names base, the
@@ -124,7 +124,7 @@ export function createKit(THREE, style = 'simple', look) {
   const { colors, finish, look: resolved, base, trim } = resolveLook(look);
   const disposables = [];
   const keep = x => (disposables.push(x), x);
-  // real style only: a new lit material on every call, so a floor tints alone and a fade on
+  // lit styles only: a new lit material on every call, so a floor tints alone and a fade on
   // one group never reaches another's surfaces; o overrides, e.g. { transparent: true } for
   // what fades (the lift, the car)
   // what differs from a matt surface: whatever is polished takes the sky's sheen, the sofa's
@@ -143,7 +143,7 @@ export function createKit(THREE, style = 'simple', look) {
     baubleSilver: { roughness: 0.2, metalness: 0.7 },
     sheer: { transparent: true, opacity: SHEER_OPACITY, side: THREE.DoubleSide, depthWrite: false, forceSinglePass: true }
   };
-  const surface = style === 'real'
+  const surface = style !== 'simple'
     ? (name, o = {}) => keep(new THREE.MeshStandardMaterial({ color: new THREE.Color(colors[name]), roughness: 0.85, metalness: 0, ...FINISH[name], ...finish[name], ...o }))
     : undefined;
   const basic = o => keep(new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, ...o }));
@@ -191,7 +191,7 @@ export function createKit(THREE, style = 'simple', look) {
     return tex;
   }
 
-  // real style: [front, back], the board texture at the look's angle as seen on a wall's local +z
+  // lit styles: [front, back], the board texture at the look's angle as seen on a wall's local +z
   // face and its mirror for the -z face, so diagonal boards rise to the right on both; one pair per
   // mount. A DataTexture, not a canvas: the engine tests run without a DOM
   let boardPair;
@@ -212,7 +212,7 @@ export function createKit(THREE, style = 'simple', look) {
     return (boardPair = [front, back]);
   }
 
-  // real style: the pitched roof's profile texture ('seam' or 'tile'), or null for 'plain'; one
+  // lit styles: the pitched roof's profile texture ('seam' or 'tile'), or null for 'plain'; one
   // per mount, on slope-aligned metre UVs (u along eave, v uphill)
   let roofTex;
   function roofMap() {
@@ -304,7 +304,7 @@ export function createKit(THREE, style = 'simple', look) {
       return [g, g, g, 255];
     });
   }
-  // real style: the lawn's mottle and the road's asphalt, one texture each per mount
+  // lit styles: the lawn's mottle and the road's asphalt, one texture each per mount
   let lawnTex, asphaltTex;
   const lawn = () => (lawnTex ||= noiseTexture(LAWN_OCTAVES, LAWN_DEPTH));
   const asphalt = () => (asphaltTex ||= noiseTexture(ASPHALT_OCTAVES, ASPHALT_DEPTH));
@@ -334,7 +334,7 @@ export function createKit(THREE, style = 'simple', look) {
 
   const inJoint = (t, step, joint) => Math.min(t % step, step - (t % step)) < joint / 2;
 
-  // real style: the paving's stones, one texture per mount
+  // lit styles: the paving's stones, one texture per mount
   let paverTex;
   function pavers() {
     if (paverTex) return paverTex;
@@ -352,7 +352,7 @@ export function createKit(THREE, style = 'simple', look) {
     return paverTex;
   }
 
-  // real style: the oak floor's planks, one texture per mount
+  // lit styles: the oak floor's planks, one texture per mount
   let plankTex;
   function planks() {
     if (plankTex) return plankTex;
@@ -371,7 +371,7 @@ export function createKit(THREE, style = 'simple', look) {
     return plankTex;
   }
 
-  // real style: the wet rooms' tiles, one texture per mount
+  // lit styles: the wet rooms' tiles, one texture per mount
   let wetTex;
   function tiles() {
     if (wetTex) return wetTex;
@@ -386,7 +386,7 @@ export function createKit(THREE, style = 'simple', look) {
     return wetTex;
   }
 
-  // real style: the kitchen wall's tiles, one texture per mount, to multiply a light surface
+  // lit styles: the kitchen wall's tiles, one texture per mount, to multiply a light surface
   let splashTex;
   function splashTiles() {
     if (splashTex) return splashTex;
@@ -400,7 +400,7 @@ export function createKit(THREE, style = 'simple', look) {
     return splashTex;
   }
 
-  // real style: the mesh fence's wires, white where a wire is, alpha MESH_VEIL between
+  // lit styles: the mesh fence's wires, white where a wire is, alpha MESH_VEIL between
   let meshTex;
   function wireMesh() {
     if (meshTex) return meshTex;
@@ -410,7 +410,7 @@ export function createKit(THREE, style = 'simple', look) {
     return meshTex;
   }
 
-  // real style: a bar fence span or gate leaf len long and h high along local +x, from the
+  // lit styles: a bar fence span or gate leaf len long and h high along local +x, from the
   // ground up: two rails and a bar every BAR_STEP, ends included; casts, takes no shadow
   function bars(len, h, mat) {
     const g = new THREE.Group();
@@ -446,7 +446,7 @@ export function createKit(THREE, style = 'simple', look) {
     return m;
   }
 
-  // real style: box() without the outline
+  // lit styles: box() without the outline
   function solid(group, mat, [x0, z0, x1, z1], [y0, y1]) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), mat);
     mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
@@ -454,7 +454,7 @@ export function createKit(THREE, style = 'simple', look) {
     return mesh;
   }
 
-  // real style: a level outline [[x, z], ...] with holes at height 0, facing up (shape y is -z,
+  // lit styles: a level outline [[x, z], ...] with holes at height 0, facing up (shape y is -z,
   // so the turn onto the ground keeps the face up)
   function flatShape(pts, holes = []) {
     const shape = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z)));
@@ -464,12 +464,13 @@ export function createKit(THREE, style = 'simple', look) {
     return geo;
   }
 
-  // real style: (night) -> sets each material's colour from its colour now towards low of it at
+  // lit styles: (night) -> sets each material's colour from its colour now towards low of it at
   // night 1, for the land and neighbours beyond the lot; the function's day holds those colours,
   // for a caller that changes one by day (the ground's snow)
   function nightTint(materials, low) {
     const day = materials.map(m => m.color.clone());
-    const tint = night => materials.forEach((m, i) => m.color.copy(day[i]).multiplyScalar(1 - (1 - low) * night));
+    // a material's userData.day, when a look sets one after its textures are in, wins over the colour at build
+    const tint = night => materials.forEach((m, i) => m.color.copy(m.userData.day || day[i]).multiplyScalar(1 - (1 - low) * night));
     tint.day = day;
     return tint;
   }

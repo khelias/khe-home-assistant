@@ -1,0 +1,59 @@
+{
+ "licence": "CC0 1.0 (ambientCG, Poly Haven); encoded with basisu 2.50",
+ "files": {
+  "lawn.ktx2": {
+   "url": "https://ambientcg.com/view?id=Grass004",
+   "from": "Grass004 1K-JPG Color, ETC1S",
+   "licence": "CC0-1.0",
+   "bytes": 277389
+  },
+  "lawn-normal.ktx2": {
+   "url": "https://ambientcg.com/view?id=Grass004",
+   "from": "Grass004 1K-JPG NormalGL, UASTC",
+   "licence": "CC0-1.0",
+   "bytes": 1356967
+  },
+  "road.ktx2": {
+   "url": "https://ambientcg.com/view?id=Asphalt031",
+   "from": "Asphalt031 1K-JPG Color, ETC1S",
+   "licence": "CC0-1.0",
+   "bytes": 231700
+  },
+  "road-normal.ktx2": {
+   "url": "https://ambientcg.com/view?id=Asphalt031",
+   "from": "Asphalt031 1K-JPG NormalGL, UASTC",
+   "licence": "CC0-1.0",
+   "bytes": 1329092
+  },
+  "road-rough.ktx2": {
+   "url": "https://ambientcg.com/view?id=Asphalt031",
+   "from": "Asphalt031 1K-JPG Roughness, ETC1S linear",
+   "licence": "CC0-1.0",
+   "bytes": 209115
+  },
+  "twig.ktx2": {
+   "url": "https://ambientcg.com/view?id=LeafSet016",
+   "from": "a twig card composed from LeafSet016 1K-JPG Color and Opacity, ETC1S",
+   "licence": "CC0-1.0",
+   "bytes": 53315
+  },
+  "hedge-twig.ktx2": {
+   "url": "https://ambientcg.com/view?id=LeafSet016",
+   "from": "a denser hedge card composed from LeafSet016 1K-JPG Color and Opacity, ETC1S",
+   "licence": "CC0-1.0",
+   "bytes": 68543
+  },
+  "sky-day.ktx2": {
+   "url": "https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky",
+   "from": "kloofendal_48d_partly_cloudy_puresky 1K HDR, UASTC HDR 4x4 without zstd",
+   "licence": "CC0-1.0",
+   "bytes": 524496
+  },
+  "sky-dusk.ktx2": {
+   "url": "https://polyhaven.com/a/belfast_sunset_puresky",
+   "from": "belfast_sunset_puresky 1K HDR, UASTC HDR 4x4 without zstd",
+   "licence": "CC0-1.0",
+   "bytes": 524496
+  }
+ }
+}

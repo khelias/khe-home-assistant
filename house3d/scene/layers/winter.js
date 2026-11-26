@@ -1,4 +1,4 @@
-// Winter, the real style's alone: the Christmas lights (site.festive) and the snow, one switchable
+// Winter, a lit style's alone: the Christmas lights (site.festive) and the snow, one switchable
 // layer. The card switches it on by the season; the layer itself knows no date and no weather.
 //
 // The lights are a view effect of the dark, like the outdoor luminaires (lights.js): they follow
@@ -8,7 +8,7 @@
 // LED every LED_GAP down it, so the strands read as a curtain of light. A near-vertical segment (a
 // climb, a post) carries its LEDs along the cable. With planters true a string winds round every
 // tall planter plant. Each LED is a small bright point with a soft halo round it, and under a
-// roof path a warm wash falls down the wall behind it, where there is one; the real style has no
+// roof path a warm wash falls down the wall behind it, where there is one; the lit styles have no
 // bloom, so the halo and the wash are the glow. A path rides the lift, so it rises and fades with
 // the roof, unless it is marked ground. kit.applyFade owns the opacity of everything in the lift,
 // so the glow is colour and size on additive materials, never opacity.
@@ -156,9 +156,9 @@ function radiusAt(profile, h) {
   return 0;
 }
 
-export default function build({ THREE, kit, model, options, style, state, roof, frame, reduceMotion, layer }) {
+export default function build({ THREE, kit, model, options, look, state, roof, frame, reduceMotion, layer }) {
   const group = new THREE.Group();
-  if (style !== 'real') return { id: 'winter', group };
+  if (!look.lit) return { id: 'winter', group };
   const lift = new THREE.Group(), site = model.site || {}, festive = site.festive || {};
   const api = id => { const L = layer(id); return (L && L.api) || {}; };
   const siteApi = api('site'), treesApi = api('trees'), ground = api('ground');
@@ -371,7 +371,8 @@ export default function build({ THREE, kit, model, options, style, state, roof, 
   // the crown's upper third: a cap on each of its lobes that reaches into it, in one mesh
   const dress = new THREE.Group();
   dress.userData.part = 'winter';
-  Object.values(treesApi.crowns ? treesApi.crowns() : {}).forEach(({ centre, radii, lobes }) => {
+  // a look that strips the crowns in winter has no caps on them
+  (look.bare ? [] : Object.values(treesApi.crowns ? treesApi.crowns() : {})).forEach(({ centre, radii, lobes }) => {
     const m = snowy(new THREE.Mesh(lobeCaps(lobes, CAP_OUT / Math.min(...radii)), snowM), 'cap');
     m.position.set(...centre);
     m.scale.set(...radii);
@@ -418,6 +419,8 @@ export default function build({ THREE, kit, model, options, style, state, roof, 
     setOn(v) {
       on = !!v;
       dress.visible = on;
+      if (look.bare && treesApi.bare) treesApi.bare(on);
+      if (look.winter) look.winter(on);
       if (ground.snow) ground.snow(on ? 1 : 0);
     },
     update(dt, k) {

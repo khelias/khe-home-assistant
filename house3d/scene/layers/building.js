@@ -1,10 +1,10 @@
 // The buildings: walls, room floors, the simple style's furniture, roofs and roof steps, and the
-// garage roof. The real style's furniture, skirting and the walls' cut tops are the interior
+// garage roof. A lit style's furniture, skirting and the walls' cut tops are the interior
 // layer's, which reads inRoom and cutOf through this layer's api; the winter layer finds the
 // walls behind its lights through wallBehind.
 // Walls that run up to a roof are cut at the ceiling, and the part above goes in lift with the
 // roofs, which rises and fades with the roof mode. The floors are the room tap targets and warm
-// with a room's markers in state 'on'. The real style draws them as lit surfaces: exterior walls
+// with a room's markers in state 'on'. The lit styles draw them as lit surfaces: exterior walls
 // clad outside (boards when the look's cladding asks) and plain inside, interior walls plain with white doors and frames, framed
 // openings (a door with finish 'cladding' gets a leaf of plain cladding, one with glass a
 // vertical glass strip, one with a hinge stands open), floors in the room's
@@ -21,12 +21,12 @@
 // at build, take a warm emissive scaled by the light's level or the glow; there are no real-time
 // lights. The chimneys (roof.chimneys) are upright blocks after the walls, cut at the ceiling like
 // a wall up to a roof, the part above in lift on a material of its own.
-const FRAME = 0.06, FRAME_D = 0.1; // real style: an opening's frame width and depth
-// real style: an opening's trim and a corner board, both standing PROUD off the face, and a
+const FRAME = 0.06, FRAME_D = 0.1; // lit styles: an opening's frame width and depth
+// lit styles: an opening's trim and a corner board, both standing PROUD off the face, and a
 // sill's metal flashing; common cladding-trim sizes
 const TRIM = 0.1, CORNER = 0.12, PROUD = 0.025, REVEAL = 0.015;
 const FLASH_T = 0.03, FLASH_OUT = 0.06, FLASH_PAST = 0.03;
-// real style with the look's trims.fascia: the roof's own lip over the fascia
+// lit styles with the look's trims.fascia: the roof's own lip over the fascia
 const FASCIA_LIP = 0.05;
 // site.posts: a post's default size, and its knee braces' drop and reach from the top, their
 // section a share of the post's
@@ -39,14 +39,14 @@ const MULLION_MIN = 1.2;
 // a door with glass: how far its glass strip stops short of the leaf's foot and top
 const DOOR_STRIP_END = 0.25;
 const LEAF_T = 0.05;
-// real style: the farthest a house room's floor edge moves out to meet the wall face it runs along
+// lit styles: the farthest a house room's floor edge moves out to meet the wall face it runs along
 const SNAP = 0.2;
-// real style at night: the warm glow of a lit room's floor and windows, and how opaque a lit pane gets
+// lit styles at night: the warm glow of a lit room's floor and windows, and how opaque a lit pane gets
 const GLOW = '#ffb45a', FLOOR_GLOW = 0.55, GLASS_GLOW = 1.4, LIT_GLASS = 0.8;
 
 /**
  * cornerBoards(faces, W, D) -> [{ wall, p, dir, from, to, filler? }]
- * The real style's corner boards on an outline of boarded walls. faces holds one entry per
+ * A lit style's corner boards on an outline of boarded walls. faces holds one entry per
  * wall, { i, a: [x, z], u: [ux, uz], n: [nx, nz], L, t }, n the plan outward normal; the outer
  * face is the centreline moved by n * t / 2. Each board lies on the outer face of wall `wall`,
  * from the outer faces' crossing p along the plan direction dir, between from and to. A convex
@@ -107,9 +107,9 @@ export function crossings(a, b, segs) {
   return out;
 }
 
-export default function build({ THREE, kit, C, model, roof, ceiling, state, style }) {
+export default function build({ THREE, kit, C, model, roof, ceiling, state, look }) {
   const { basic, mats, edges, box, near } = kit;
-  const real = style === 'real';
+  const lit = look.lit;
   const site = model.site || {};
   const levels = model.levels || [0], levelOf = o => o.level || 0;
   const rooms = model.rooms || [];
@@ -119,7 +119,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   const group = new THREE.Group(), lift = new THREE.Group();
   let mH, mR, wallMats, cladLeaf, postMat, glassFor = () => null;
   const roomGlass = new Map();
-  if (real) {
+  if (lit) {
     // walls and roofs are DoubleSide: a roof's remapped extrusion faces inwards
     const two = { side: THREE.DoubleSide }, fades = { ...two, transparent: true };
     const [front, back] = kit.look.cladding.pattern === 'boards' ? kit.boards() : [];
@@ -166,7 +166,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     wallMats = () => mH;
   }
 
-  // real style: the wall solid, glass in windows and glass doors, a leaf in doors, and a frame
+  // lit styles: the wall solid, glass in windows and glass doors, a leaf in doors, and a frame
   // round each opening; with the look's opening trims, a clad wall's openings also get a trim on
   // the outer face, a lined reveal and, under a window with a sill, a flashing
   function dressWall(g, geo, ops, m, w, L, top) {
@@ -343,7 +343,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     const g = new THREE.Group();
     g.position.set(w.a[0], y0, w.a[1]);
     g.rotation.y = Math.atan2(-uz, ux);
-    if (real) {
+    if (lit) {
       dressWall(g, geo, ops, m, w, L, top);
       parent.add(g);
       return;
@@ -369,13 +369,13 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   }
 
   const shade = o => {
-    if (real) o.castShadow = o.receiveShadow = true;
+    if (lit) o.castShadow = o.receiveShadow = true;
     return o;
   };
   if (site.garage_roof) {
     const { y, rim = 0, bands = 1 } = site.garage_roof, [y0, y1] = y;
     (site.garage_roof.rects || [site.garage_roof.rect]).forEach(r => {
-      if (!real) return box(lift, mR.wall, mR.edge, r, y);
+      if (!lit) return box(lift, mR.wall, mR.edge, r, y);
       const [x0, z0, x1, z1] = r, f = mR.trim, t = BAND_T;
       // the four boards t thick round the rect's edge, from a to b
       const ring = (a, b, part) => [[x0, z0, x1, z0 + t], [x0, z1 - t, x1, z1], [x0, z0 + t, x0 + t, z1 - t], [x1 - t, z0 + t, x1, z1 - t]]
@@ -400,18 +400,18 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   // BRACE below the top out BRACE along its direction, up to the top
   (site.posts || []).forEach(p => {
     const [x, z] = p.at, a = p.size || POST, t = a * BRACE_T, rect = [x - a / 2, z - a / 2, x + a / 2, z + a / 2];
-    shade(real ? kit.solid(group, postMat, rect, [0, p.top]) : box(group, mH.wall, mH.edge, rect, [0, p.top])).userData.part = 'post';
+    shade(lit ? kit.solid(group, postMat, rect, [0, p.top]) : box(group, mH.wall, mH.edge, rect, [0, p.top])).userData.part = 'post';
     (p.braces || []).forEach(([dx, dz]) => {
-      const n = Math.hypot(dx, dz), b = shade(kit.strut(group, [x, p.top - BRACE, z], [x + (dx / n) * BRACE, p.top, z + (dz / n) * BRACE], t, t, real ? postMat : mH.wall, 'brace'));
-      if (!real) b.add(edges(b.geometry, mH.edge));
+      const n = Math.hypot(dx, dz), b = shade(kit.strut(group, [x, p.top - BRACE, z], [x + (dx / n) * BRACE, p.top, z + (dz / n) * BRACE], t, t, lit ? postMat : mH.wall, 'brace'));
+      if (!lit) b.add(edges(b.geometry, mH.edge));
     });
   });
 
-  // real style: the clad walls' corner boards (with the look's corner trims), each as a span
+  // lit styles: the clad walls' corner boards (with the look's corner trims), each as a span
   // [lo, hi] along its wall, and how far the fillers take each wall's base strip; the fillers
   // close the walls' corners with or without the boards
   const corners = [], strips = new Map();
-  if (real) levels.forEach((_, level) => {
+  if (lit) levels.forEach((_, level) => {
     const list = [];
     (model.walls || []).forEach((w, i) => {
       if (levelOf(w) !== level || !wallMats(w).boarded) return;
@@ -455,16 +455,16 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   });
 
   // a chimney from its level's floor to its top: on the ground floor in group up to the ceiling and
-  // the rest in lift, an upper storey's in lift whole; the real style's lift part on a material of
+  // the rest in lift, an upper storey's in lift whole; a lit style's lift part on a material of
   // its own, so its fade stays off the lower part
   const chimneys = roof.chimneys || [], chimneyMeshes = [];
-  const mC = !chimneys.length ? null : real ? { group: kit.surface('chimney'), lift: kit.surface('chimney', { transparent: true }) } : { group: mH, lift: mR };
+  const mC = !chimneys.length ? null : lit ? { group: kit.surface('chimney'), lift: kit.surface('chimney', { transparent: true }) } : { group: mH, lift: mR };
   chimneys.forEach(c => {
     const parts = c.cut ? [[group, 0, c.cut], [lift, c.cut, c.top]] : [[c.level > 0 ? lift : group, levels[c.level], c.top]];
     parts.forEach(([parent, a, b]) => {
       const m = parent === lift ? mC.lift : mC.group;
-      const mesh = real ? kit.solid(parent, m, c.rect, [a, b]) : box(parent, m.wall, m.edge, c.rect, [a, b]);
-      if (real) mesh.castShadow = mesh.receiveShadow = true;
+      const mesh = lit ? kit.solid(parent, m, c.rect, [a, b]) : box(parent, m.wall, m.edge, c.rect, [a, b]);
+      if (lit) mesh.castShadow = mesh.receiveShadow = true;
       else mesh.renderOrder = 2;
       mesh.userData.part = 'chimney';
       mesh.userData.chimney = c.id;
@@ -512,7 +512,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     });
   });
 
-  // real style: the axis-aligned walls as [axis, centre, half thickness, lo, hi], for a wall along
+  // lit styles: the axis-aligned walls as [axis, centre, half thickness, lo, hi], for a wall along
   // x = centre (axis 0) or z = centre (axis 1) spanning lo..hi on the other axis. A house room's
   // rect edge in front of one it runs along, up to SNAP short of its near face, moves out to that
   // face, since rooms are drawn to centrelines and drawings round, and the ground would show
@@ -545,17 +545,17 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   // a room can be several rectangles
   const floorMeshes = [];
   ground.forEach(r => {
-    r.rects.map(rc => (real && r.floor !== 'paving' ? snapRect(rc) : rc)).forEach(([x0, z0, x1, z1]) => {
-      const stones = real && r.floor === 'paving';
-      const map = !real ? null : stones ? kit.pavers() : r.floor === 'tile' ? kit.tiles() : kit.planks();
+    r.rects.map(rc => (lit && r.floor !== 'paving' ? snapRect(rc) : rc)).forEach(([x0, z0, x1, z1]) => {
+      const stones = lit && r.floor === 'paving';
+      const map = !lit ? null : stones ? kit.pavers() : r.floor === 'tile' ? kit.tiles() : kit.planks();
       // the night glow lights the planks, tiles or stones, not a flat sheet over them
-      const mat = real ? kit.surface(r.floor || 'floor', { map, emissiveMap: map }) : basic({ color: C.floor.clone(), opacity: 0.85, side: THREE.DoubleSide });
-      // the real style's floors run to the rect's edge, so a room in several rects is one floor
-      const inset = real ? 0 : 0.05, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      const mat = lit ? kit.surface(r.floor || 'floor', { map, emissiveMap: map }) : basic({ color: C.floor.clone(), opacity: 0.85, side: THREE.DoubleSide });
+      // a lit style's floors run to the rect's edge, so a room in several rects is one floor
+      const inset = lit ? 0 : 0.05, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
       const geo = new THREE.PlaneGeometry(x1 - x0 - inset * 2, z1 - z0 - inset * 2);
       // stones, planks and tiles on world (x, z), so they run on across rooms and from the paving
       // round the carport; the plane's y turns to -z
-      if (real) {
+      if (lit) {
         const pos = geo.attributes.position, uv = geo.attributes.uv;
         for (let k = 0; k < pos.count; k++) uv.setXY(k, cx + pos.getX(k), cz - pos.getY(k));
       }
@@ -564,15 +564,15 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
       // a paved floor lies 5 mm over the paving under it, so a tint never z-fights with it
       mesh.position.set(cx, stones ? 0.025 : 0.02, cz);
       mesh.renderOrder = 1;
-      mesh.userData = { room: r.id, warm: 0, hover: 0, sel: 0, base: real ? mat.color.clone() : C.floor };
-      mesh.receiveShadow = real;
+      mesh.userData = { room: r.id, warm: 0, hover: 0, sel: 0, base: lit ? mat.color.clone() : C.floor };
+      mesh.receiveShadow = lit;
       group.add(mesh);
       floorMeshes.push(mesh);
     });
   });
 
-  // the simple style's furniture; the real style's is the interior layer's
-  if (!real) {
+  // the simple style's furniture; a lit style's is the interior layer's
+  if (!lit) {
     (model.furniture || []).forEach(f => {
       if (f.rect) return box(group, mH.furn, mH.furnEdge, f.rect, f.y);
       const [x, z, r] = f.circle;
@@ -585,8 +585,8 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   }
 
   const roofMeshes = [];
-  // real style with the look's trims.fascia: the edge band is a fascia under a lip of roof
-  const fascia = real && kit.look.trims.fascia;
+  // lit styles with the look's trims.fascia: the edge band is a fascia under a lip of roof
+  const fascia = lit && kit.look.trims.fascia;
   const lipOf = thick => (fascia ? Math.min(FASCIA_LIP, thick / 2) : 0);
   function shedRoof(id, points, h, thick) {
     const shape = new THREE.Shape(points.map(([x, z]) => new THREE.Vector2(x, z)));
@@ -617,7 +617,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   // lip: the band is roof as well (a shed roof's lip slab); a geometry's third group, a wing roof's
   // lip, is roof too
   function addRoof(geo, id, pitched, lip = false) {
-    if (real) {
+    if (lit) {
       // the extrusion's first group is the top and underside, the second the edge band
       const top = pitched ? mR.roofPitched : mR.roof, band = lip ? mR.roof : fascia ? mR.trim : mR.frame;
       const mesh = new THREE.Mesh(geo, fascia ? [top, band, mR.roof] : [top, band]);
@@ -691,11 +691,11 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     buildWall(lift, { a: s.a, b: s.b, t: 0.2, top: roof.under(s.top), bot: (x, z) => roof.fns[s.bot](x, z) - roof.gap + low.thick }, mR);
   });
 
-  // the real style's light floors tint lighter, towards amber
-  const TINT = real ? [[C.amber, 0.5], [C.line, 0.3], [C.sel, 0.25]] : [[C.warm, 0.85], [C.hover, 0.6], [C.sel, 0.7]];
-  let warm = new Set(), lit = new Map();
+  // a lit style's light floors tint lighter, towards amber
+  const TINT = lit ? [[C.amber, 0.5], [C.line, 0.3], [C.sel, 0.25]] : [[C.warm, 0.85], [C.hover, 0.6], [C.sel, 0.7]];
+  let warm = new Set(), glowing = new Map();
   const glowColor = new THREE.Color(GLOW);
-  if (real) {
+  if (lit) {
     floorMeshes.forEach(m => { m.material.emissive.copy(glowColor); m.material.emissiveIntensity = 0; m.userData.glow = 0; });
     roomGlass.forEach(mt => { mt.emissive.copy(glowColor); mt.emissiveIntensity = 0; mt.userData.glow = 0; mt.userData.day = mt.opacity; });
   }
@@ -726,15 +726,15 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     id: 'building',
     group,
     lift,
-    // for the interior layer, which dresses the real style's walls, and the winter layer's wash
+    // for the interior layer, which dresses a lit style's walls, and the winter layer's wash
     api: { inRoom, cutOf, wallBehind },
     markers(list) {
       const on = list.filter(m => m.state === 'on' && m.warm !== false && roomIds.has(m.room));
       warm = new Set(on.map(m => m.room));
       // a room's brightest light or marker glow sets its glow; a marker's glow counts in any state,
       // since a motion sensor off a few minutes ago is idle
-      lit = new Map();
-      const up = (room, g) => lit.set(room, Math.max(lit.get(room) || 0, g));
+      glowing = new Map();
+      const up = (room, g) => glowing.set(room, Math.max(glowing.get(room) || 0, g));
       on.filter(m => m.icon === 'light').forEach(m => up(m.room, m.level ?? 1));
       list.forEach(m => { if (m.glow > 0 && roomIds.has(m.room)) up(m.room, m.glow); });
     },
@@ -755,15 +755,15 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
         });
         m.material.color.copy(u.base).lerp(TINT[0][0], u.warm * TINT[0][1]).lerp(TINT[1][0], u.hover * TINT[1][1]).lerp(TINT[2][0], u.sel * TINT[2][1]);
       });
-      if (!real) return moving;
+      if (!lit) return moving;
       const night = state.night || 0;
       const ease = (u, goal, apply) => {
         if (near(u.glow, goal)) u.glow = goal;
         else { u.glow += (goal - u.glow) * k; moving = true; }
         apply(u.glow);
       };
-      floorMeshes.forEach(m => ease(m.userData, (lit.get(m.userData.room) || 0) * night, g => { m.material.emissiveIntensity = g * FLOOR_GLOW; }));
-      roomGlass.forEach((mt, room) => ease(mt.userData, (lit.get(room) || 0) * night, g => {
+      floorMeshes.forEach(m => ease(m.userData, (glowing.get(m.userData.room) || 0) * night, g => { m.material.emissiveIntensity = g * FLOOR_GLOW; }));
+      roomGlass.forEach((mt, room) => ease(mt.userData, (glowing.get(room) || 0) * night, g => {
         mt.emissiveIntensity = g * GLASS_GLOW;
         mt.opacity = mt.userData.day + (LIT_GLASS - mt.userData.day) * Math.min(1, g);
       }));

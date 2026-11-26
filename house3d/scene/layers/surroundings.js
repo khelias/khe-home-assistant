@@ -1,8 +1,8 @@
 // The surroundings (private, HA only): the neighbours' buildings and the street, fainter than
-// the lot and outside every tap test. In the real style they darken to SUR_NIGHT of their colour
+// the lot and outside every tap test. In the lit styles they darken to SUR_NIGHT of their colour
 // at night, so moonlit neighbours do not outshine the house.
 //
-// The real style's neighbours are stand-ins, since the data has no roofs: a house-sized one
+// A lit style's neighbours are stand-ins, since the data has no roofs: a house-sized one
 // (ROOF_MAX_H high at most, its smallest enclosing rectangle between ROOF_AREA m2) whose footprint
 // fills ROOF_FILL of that rectangle
 // gets a gable along that rectangle's long side, its ridge at the building's height, a rise of
@@ -11,14 +11,14 @@
 // are a seeded shade darker by up to SHADE_SPREAD; the street is asphalt (kit.asphalt()).
 const SUR_NIGHT = 0.45;
 const ROOF_MAX_H = 9, ROOF_AREA = [4, 300], ROOF_FILL = 0.95, ROOF_PITCH = Math.tan(Math.PI / 6), ROOF_RISE = 0.4, EAVE = 0.3, SHADE_SPREAD = 0.1;
-export default function build({ THREE, kit, C, options, style, state }) {
+export default function build({ THREE, kit, C, options, look, state }) {
   const sur = options.surroundings;
   if (!sur) return null;
   const group = new THREE.Group();
-  // the real style: plain lit surfaces that take the lot's shadows and cast none
-  if (style === 'real') {
+  // the lit styles: plain lit surfaces that take the lot's shadows and cast none
+  if (look.lit) {
     const bldM = kit.surface('neighbour', { vertexColors: true }), roofM = kit.surface('neighbourRoof', { vertexColors: true, side: THREE.DoubleSide });
-    const roadM = kit.surface('road', { map: kit.asphalt() });
+    const roadM = look.material('road');
     const add = (geo, mat) => {
       const m = new THREE.Mesh(geo, mat);
       m.receiveShadow = true;

@@ -36,15 +36,15 @@ export function panelGrid(w, d, panels) {
   return out;
 }
 
-export default function build({ THREE, kit, C, model, style, state, roof }) {
+export default function build({ THREE, kit, C, model, look, state, roof }) {
   const items = ((model.future || {}).items || []).filter(it => it && Array.isArray(it.pos));
   if (!items.length) return null;
-  const real = style === 'real';
+  const lit = look.lit;
   const group = new THREE.Group(), lift = new THREE.Group();
 
-  // the real style's one material per surface; the simple style's one fill and its line
+  // a lit style's one material per surface; the simple style's one fill and its line
   const mats = {};
-  const fill = real ? null : kit.basic({ color: C.future, opacity: SIMPLE_FILL, side: THREE.DoubleSide });
+  const fill = lit ? null : kit.basic({ color: C.future, opacity: SIMPLE_FILL, side: THREE.DoubleSide });
   function mat(name) {
     if (fill) return fill;
     if (mats[name]) return mats[name];
@@ -52,7 +52,7 @@ export default function build({ THREE, kit, C, model, style, state, roof }) {
     m.color.lerp(C.future, REAL_TINT);
     return (mats[name] = m);
   }
-  const line = real ? null : kit.lineMat({ color: C.future, opacity: SIMPLE_LINE });
+  const line = lit ? null : kit.lineMat({ color: C.future, opacity: SIMPLE_LINE });
   // a mesh of the item, tagged for taps; the simple style outlines it
   const targets = [];
   function add(parent, geo, name, id, inLift) {
@@ -118,7 +118,7 @@ export default function build({ THREE, kit, C, model, style, state, roof }) {
     const hull = kit.keep(new THREE.ExtrudeGeometry(new THREE.Shape(prof.map(([x, y]) => new THREE.Vector2(x, y))), { depth: d, bevelEnabled: false }));
     hull.translate(0, 0, -d / 2);
     add(g, hull, 'glass', it.id);
-    if (!real) return;
+    if (!lit) return;
     for (const z of [-d / 2, 0, d / 2]) for (const x of [-w / 2, w / 2]) add(g, box(BAR, EAVES, BAR), 'frame', it.id).position.set(x, EAVES / 2, z);
     for (const x of [-w / 2, w / 2]) add(g, box(BAR, BAR, d), 'frame', it.id).position.set(x, EAVES, 0);
     add(g, box(BAR, BAR, d), 'frame', it.id).position.set(0, RIDGE, 0);

@@ -1,16 +1,16 @@
 // The pergola: wall beam on the rect's north edge, posts on the south edge. The louvres keep a
 // fixed angle because the pergola reports no position. Its LED glows with the marker whose role
 // is 'pergola-light'.
-export default function build({ THREE, kit, C, model, style }) {
+export default function build({ THREE, kit, C, model, look }) {
   const p = (model.site || {}).pergola;
   if (!p) return null;
   const { basic, lineMat, edges, near } = kit;
-  const real = style === 'real';
-  // the real style: in the casings' surface (kit.trim: trim when the look names it, else the
+  const lit = look.lit;
+  // the lit styles: in the casings' surface (kit.trim: trim when the look names it, else the
   // frame's), casting shadows, no outlines
-  const box = real ? (g, m, _e, r, y) => { const s = kit.solid(g, m, r, y); s.castShadow = true; return s; } : kit.box;
+  const box = lit ? (g, m, _e, r, y) => { const s = kit.solid(g, m, r, y); s.castShadow = true; return s; } : kit.box;
   const group = new THREE.Group();
-  const trimM = real ? kit.surface(kit.trim.surface) : null;
+  const trimM = lit ? kit.surface(kit.trim.surface) : null;
   const frameM = trimM || basic({ color: C.wall, opacity: 0.35 });
   const frameE = lineMat({ color: C.line, opacity: 0.75 });
   const ledMat = lineMat({ color: C.amber, opacity: 0 });
@@ -32,7 +32,7 @@ export default function build({ THREE, kit, C, model, style }) {
       const s = new THREE.Mesh(geo, slatM);
       s.position.set(x0 + u * W + W / 2, Hp - 0.1, z0 + 0.25 + i * 0.2);
       s.rotation.x = 0.6;
-      if (real) s.castShadow = true;
+      if (lit) s.castShadow = true;
       else s.add(edges(geo, slatE));
       group.add(s);
     }

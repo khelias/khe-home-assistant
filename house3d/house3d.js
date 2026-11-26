@@ -2,7 +2,7 @@
 // and draws generic markers over it. The HA card and the standalone viewer are thin shells
 // around mount(); neither the engine nor this directory carries any house data.
 //
-// This file is the core: renderer and bloom, the real style's sun, sky, shadows and contact
+// This file is the core: renderer and bloom, a lit style's sun, sky, shadows and contact
 // shadows, camera,
 // controls and framing, roof mode, taps and hover, the frame loop, resize and dispose, and the
 // layer registry. It builds no scene geometry. scene/kit.js makes each mount's colours, materials
@@ -12,13 +12,14 @@
 // layer, listed in LAYERS below in build order. A new scene layer is a module there and its
 // line in LAYERS.
 //
-// Styles: 'simple' (default) is the unlit neon wireframe; 'real' draws lit surfaces in the
-// house's look (kit.surface: the model's geometry.look over a neutral default) under a sun with
-// shadows, on one of two stages, garden or studio, with a house's baked contact shadows in either
-// (mount()'s stage and bake options). A layer branches on ctx.style === 'real' and leaves its
-// simple path as it is;
+// Styles: 'simple' (default) is the unlit neon wireframe; 'real' (Päris) and 'photo' (Foto) are
+// the lit styles, which draw lit surfaces in the house's look (kit.surface: the model's
+// geometry.look over a neutral default) under a sun with shadows, on one of two stages, garden or
+// studio, with a house's baked contact shadows in either (mount()'s stage and bake options). What
+// a lit style draws its surfaces, sky and light with is its look (scene/look.js, ctx.look); a
+// layer branches only on ctx.look.lit and leaves its simple path as it is;
 // tests/house3d/simple-snapshot.json pins the simple style's objects and materials. The interior
-// layer is the real style's alone (it builds null in the simple one) and reads the building
+// layer is a lit style's alone (it builds null in the simple one) and reads the building
 // layer's api, so it comes after it.
 //
 // One layer cannot take the view down: a layer module that fails to load is left out,
@@ -40,7 +41,7 @@
 //   lift?           a group that rises and fades with the roof mode (the building's upper part)
 //   toggle?         true for a switchable layer; listed()? says whether view.layers shows it now
 //   update(dt, k)?  per frame, dt in seconds and k the easing step; true while still animating
-//   shades?         true when what update() animates casts shadows (the real style's shadow map
+//   shades?         true when what update() animates casts shadows (a lit style's shadow map
 //                   is rendered only on change); a layer that only tints or glows leaves it out
 //   markers(list)?  every setMarkers list
 //   hit(ray)?       the tap and hover test on the raycaster: null, { car: true }, { room, target }
@@ -51,34 +52,37 @@
 //   api?            what the core re-exports (setCar, carState, carScreen) or another layer
 //                   calls through ctx.layer(id)
 //   dispose()?      frees what the kit's list and the scene traversal do not
-// ctx: THREE, kit, C (kit.C), model, options, style ('simple' | 'real'),
+// ctx: THREE, kit, C (kit.C), model, options, style (look.id), look (scene/look.js), stage ('garden' | 'studio'),
 //   frame { lotBox, wallBox, ext, E, lotCx, lotCz } (modelFrame),
 //   roof { fns, flat, under, topFn, gap, top(id), faces(id), planeAt(id, x, z), kinks(id), clip }: fns[id], under(id),
 //   topFn(top) and top(id) (the slab's top) are (x, z) -> y for every roof kind (modelFrame()), ceiling, reduceMotion, state (read-only: mode,
-//   roofFade, hovered, selection, night: 0 by day to 1 at night, the real style's only, sun: the
+//   roofFade, hovered, selection, night: 0 by day to 1 at night, a lit style's only, sun: the
 //   sun's { alt, dir, time } in both styles, null without a place), layer(id), screen(x, y, z) -> { x, y } | null, invalidate().
 //   build() and the first setOn() run before the loop exists: they must not call invalidate()
 //   or screen().
 // The core puts each layer's group and lift under a wrapper group, and switching a layer sets
 // only the wrapper's visible. Nothing leaves the scene, so dispose() still reaches every object.
-import * as THREE from './vendor/three-0.186.1/build/three.module.js';
-import { OrbitControls } from './vendor/three-0.186.1/examples/jsm/controls/OrbitControls.js';
-import { EffectComposer } from './vendor/three-0.186.1/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from './vendor/three-0.186.1/examples/jsm/postprocessing/OutputPass.js';
-import { FullScreenQuad } from './vendor/three-0.186.1/examples/jsm/postprocessing/Pass.js';
+import * as THREE from './vendor/three-0.187.0/build/three.module.js';
+import { OrbitControls } from './vendor/three-0.187.0/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from './vendor/three-0.187.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from './vendor/three-0.187.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from './vendor/three-0.187.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from './vendor/three-0.187.0/examples/jsm/postprocessing/OutputPass.js';
+import { FullScreenQuad } from './vendor/three-0.187.0/examples/jsm/postprocessing/Pass.js';
 
 const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'interior', 'lights', 'winter', 'car', 'future', 'fans'];
 const QUERY = new URL(import.meta.url).search;
 // a layer module that fails to load drops its layer, not the engine, and the bake module drops
 // only the bake; the kit, the sun and the overlay (scene/overlay.js, the markers, labels and
 // chips) are required
-const [KIT, SUN, OVERLAY, BAKED, ...LOADED] = await Promise.allSettled(['kit', 'sun', 'overlay', 'bake', ...LAYERS.map(id => `layers/${id}`)].map(p => import(`./scene/${p}.js${QUERY}`)));
-[KIT, SUN, OVERLAY].forEach(r => { if (r.status === 'rejected') throw r.reason; });
+const [KIT, SUN, OVERLAY, LOOK, PHOTO, BAKED, ...LOADED] = await Promise.allSettled(['kit', 'sun', 'overlay', 'look', 'photo', 'bake', ...LAYERS.map(id => `layers/${id}`)].map(p => import(`./scene/${p}.js${QUERY}`)));
+[KIT, SUN, OVERLAY, LOOK].forEach(r => { if (r.status === 'rejected') throw r.reason; });
 if (BAKED.status === 'rejected') console.error('house3d: bake failed to load', BAKED.reason);
 const BAKE = BAKED.status === 'fulfilled' ? BAKED.value : null;
+if (PHOTO.status === 'rejected') console.error('house3d: the Foto style failed to load', PHOTO.reason);
+const photoLook = PHOTO.status === 'fulfilled' ? PHOTO.value.photoLook : null;
 const { createKit } = KIT.value;
+const { createLook } = LOOK.value;
 const { sunPosition, gridBearing, sunDirection, sunGlow, realLight, LOW_SUN } = SUN.value;
 const { createOverlay, OVERLAY_STYLE } = OVERLAY.value;
 const BUILDERS = LOADED.map((r, i) => {
@@ -90,15 +94,17 @@ const BUILDERS = LOADED.map((r, i) => {
 const D2R = Math.PI / 180;
 const ROOF_GAP = 0.06; // walls stop just under the roof so the two outlines do not z-fight
 const BLOOM_MIN_WIDTH = 720;
+// autoQuality(): at or below these the Foto style takes the light tier
+const LOW_CORES = 4, LOW_MEMORY = 4;
 // the contact shadows: how far a surface darkens what is near it, in metres, the fade in and out in
 // seconds, and the roof's fade below which it counts as off
 const AO_RADIUS = 0.45, AO_SCALE = 1.15, AO_SAMPLES = 12, AO_RAMP = 0.3, AO_ROOF_OFF = 0.01;
 const FOCUS_SPAN = 7; // metres: the least a focused room's framing spans
-// the real style's sky texture, SKY_PX rows from the horizon, below SKY_HORIZON of the view's
+// a lit style's sky texture, SKY_PX rows from the horizon, below SKY_HORIZON of the view's
 // height, to the zenith at its top
 const SKY_PX = 128, SKY_HORIZON = 0.25;
 const LOT_FOG = 1.5; // fitFog()
-// without a place the real style lights the street side from the left, like an afternoon sun
+// without a place the lit styles light the street side from the left, like an afternoon sun
 const FIXED_SUN = [-0.62, 0.62, -0.48];
 // pvNow(): clear-sky beam by Meinel's formula, the diffuse share of it, the system's losses and
 // the peak kW per kWp at the roofs' low slope (khe-meta house/house-hvac.md's PV assessment)
@@ -606,20 +612,37 @@ export function coast(v, dt, tau = 0.35) {
   return { d: { az: v.az * s, polar: v.polar * s }, v: { az: v.az * f, polar: v.polar * f } };
 }
 
-/**
- * aoWanted({ real, ao, width, roofFade }) -> true when the contact shadows should show: the real
- * style, not switched off by options.ao, at least BLOOM_MIN_WIDTH wide and the roof fully off.
- */
-export function aoWanted({ real, ao, width, roofFade }) {
-  return !!real && ao !== false && width >= BLOOM_MIN_WIDTH && roofFade <= AO_ROOF_OFF;
+// the light tier unless options.quality says otherwise: a device that reports few cores or little
+// memory (a tablet), where Foto's cards and normal maps cost the most
+export function autoQuality(nav = typeof navigator === 'undefined' ? {} : navigator) {
+  return (nav.hardwareConcurrency || 8) <= LOW_CORES || (nav.deviceMemory || 8) <= LOW_MEMORY ? 'low' : 'high';
 }
 
 /**
- * stageLayers(style, stage) -> the layer ids mount() builds: the studio stage of the real style
+ * aoWanted({ lit, ao, width, roofFade }) -> true when the contact shadows should show: a lit
+ * style, not switched off by options.ao, at least BLOOM_MIN_WIDTH wide and the roof fully off.
+ */
+export function aoWanted({ lit, ao, width, roofFade }) {
+  return !!lit && ao !== false && width >= BLOOM_MIN_WIDTH && roofFade <= AO_ROOF_OFF;
+}
+
+/**
+ * resolveStyle({ style, stage }) -> { lit, style, stage }: mount()'s style and stage from its
+ * options, 'simple' and 'garden' for anything unknown; the stage is a lit style's, and the studio
+ * is Päris's in every lit style, so a lit style there is 'real'.
+ */
+export function resolveStyle({ style, stage }) {
+  const lit = style === 'real' || style === 'photo';
+  const studio = lit && stage === 'studio';
+  return { lit, style: !lit ? 'simple' : studio ? 'real' : style, stage: studio ? 'studio' : 'garden' };
+}
+
+/**
+ * stageLayers(style, stage) -> the layer ids mount() builds: the studio stage of the lit styles
  * builds only the house (pergola, building, interior), every other style and stage all of LAYERS.
  */
 export function stageLayers(style, stage) {
-  return style === 'real' && stage === 'studio' ? LAYERS.filter(id => STUDIO_LAYERS.includes(id)) : LAYERS.slice();
+  return style !== 'simple' && stage === 'studio' ? LAYERS.filter(id => STUDIO_LAYERS.includes(id)) : LAYERS.slice();
 }
 
 /**
@@ -628,7 +651,7 @@ export function stageLayers(style, stage) {
  *                                     carScreen, layers, time, view, sun }
  *
  * model: geometry + rooms layers (private and showcase are ignored). A wall with finish 'panel' is
- *   drawn in the real style as a panel in the frame's colour (the carport's walls and posts); a room's floor
+ *   drawn in the lit styles as a panel in the frame's colour (the carport's walls and posts); a room's floor
  *   ('tile' or 'paving', else oak) is its floor finish there. site.decks and site.paving:
  *   items that are rects [x0, z0, x1, z1] or outlines [[x, z], ...]. site.gates: [{ a, b, kind,
  *   height, opens?, slide?, name? }], drawn closed in the fence line; kind 'sliding' (one leaf, set
@@ -651,16 +674,19 @@ export function stageLayers(style, stage) {
  *                    styles; sun as the sun getter gives it
  *   onFirstFrame()   the first frame is on the canvas
  *   onIdle()         the frame loop has stopped: nothing moves until the next change
- *   bloom            default true; always off below 720 px width and in the real style
- *   ao               default true; false keeps the real style's contact shadows off, which are
+ *   bloom            default true; always off below 720 px width and in the lit styles
+ *   ao               default true; false keeps a lit style's contact shadows off, which are
  *                    otherwise on from 720 px width with the roof fully off
  *   mode             the starting mode, 'roof' (default) or 'open'
- *   style            'simple' (default) or 'real'; another style is another mount
- *   stage            the real style's stage: 'garden' (default), the lot under the sun's clock, or
+ *   style            'simple' (default), 'real' (Päris) or 'photo' (Foto, scene/photo.js: Päris until its
+ *                    textures, house3d/assets/, are in after the first frame); another style is another mount
+ *   quality          Foto's tier: 'high', or 'low' (half the leaf cards, no normal maps, no contact
+ *                    shadows); autoQuality() picks it when left out
+ *   stage            a lit style's stage: 'garden' (default), the lot under the sun's clock, or
  *                    'studio', the house alone on a white base in soft studio light, where setSun
  *                    and setTime change nothing drawn; another stage is another mount
  *   bake             the URL of a house's bake.json (scripts/house3d-bake.sh): its contact shadows,
- *                    fetched after the first frame and applied in the real style when every baked
+ *                    fetched after the first frame and applied in the lit styles when every baked
  *                    mesh matches, else none with one console warning
  *   view             { position, target } as the view getter gives it: the first framing puts
  *                    the camera there instead of the home view, so a remount keeps the user's orbit
@@ -678,7 +704,7 @@ export function stageLayers(style, stage) {
  *                    smooth curve through it and parks at the last point, facing along the last leg.
  *   surroundings     { buildings: [{ outline: [[x, z], ...], height }], roads: [{ outline, holes? }] }:
  *                    the neighbouring buildings and the street as a flat surface, faint, never
- *                    tapped; the simple style draws a building as a box, the real style gives a
+ *                    tapped; the simple style draws a building as a box, the lit styles give a
  *                    house-sized rectangular one a gable (surroundings.js)
  * snapshot(maxWidth): the scene as it stands, without the markers, as a JPEG data URL at most
  *   maxWidth pixels wide, or null (not framed yet, the WebGL context lost, no WebGL); the card
@@ -691,15 +717,15 @@ export function stageLayers(style, stage) {
  *   is away, switched off or behind. Without a car, setCar does nothing, carState is 'away', carScreen null.
  * setSun({ lat, lon, bearing } | null): the place for the sun, in degrees, bearing the L-EST97
  *   grid azimuth of the model's +x axis (georef.x_axis_bearing_deg); null or any missing value
- *   gives the real style a fixed afternoon sun. setTime(date | null): the sun's time, null for
+ *   gives the lit styles a fixed afternoon sun. setTime(date | null): the sun's time, null for
  *   live (recomputed once a minute while there is a place). time is the time in use. sun is
  *   { alt, dir: [x, y, z], time } (degrees, the unit vector towards the sun in model axes, the
- *   Date it was computed for), or null without a place, in both styles; only the real style
- *   draws it. view is { position, target } for options.view; the fog follows the camera.
+ *   Date it was computed for), or null without a place, in both styles; only the lit styles
+ *   draw it. view is { position, target } for options.view; the fog follows the camera.
  * layers: [{ id, on }] for the switchable layers present and listed now; setLayer(id, on) switches
  *   one and ignores an unknown id. Switchable: 'markers' (the overlay; off hides every marker but
  *   an alert), 'fans' (listed while a marker has a look), 'trees', 'surroundings', 'winter' (the
- *   real style's lights and snow) and 'car' (off parks a running drive and closes the gate at
+ *   lit styles' lights and snow) and 'car' (off parks a running drive and closes the gate at
  *   once, and 'arrive' then parks). A layer that is off takes no taps.
  * markers: { id, pos: [x, y, z], icon, state: 'idle'|'on'|'alert'|'off', value?, label?,
  *            stateText?, room?, look?: [dx, dz], role?, level?: 0..1, glow?: 0..1, pulse?, warm? }
@@ -717,7 +743,7 @@ export function stageLayers(style, stage) {
  *   markers and selects its floor; null returns to the overview and leaves the camera. The card
  *   uses this; setSelection(id) marks a room's floor or a marker by id and is the viewer's.
  *   A marker whose room is a house room shows only with the roof off, unless its state is
- *   'alert'; state 'on' warms that room's floor unless warm is false. In the real style at night a
+ *   'alert'; state 'on' warms that room's floor unless warm is false. In the lit styles at night a
  *   room glows from its brightest 'on' light's level or any of its markers' glow, whatever its
  *   state. role 'pergola-light' drives the pergola's LED glow.
  */
@@ -753,10 +779,10 @@ export function mount(element, model, options = {}) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   stage.appendChild(renderer.domElement);
 
-  const style = options.style === 'real' ? 'real' : 'simple', real = style === 'real';
-  const scenery = real && options.stage === 'studio' ? 'studio' : 'garden', studio = scenery === 'studio';
+  const { lit, style, stage: scenery } = resolveStyle(options), studio = scenery === 'studio';
   const kit = createKit(THREE, style, model.look), C = kit.C;
-  root.classList.toggle('h3d-real', real);
+  const look = createLook(THREE, kit, style, { light: realLight, photo: photoLook, quality: options.quality || autoQuality() });
+  root.classList.toggle('h3d-real', lit);
   const scene = new THREE.Scene();
   scene.background = C.bg;
   scene.fog = new THREE.Fog(C.bg, 34, 78);
@@ -792,7 +818,7 @@ export function mount(element, model, options = {}) {
   const screen = (x, y, z) => toScreen(camera, [x, y, z], width, height, screenV);
   const byId = {};
   const ctx = {
-    THREE, kit, C, model, options, style, reduceMotion, state, screen,
+    THREE, kit, C, model, options, style: look.id, look, stage: scenery, reduceMotion, state, screen,
     frame: modelBox,
     roof,
     ceiling: model.ceiling,
@@ -827,7 +853,7 @@ export function mount(element, model, options = {}) {
     if (e.wrap) e.wrap.visible = on;
     if (e.L.setOn) e.L.setOn(on);
   }
-  const shadowsDirty = () => { if (real) renderer.shadowMap.needsUpdate = true; };
+  const shadowsDirty = () => { if (lit) renderer.shadowMap.needsUpdate = true; };
   function setLayer(id, on) {
     const e = layers.find(x => x.L.toggle && x.L.id === id && !x.failed);
     if (!e || e.on === !!on) return;
@@ -843,7 +869,7 @@ export function mount(element, model, options = {}) {
   layers.forEach(e => { if (e.L.toggle) switchLayer(e, start[e.L.id] !== false); });
   // what a bake would darken, taken before the roof's fade changes an opacity (scene/bake.js)
   let bakeList = null;
-  if (real && options.bake && BAKE) {
+  if (lit && options.bake && BAKE) {
     try { bakeList = BAKE.bakeTargets(layers.map(e => e.L)); } catch (e) { console.error('house3d: bake failed', e); }
   }
 
@@ -860,22 +886,23 @@ export function mount(element, model, options = {}) {
     composer.setSize(width, height);
     return composer;
   }
-  const bloomOn = () => !real && options.bloom !== false && width >= BLOOM_MIN_WIDTH;
+  const bloomOn = () => !lit && options.bloom !== false && width >= BLOOM_MIN_WIDTH;
 
-  /* ---------- the real style's contact shadows, loaded on first use ---------- */
+  /* ---------- a lit style's contact shadows, loaded on first use ---------- */
   // Not a composer pass: OutputPass would tone-map the sky and the sun's glow, which the plain draw
   // leaves untouched. The scene draws to the canvas as ever and the shadows multiply over it.
   let ao = null, aoLoading = false, aoLevel = 0;
   function loadAO() {
     aoLoading = true;
-    import('./vendor/three-0.186.1/examples/jsm/postprocessing/GTAOPass.js').then(({ GTAOPass }) => {
+    import('./vendor/three-0.187.0/examples/jsm/postprocessing/GTAOPass.js').then(({ GTAOPass }) => {
       if (disposed) return;
       const pass = new GTAOPass(scene, camera, width, height);
       pass.output = GTAOPass.OUTPUT.Denoise;
       pass.updateGtaoMaterial({ radius: AO_RADIUS, scale: AO_SCALE, samples: AO_SAMPLES });
-      // glass, sheers, the floor shade and the sun's glow have no surface to shade: drawn into the
-      // normals they would leave a dark halo round what is behind them
-      const seeThrough = m => (Array.isArray(m) ? m.some(x => x.transparent) : !!m && m.transparent);
+      // glass, sheers, the floor shade, the sun's glow and Foto's leaf cards have no surface to
+      // shade: drawn into the normals they would leave a dark halo round what is behind them
+      const clear = x => x.transparent || x.alphaTest > 0;
+      const seeThrough = m => (Array.isArray(m) ? m.some(clear) : !!m && clear(m));
       pass._overrideVisibility = () => scene.traverseVisible(o => {
         if (!(o.isPoints || o.isLine || o.isLine2 || o.isSprite || seeThrough(o.material))) return;
         o.visible = false;
@@ -898,7 +925,7 @@ export function mount(element, model, options = {}) {
   }
   // one step of the fade towards what is wanted now; true while it still moves
   function stepAO(dt) {
-    const wanted = aoWanted({ real, ao: options.ao, width, roofFade: fade.cur });
+    const wanted = aoWanted({ lit, ao: look.ao ?? options.ao, width, roofFade: fade.cur });
     if (wanted && !aoLoading) loadAO();
     const to = wanted && ao ? 1 : 0;
     if (aoLevel === to) return false;
@@ -916,7 +943,7 @@ export function mount(element, model, options = {}) {
     renderer.autoClear = clears;
   }
 
-  /* ---------- the real style's sun, sky and shadows ---------- */
+  /* ---------- a lit style's sun, sky and shadows ---------- */
   // sun is the one shadow-casting light: the sun while it is up, the moon below the horizon
   let sun = null, fill = null, hemi = null, glow = null, sunPlace = null, sunTime = null, sunTimer = 0, liftCasts = true, liftAt = null;
   // the sky behind the scene, and the same sky as the environment the surfaces reflect, both
@@ -925,7 +952,7 @@ export function mount(element, model, options = {}) {
   // towards the sun, unit length, at every altitude (sunV is set only while it is up)
   const sunDir = new THREE.Vector3();
   const lowSun = new THREE.Color(LOW_SUN), horizon = new THREE.Color(), zenith = new THREE.Color(), px = new THREE.Color();
-  if (real) {
+  if (lit) {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
     // the shadow camera is fixed to the lot box, so a camera move needs no shadow pass: the map
@@ -944,7 +971,7 @@ export function mount(element, model, options = {}) {
     scene.add(hemi, sun, sun.target, fill);
     pmrem = new THREE.PMREMGenerator(renderer);
   }
-  if (real && !studio) {
+  if (lit && !studio) {
     // neutral keeps the specification's colours closest
     renderer.toneMapping = THREE.NeutralToneMapping;
     skyTex = kit.keep(new THREE.DataTexture(new Uint8Array(SKY_PX * 4), 1, SKY_PX));
@@ -1049,10 +1076,10 @@ export function mount(element, model, options = {}) {
     fill.intensity = STUDIO.fill;
     fill.color.set(STUDIO.light);
     fill.position.set(...STUDIO.fillDir);
-    const env = new THREE.Scene(), lit = new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 4, 4), side: THREE.DoubleSide });
+    const env = new THREE.Scene(), bright = new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 4, 4), side: THREE.DoubleSide });
     env.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.MeshBasicMaterial({ color: '#cfccc6', side: THREE.BackSide })));
     SOFT_BOXES.forEach(([x, y, z, size]) => {
-      const p = new THREE.Mesh(new THREE.PlaneGeometry(size, size), lit);
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(size, size), bright);
       p.position.set(x, y, z);
       p.lookAt(0, 0, 0);
       env.add(p);
@@ -1074,7 +1101,7 @@ export function mount(element, model, options = {}) {
       sunNow = { alt: p.altitude, dir: sunDirection(p.altitude, gridBearing(p.azimuth, sunPlace.lon), sunPlace.bearing), time };
     } else sunNow = null;
     if (options.onSun) options.onSun(sunNow);
-    if (!real || studio) return;
+    if (!lit || studio) return;
     let alt, dir;
     if (sunNow) {
       alt = sunNow.alt;
@@ -1083,7 +1110,7 @@ export function mount(element, model, options = {}) {
       dir = FIXED_SUN;
       alt = Math.asin(dir[1] / Math.hypot(...dir)) / D2R;
     }
-    const L = realLight(alt);
+    const L = look.light(alt);
     night = L.night;
     horizon.setRGB(...L.horizon);
     zenith.setRGB(...L.zenith);
@@ -1098,8 +1125,11 @@ export function mount(element, model, options = {}) {
     hemi.intensity = L.hemi.intensity;
     hemi.color.setRGB(...L.hemi.sky);
     hemi.groundColor.setRGB(...L.hemi.ground);
+    // a look with its own sky (Foto's photographs) draws it, its environment and the fog
+    const ownSky = !!look.sky && look.sky({ alt, dir, scene, pmrem });
+    if (ownSky && envTarget) { envTarget.dispose(); envTarget = null; }
     const key = [...L.zenith, ...L.horizon, ...L.env.ground].map(v => Math.round(v * 40)).join();
-    if (key !== skyKey) {
+    if (!ownSky && key !== skyKey) {
       skyKey = key;
       paintSky();
       envMat.uniforms.zenith.value.setRGB(...L.env.zenith);
@@ -1109,10 +1139,10 @@ export function mount(element, model, options = {}) {
       envTarget = pmrem.fromScene(envScene, 0, 0.1, 10);
       scene.environment = envTarget.texture;
     }
-    scene.environmentIntensity = L.env.intensity;
+    if (!ownSky) scene.environmentIntensity = L.env.intensity;
     sunDir.set(dir[0], dir[1], dir[2]).normalize();
     const g = sunGlow(alt);
-    glow.visible = g.visible;
+    glow.visible = g.visible && !ownSky;
     glow.material.opacity = g.opacity;
     glow.material.color.set('#ffffff').lerp(lowSun, g.warm);
     if (sun.visible) placeSun(L.key.dir || dir);
@@ -1276,12 +1306,12 @@ export function mount(element, model, options = {}) {
   }
   const homeDistance = () => homeFor().distance;
   // the simple style's fog starts just past the orbit target, never nearer than from the home
-  // view: fixed to the home distance, a zoom-out sank the house itself into it. The real style's
+  // view: fixed to the home distance, a zoom-out sank the house itself into it. A lit style's
   // starts at the lot's farthest corner from the camera, so the lot stays clear and only the land
   // beyond fades, out by LOT_FOG times that distance
   const fogCorner = new THREE.Vector3();
   function fitFog() {
-    if (real) {
+    if (lit) {
       const [x0, z0, x1, z1] = modelBox.lotBox;
       let far = 0;
       for (const x of [x0, x1]) for (const z of [z0, z1]) far = Math.max(far, camera.position.distanceTo(fogCorner.set(x, 0, z)));
@@ -1397,7 +1427,7 @@ export function mount(element, model, options = {}) {
       });
     }
     // the shadow pass ignores opacity, so the lift casts only while the roof is fully on
-    if (real && liftCasts !== fade.cur > 0.99) {
+    if (lit && liftCasts !== fade.cur > 0.99) {
       liftCasts = fade.cur > 0.99;
       shadowsDirty();
       layers.forEach(({ L }) => {
@@ -1425,9 +1455,23 @@ export function mount(element, model, options = {}) {
       drawn = true;
       if (options.onFirstFrame) options.onFirstFrame();
       if (bakeList) loadBake();
+      if (look.start && !studio) loadLook();
     }
   }
   let drawn = false;
+  // what the look loads (Foto's textures, house3d/assets/ at this file's ?v=), after the first frame
+  // like the bake; a texture that fails leaves the look as Päris draws it
+  function loadLook() {
+    const vendor = './vendor/three-0.187.0/examples/jsm/';
+    import(`${vendor}loaders/KTX2Loader.js`).then(({ KTX2Loader }) => {
+      if (disposed) return;
+      const loader = new KTX2Loader().setTranscoderPath(new URL(`${vendor}libs/basis/`, import.meta.url).href).detectSupport(renderer);
+      return look.start({
+        load: f => loader.loadAsync(new URL(`./assets/${f}${QUERY}`, import.meta.url).href),
+        done: () => { if (!disposed) { updateSun(); shadowsDirty(); invalidate(); } }
+      }).finally(() => loader.dispose());
+    }).catch(e => console.warn('house3d: the Foto style stays as Päris draws it', e));
+  }
   // the bake and its atlas beside it, after the first frame so they never hold it up
   function loadBake() {
     let url;
@@ -1477,6 +1521,7 @@ export function mount(element, model, options = {}) {
     clearInterval(sunTimer);
     if (sun) sun.dispose();
     if (envTarget) envTarget.dispose();
+    if (look.dispose) look.dispose();
     if (pmrem) pmrem.dispose();
     cancelAnimationFrame(raf);
     raf = 0;

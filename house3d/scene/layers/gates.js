@@ -1,5 +1,5 @@
 // Gates in the fence line, drawn like the fence: lines in the simple style, bars like the bar
-// fence in the real one. Each leaf hangs on a pivot so the drive gate can open for the car; a post
+// fence in the lit ones. Each leaf hangs on a pivot so the drive gate can open for the car; a post
 // two gates share is drawn once.
 const SLIDE_OFFSET = 0.12; // a sliding leaf runs this far to the lot side of the fence line, past its rails
 const yawOf = (dx, dz) => Math.atan2(-dz, dx); // rotation.y that turns local +x along (dx, dz)
@@ -14,15 +14,15 @@ const meets = (p, q, a, b) => {
   return (d1 * d2 <= 0) && (d3 * d4 <= 0) && between(p, q, a, b);
 };
 
-export default function build({ THREE, kit, C, model, frame, style }) {
+export default function build({ THREE, kit, C, model, frame, look }) {
   const list = (model.site || {}).gates || [];
   if (!list.length) return null;
   const { lotCx, lotCz } = frame;
-  const real = style === 'real';
+  const lit = look.lit;
   const group = new THREE.Group();
-  const gateE = real ? null : kit.lineMat({ color: C.lineSoft, opacity: 0.5 });
-  const postM = real ? kit.surface('fence') : kit.basic({ color: C.wall, opacity: 0.35 });
-  const postE = real ? null : kit.lineMat({ color: C.lineSoft, opacity: 0.6 });
+  const gateE = lit ? null : kit.lineMat({ color: C.lineSoft, opacity: 0.5 });
+  const postM = lit ? kit.surface('fence') : kit.basic({ color: C.wall, opacity: 0.35 });
+  const postE = lit ? null : kit.lineMat({ color: C.lineSoft, opacity: 0.6 });
   const gatePosts = new Set();
   function leafGeo(len, h) {
     const n = Math.max(1, Math.round(len / 0.12)), pts = [];
@@ -40,7 +40,7 @@ export default function build({ THREE, kit, C, model, frame, style }) {
       if (gatePosts.has(key)) return;
       gatePosts.add(key);
       const rect = [x - 0.05, z - 0.05, x + 0.05, z + 0.05], y = [0, g.height + 0.1];
-      if (real) kit.solid(group, postM, rect, y).castShadow = true;
+      if (lit) kit.solid(group, postM, rect, y).castShadow = true;
       else kit.box(group, postM, postE, rect, y);
     });
     const side = g.opens === 'out' ? -1 : 1, leaves = [];
@@ -48,7 +48,7 @@ export default function build({ THREE, kit, C, model, frame, style }) {
       const pivot = new THREE.Object3D();
       pivot.position.set(x, 0, z);
       pivot.rotation.y = yawOf(dx, dz);
-      pivot.add(real ? kit.bars(len, g.height, postM) : new THREE.LineSegments(leafGeo(len, g.height), gateE));
+      pivot.add(lit ? kit.bars(len, g.height, postM) : new THREE.LineSegments(leafGeo(len, g.height), gateE));
       group.add(pivot);
       const turn = yawOf(side * nx, side * nz) - pivot.rotation.y;
       leaves.push({ pivot, x, z, closed: pivot.rotation.y, turn: Math.atan2(Math.sin(turn), Math.cos(turn)) });

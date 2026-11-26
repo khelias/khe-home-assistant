@@ -21,12 +21,14 @@ globalThis.document = {
   })
 };
 
-export const THREE = await import(new URL('vendor/three-0.186.1/build/three.module.js', E));
+export const THREE = await import(new URL('vendor/three-0.187.0/build/three.module.js', E));
 export const { createKit } = await import(new URL('scene/kit.js', E));
+export const { createLook } = await import(new URL('scene/look.js', E));
+export const { photoLook } = await import(new URL('scene/photo.js', E));
 export const BUILDERS = await Promise.all(LAYERS.map(id => import(new URL(`scene/layers/${id}.js`, E))));
-export const { modelFrame, seasonOn, seasonWindow, buildLayer, guardLayer, syncCamera, toScreen, releaseVelocity, coast, homeBox, homeDir, homeView, pvNow, roofNormal, roofTop, tapAction, aoWanted } = await import(new URL('house3d.js', E));
+export const { modelFrame, seasonOn, seasonWindow, buildLayer, guardLayer, syncCamera, toScreen, releaseVelocity, coast, homeBox, homeDir, homeView, pvNow, roofNormal, roofTop, tapAction, aoWanted, resolveStyle, autoQuality } = await import(new URL('house3d.js', E));
 export const { collide, inChip, hitRect } = await import(new URL('scene/overlay.js', E));
-export const { OrbitControls } = await import(new URL('vendor/three-0.186.1/examples/jsm/controls/OrbitControls.js', E));
+export const { OrbitControls } = await import(new URL('vendor/three-0.187.0/examples/jsm/controls/OrbitControls.js', E));
 export const { sunPosition, gridBearing, sunDirection, sunGlow, realLight } = await import(new URL('scene/sun.js', E));
 export const { cornerBoards } = await import(new URL('scene/layers/building.js', E));
 export const { panelGrid } = await import(new URL('scene/layers/future.js', E));
@@ -49,12 +51,13 @@ export const options = {
 
 // the ctx mount() builds, without a renderer, camera or loop
 export function makeCtx(opts = options, m = model) {
-  const style = opts.style === 'real' ? 'real' : 'simple';
+  const { style, stage } = resolveStyle(opts);
   const kit = createKit(THREE, style, m.look);
+  const look = createLook(THREE, kit, style, { light: realLight, photo: photoLook, quality: opts.quality });
   const { roof, frame } = modelFrame(m);
   const byId = {};
   const ctx = {
-    THREE, kit, C: kit.C, model: m, options: opts, style, reduceMotion: false,
+    THREE, kit, C: kit.C, model: m, options: opts, style: look.id, look, stage, reduceMotion: false,
     state: { mode: 'roof', roofFade: 1, hovered: null, selection: null, night: 0 },
     screen: () => null,
     frame, roof,

@@ -94,6 +94,7 @@ body.real .hint { color: var(--ink); text-shadow: 0 1px 2px rgba(6, 12, 27, 0.85
   <div class="seg" role="group" aria-label="Stiil">
     <button type="button" data-style="simple" aria-pressed="true">Lihtne</button>
     <button type="button" data-style="real" aria-pressed="false">Päris</button>
+    <button type="button" data-style="photo" aria-pressed="false">Foto</button>
     <button type="button" data-style="studio" aria-pressed="false">Stuudio</button>
   </div>
   <button type="button" class="icon-btn" id="reset" aria-label="Lähtesta vaade" title="Lähtesta vaade"></button>
@@ -138,13 +139,13 @@ const SUN_PLACE = { lat: 58.6, lon: 25.0 };
 const bearing = (model.orientation || {}).x_axis_bearing_deg;
 // a house's baked contact shadows, when the build put them beside the model
 const bake = document.querySelector('meta[name="house3d-bake"]')?.content || undefined;
-// style is the button's: 'simple', 'real' (the garden) or 'studio' (the real style's studio stage)
+// style is the button's: 'simple', 'real' or 'photo' (the garden) or 'studio' (Päris's studio stage)
 let sel = null, style = 'simple', time = null; // time null: live
 let view;
 function mountView(keep = {}) {
   try {
     view = mount(stage, model, {
-      style: style === 'simple' ? 'simple' : 'real', stage: style === 'studio' ? 'studio' : 'garden', bake,
+      style: style === 'studio' ? 'real' : style, stage: style === 'studio' ? 'studio' : 'garden', bake,
       mode: keep.mode, view: keep.view,
       // the winter layer by the season, with its snow falling
       layers: { winter: seasonOn(new Date()) }, snowfall: true,
@@ -183,7 +184,7 @@ function restyle(s) {
   view = null;
   mountView(keep);
   document.querySelectorAll('[data-style]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.style === style)));
-  clock.hidden = style !== 'real';
+  clock.hidden = style !== 'real' && style !== 'photo';
   document.body.classList.toggle('real', style !== 'simple');
   syncClock();
 }

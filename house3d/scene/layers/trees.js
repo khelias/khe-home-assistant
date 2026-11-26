@@ -1,5 +1,5 @@
-// Garden trees: a trunk and a crown sized from the tree's height and crown width. The real style
-// draws the crown as a clump of soft lobes in one mesh, centred and scaled like the crowns() api's
+// Garden trees: a trunk and a crown sized from the tree's height and crown width. The lit styles
+// draw the crown as a clump of soft lobes in one mesh, centred and scaled like the crowns() api's
 // ellipsoid: every lobe inside its unit sphere and together filling its upper third, so the winter
 // layer's cap rests on them. A kind gives the clump its habit (KINDS), the tree's id varies it the
 // same way on every mount, and vertex shades darken the underside and the inner lobes. The trunk
@@ -15,15 +15,15 @@ const KINDS = {
 };
 const LOBE_DETAIL = 2, SHADE_LOW = 0.72, SHADE_INNER = 0.9, TRUNK_SIDES = 8, BODY_LIGHT = 0.6;
 
-export default function build({ THREE, kit, C, model, style }) {
+export default function build({ THREE, kit, C, model, look }) {
   const trees = (model.site || {}).trees || [];
   if (!trees.length) return null;
   const group = new THREE.Group();
   // for the winter layer: per tree id, its crown's centre [x, y, z] and radii [x, y, z] as built,
-  // in the real style its lobes as [x, y, z, r] in the crown's unit sphere, and attach(), which
+  // in the lit styles its lobes as [x, y, z, r] in the crown's unit sphere, and attach(), which
   // hangs its snow on the trees so it hides with them
-  // real style: per tree its seeded sequence and lobes, drawn once for the crown and the api
-  const lobed = style === 'real' ? Object.fromEntries(trees.map(({ id, kind }) => {
+  // lit styles: per tree its seeded sequence and lobes, drawn once for the crown and the api
+  const lobed = look.lit ? Object.fromEntries(trees.map(({ id, kind }) => {
     const rand = kit.seeded(id);
     return [id, { rand, lobes: lobesOf(KINDS[kind] || KINDS.maple, rand) }];
   })) : {};
@@ -33,9 +33,16 @@ export default function build({ THREE, kit, C, model, style }) {
       if (lobed[id]) at.lobes = lobed[id].lobes.map(([c, r]) => [c.x, c.y, c.z, r]);
       return [id, at];
     })),
-    attach: obj => group.add(obj)
+    attach: obj => group.add(obj),
+    // winter in a look that strips them: the crowns and their dress hidden, trunks and branches kept
+    bare(on) {
+      group.traverse(o => {
+        if (o.userData.part === 'crown') o.visible = !on;
+        if (o.userData.part === 'cards') o.visible = !on && !!o.userData.ready;
+      });
+    }
   };
-  if (style === 'real') {
+  if (look.lit) {
     const trunkM = kit.surface('trunk'), barkM = kit.surface('bark'), crownM = kit.surface('crown', { vertexColors: true });
     trees.forEach(({ id, kind, pos: [x, z], height, crown }) => {
       const top = height * (TRUNK[kind] || 0.3), w = Math.min(Math.max(height * 0.025, 0.1), 0.35);
@@ -46,6 +53,7 @@ export default function build({ THREE, kit, C, model, style }) {
       m.castShadow = true;
       m.userData.part = 'crown';
       group.add(m);
+      if (look.crown) look.crown({ group, mesh: m, material: crownM, lobes, rand: kit.seeded(`cards ${id}`), centre: [x, centreY, z], radii: [crown / 2, ry], crown });
       // the trunk runs a third of the way up into the crown, a birch's to its middle
       const birch = kind === 'birch', end = birch ? centreY : top + ry / 3;
       const trunk = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.3, w * 0.55, end, TRUNK_SIDES), birch ? barkM : trunkM);
@@ -78,7 +86,7 @@ export default function build({ THREE, kit, C, model, style }) {
     group.add(m);
   });
   return { id: 'trees', group, toggle: true, api };
-  // real style: a kind's lobes in the crown's unit sphere, [centre, radius] each, drawn from rand
+  // lit styles: a kind's lobes in the crown's unit sphere, [centre, radius] each, drawn from rand
   // (a tree's seeded sequence, which clump() and the branches then go on drawing from)
   function lobesOf({ rings, jitter }, rand) {
     const turn = rand() * 2 * Math.PI, lobes = [], v = () => 1 + jitter * (2 * rand() - 1);
@@ -93,7 +101,7 @@ export default function build({ THREE, kit, C, model, style }) {
     return lobes;
   }
 
-  // real style: the lobes as one geometry, the shades in a colour attribute
+  // lit styles: the lobes as one geometry, the shades in a colour attribute
   function clump(lobes, rand) {
     const v = new THREE.Vector3(), n = new THREE.Vector3();
     return kit.merge(lobes.map(([c, r]) => {

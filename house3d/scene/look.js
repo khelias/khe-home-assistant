@@ -1,0 +1,32 @@
+// The styles' looks: what a style draws its surfaces, sky and light with. A layer asks ctx.look
+// and branches only on look.lit, a lit surface against the simple style's wireframe and edges;
+// which lit style it is stays here. createLook() runs once per mount, after createKit().
+//
+// A look: { id: 'simple' | 'real' | 'photo', lit, and when lit:
+//   material(role, o?)  a new lit material for a surface by its kit name (kit.surface), with the
+//                       role's own texture (the lawn's mottle, the road's asphalt, the paving's
+//                       stones) unless o gives a map
+//   light(alt)          the light at a sun altitude in degrees (sun.js realLight()'s shape)
+//   start({ load, done })?  after the first frame: load(file) -> Promise<texture> from
+//                       house3d/assets/, done() once applied (scene/photo.js)
+//   sky({ alt, dir, scene, pmrem })?  per sun change in the garden, after the lights are set;
+//                       true when the look drew its own sky, environment and fog; once true,
+//                       true for the rest of the mount (the core drops its own environment)
+//   crown(tree)?, hedge(hedge)?  dress a crown or a hedge (leaf cards), see scene/photo.js
+//   snow(amount)?       the ground's snow on the lawn, 0 to 1
+//   bare?               true when winter strips the deciduous crowns
+//   winter(on)?         the winter layer switched, for what else the look changes in winter
+//   ao?                 false when the look wants no contact shadows
+//   dispose()? }
+// The studio stage is Päris's in every lit style: mount() asks for 'real' there.
+const MAPS = { lawn: 'lawn', road: 'asphalt', paving: 'pavers' };
+
+export function createLook(THREE, kit, id, { light, photo, quality } = {}) {
+  if (id !== 'real' && id !== 'photo') return { id: 'simple', lit: false };
+  const real = {
+    id: 'real', lit: true,
+    material: (role, o = {}) => kit.surface(role, MAPS[role] && !('map' in o) ? { map: kit[MAPS[role]](), ...o } : o),
+    light
+  };
+  return id === 'photo' && photo ? photo(THREE, kit, real, { quality }) : real;
+}

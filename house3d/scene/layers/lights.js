@@ -1,4 +1,4 @@
-// The outdoor luminaires (site.lights), a view effect of the dark: in the real style each is a
+// The outdoor luminaires (site.lights), a view effect of the dark: in the lit styles each is a
 // small fixture in the frame's colour, a flat disc under a ceiling or a box on a wall set out along its
 // face, that glows warm with a halo sprite and an additive pool of light on the ground, all
 // scaled by ctx.state.night and eased like a room's glow. They follow no HA entity. There are no
@@ -12,11 +12,11 @@ const POOL_Y = 0.14; // over the decks (0.12) and the step (0.115), so it shows 
 const POOL = 3;
 const WARM = '#ffcf8a', FIXTURE_GLOW = 2.2, HALO_OPACITY = 0.75, POOL_OPACITY = 0.85;
 
-export default function build({ THREE, kit, model, state, style }) {
+export default function build({ THREE, kit, model, state, look }) {
   const lights = (model.site || {}).lights;
   if (!Array.isArray(lights) || !lights.length) return null;
   const group = new THREE.Group();
-  if (style !== 'real') return { id: 'lights', group };
+  if (!look.lit) return { id: 'lights', group };
 
   const fixture = kit.surface('frame', { emissive: new THREE.Color(WARM), emissiveIntensity: 0 });
   const halo = kit.keep(new THREE.SpriteMaterial({

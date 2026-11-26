@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 61;
+const HOUSE3D_VERSION = 62;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -57,6 +57,7 @@ export const TEXT = {
     style: 'Stiil',
     simple: 'Lihtne',
     real: 'Päris',
+    photo: 'Foto',
     noLayers: 'Lülitatavaid kihte pole.',
     plan: 'Plaan',
     planAsOf: date => `Plaan · hinnang ${date}`,
@@ -99,6 +100,7 @@ export const TEXT = {
     style: 'Style',
     simple: 'Simple',
     real: 'Real',
+    photo: 'Photo',
     noLayers: 'No layers to switch.',
     plan: 'Plan',
     planAsOf: date => `Plan · estimate of ${date}`,
@@ -167,12 +169,14 @@ function writeLayers(layers) {
 
 // The style is kept per browser too; the time of day is not.
 const STYLE_KEY = 'house3d-style';
+const STYLES = ['simple', 'real', 'photo'];
 function readStyle() {
   try {
     const v = localStorage.getItem(STYLE_KEY);
-    if (v === 'simple' || v === 'real') return v;
+    if (STYLES.includes(v)) return v;
   } catch (e) { /* the in-memory copy answers */ }
-  return seenMemory.get(STYLE_KEY) === 'real' ? 'real' : 'simple';
+  const v = seenMemory.get(STYLE_KEY);
+  return STYLES.includes(v) ? v : 'simple';
 }
 function writeStyle(v) {
   seenMemory.set(STYLE_KEY, v);
@@ -198,7 +202,7 @@ export function writePoster(key, url) {
   try { localStorage.setItem(key, url); } catch (e) { seenMemory.set(key, url); }
 }
 
-// The real style's sliders: the time of day in quarter hours (96 is 24:00) and the day of this year.
+// The lit styles' sliders: the time of day in quarter hours (96 is 24:00) and the day of this year.
 const pad = n => String(n).padStart(2, '0');
 const yearStart = () => new Date(new Date().getFullYear(), 0, 1);
 const dayOfYear = d => Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - yearStart()) / 86400000);
@@ -710,7 +714,7 @@ export class House3dCard extends Base {
         if (ev.target.closest('[data-act="now"]')) {
           this._setTime(null);
           // the simple style shows the button only while a slider time is kept
-          return this._style !== 'real' ? this._openLayers() : undefined;
+          return !this._lit() ? this._openLayers() : undefined;
         }
         if (ev.target.closest('[data-act="close"]')) return this._sheet === 'layers' ? this._closeSheet() : this._openRoom(null);
       });
@@ -786,13 +790,18 @@ export class House3dCard extends Base {
   }
 
   // the sun needs the house's place: HA's location and the model's grid bearing; without any of
-  // them the real style keeps its fixed sun
+  // them a lit style keeps its fixed sun
   _applySun(hass) {
     const c = hass.config || {}, geo = this._config.model.georef || {};
     const place = { lat: num(c.latitude), lon: num(c.longitude), bearing: num(geo.x_axis_bearing_deg) };
     if (place.lat === null || place.lon === null || place.bearing === null) return;
     this._view.setSun(place);
     this._sunSet = true;
+  }
+
+  // a lit style (Päris, Foto) has the sun, its time sliders and a night; asked once the engine is in
+  _lit() {
+    return this._mod.resolveStyle({ style: this._style }).lit;
   }
 
   _sliderTime() {
@@ -995,9 +1004,8 @@ export class House3dCard extends Base {
     sheet.innerHTML = `<div class="head"><div><h2>${this._isHero ? t.view : t.layersTitle}</h2></div>
       <button type="button" class="close" data-act="close" aria-label="${t.close}">${this._mod.icon('close')}</button></div>
       ${this._isHero ? `<div class="row">${this._modeSeg(this._view.mode)}<button type="button" class="now" data-act="reset">${t.resetView}</button></div>` : `<div class="row"><span>${t.style}</span><div class="seg" role="group" aria-label="${t.style}">
-        <button type="button" data-style="simple" aria-pressed="${this._style === 'simple'}">${t.simple}</button>
-        <button type="button" data-style="real" aria-pressed="${this._style === 'real'}">${t.real}</button></div></div>`}
-      ${this._style === 'real' ? this._timeRows() : this._time ? `<button type="button" class="now" data-act="now" aria-pressed="false">${t.now}</button>` : ''}
+        ${STYLES.map(s => `<button type="button" data-style="${s}" aria-pressed="${this._style === s}">${t[s]}</button>`).join('')}</div></div>`}
+      ${this._lit() ? this._timeRows() : this._time ? `<button type="button" class="now" data-act="now" aria-pressed="false">${t.now}</button>` : ''}
       <div class="list switches"></div>`;
     this._sheet = 'layers';
     this._syncTime();

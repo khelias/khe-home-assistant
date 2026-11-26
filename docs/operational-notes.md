@@ -575,17 +575,22 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   an architectural model: oak planks along the plan's z and the wet rooms'
   wood-look tile on the floors, near-black section caps on the walls' cut
   tops, oak skirting and a soft shade on the floor along the walls, and the furniture shaped by
-  its `kind`), chosen per browser in the Kihid sheet and kept in `localStorage` under
+  its `kind`), and "Foto" (Päris with a photographed lawn, street and sky and
+  leaf cards on the crowns and hedges, the deciduous crowns bare in winter, a
+  light tier on a device with few cores or little memory; its textures are
+  the engine's `house3d/assets/`, loaded after the first frame, so khe.ee/ha
+  allows a `blob:` worker and WebAssembly for their decoder), chosen per
+  browser in the Kihid sheet and kept in `localStorage` under
   `house3d-style`. Switching remounts the engine with the roof mode, camera
-  and fog kept. The real style has no bloom; its shadow map is 2048 px, 1024
+  and fog kept. The lit styles have no bloom; their shadow map is 2048 px, 1024
   below 720 px width, and the roof and the car cast only while fully shown,
   since the shadow pass ignores opacity. The shadow camera is fixed to the
   lot, so the map is rendered only when the sun moves, the roof fades, a
   layer that casts animates (the car and the gate; a layer says so with
   `shades`) or is switched, the style mounts or a resize replaces the map,
   never for a camera move.
-- **Contact shadows** darken what stands close together in the real style,
-  from 720 px width with the roof fully off. They stay off in the hero
+- **Contact shadows** darken what stands close together in the lit styles
+  (Foto's light tier excepted), from 720 px width with the roof fully off. They stay off in the hero
   (`heroMount` passes `ao: false`) and in the simple style. three's `GTAOPass`,
   vendored with its shaders, loads by dynamic `import()` the first time they
   are wanted; a failed load logs once and the plain draw goes on. The scene

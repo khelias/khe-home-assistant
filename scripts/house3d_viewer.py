@@ -211,12 +211,15 @@ def build(model_path, outdir, bake=None):
 
 
 def copy_engine(outdir):
-    """Copy the engine, its scene modules and vendored three.js into outdir; return its Path."""
+    """Copy the engine, its scene modules, the Foto style's assets and vendored three.js into
+    outdir; return its Path."""
     out = Path(outdir)
     out.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(SRC / "house3d.js", out / "house3d.js")
-    shutil.copytree(SRC / "scene", out / "scene", dirs_exist_ok=True)
-    shutil.copytree(SRC / "vendor", out / "vendor", dirs_exist_ok=True)
+    for folder in ("scene", "assets", "vendor"):
+        # a consumer's copy may leave Foto's assets out (its house3d-engine.json exclude)
+        if folder != "assets" or (SRC / folder).is_dir():
+            shutil.copytree(SRC / folder, out / folder, dirs_exist_ok=True)
     return out
 
 
