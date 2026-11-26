@@ -1,0 +1,170 @@
+name: Bump the engine copy
+
+# Once a week, moves the pinned copy of khe-house3d to its main and opens a PR (estate ADR-052).
+# The operator merges it, and the merge deploys house3d/ to Home Assistant (deploy.yml).
+# Closing the PR unmerged declines that engine commit: runs at the same commit leave it closed,
+# and the next engine commit opens a new one.
+on:
+  schedule:
+    - cron: '37 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: house3d-bump
+  cancel-in-progress: false
+
+env:
+  ENGINE_REPO: khelias/khe-house3d
+  BRANCH: house3d-bump
+
+jobs:
+  # A PR opened or pushed with GITHUB_TOKEN starts no workflow, so ci.yml never runs on it: the
+  # repo's whole check runs here instead, on a read-only token, before anything is pushed.
+  check:
+    name: Copy and check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.copy.outputs.sha }}
+      old: ${{ steps.copy.outputs.old }}
+      tree: ${{ steps.copy.outputs.tree }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # The pr job repeats this step at the same SHA and must come to the same tree.
+      - &copy
+        name: Copy the engine and bump HOUSE3D_VERSION
+        id: copy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha=${SHA:-$(gh api "repos/$ENGINE_REPO/commits/main" --jq .sha)}
+          [[ $sha =~ ^[0-9a-f]{40}$ ]] || { echo "::error::not a commit sha: $sha"; exit 1; }
+          old=$(python3 -I -c 'import json; print(json.load(open("house3d-engine.json"))["commit"])')
+          [[ $old =~ ^[0-9a-f]{40}$ ]] || { echo "::error::house3d-engine.json has no commit sha"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "old=$old" >> "$GITHUB_OUTPUT"
+          if [ "$sha" = "$old" ]; then
+            echo "The copy is at $ENGINE_REPO main already (${sha:0:12})."
+            exit 0
+          fi
+          bash scripts/house3d-copy.sh "$sha"
+          if [ -z "$(git status --porcelain -- . ':!house3d-engine.json')" ]; then
+            echo "::notice::$ENGINE_REPO ${sha:0:12} changes no copied file; nothing to propose."
+            exit 0
+          fi
+          # Every engine change bumps the card's version, so HA's /local and the phone app load it.
+          python3 -I - <<'EOF'
+          import re, sys
+          path = "house3d/house3d-card.js"
+          with open(path, encoding="utf-8", newline="") as f:
+              text = f.read()
+          line = re.compile(r"^const HOUSE3D_VERSION = (\d+);$", re.M)
+          found = line.findall(text)
+          if len(found) != 1:
+              sys.exit(f"::error::{path} has {len(found)} lines 'const HOUSE3D_VERSION = N;', not one")
+          new = int(found[0]) + 1
+          with open(path, "w", encoding="utf-8", newline="") as f:
+              f.write(line.sub(f"const HOUSE3D_VERSION = {new};", text))
+          print(f"HOUSE3D_VERSION {found[0]} -> {new}")
+          EOF
+          # staged, since --check counts only tracked files as the copy
+          git add -A
+          echo "tree=$(git write-tree)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Python
+        if: steps.copy.outputs.tree != ''
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.13'
+
+      - name: Install ruff
+        if: steps.copy.outputs.tree != ''
+        run: pip install ruff==0.17.0
+
+      - name: Setup Node.js
+        if: steps.copy.outputs.tree != ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Check
+        if: steps.copy.outputs.tree != ''
+        run: RUFF=ruff bash scripts/check.sh
+
+  pr:
+    name: Open the PR
+    needs: check
+    if: needs.check.outputs.tree != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      SHA: ${{ needs.check.outputs.sha }}
+      OLD: ${{ needs.check.outputs.old }}
+      TREE: ${{ needs.check.outputs.tree }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - *copy
+
+      - name: Commit, push and open the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW_TREE: ${{ steps.copy.outputs.tree }}
+        run: |
+          set -euo pipefail
+          [[ $SHA =~ ^[0-9a-f]{40}$ && $OLD =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad sha"; exit 1; }
+          [ "$NEW_TREE" = "$TREE" ] || { echo "::error::the copy differs from the one the check job checked"; exit 1; }
+          short=${SHA:0:12}
+          # a PR for this engine commit that was closed unmerged declines it, also after main moves on
+          declined=$(gh pr list --head "$BRANCH" --state closed --search "$short in:title" --json number --jq 'length')
+          if [ "$declined" != "0" ]; then
+            echo "A PR for $ENGINE_REPO $short was closed; it stays declined until the next engine commit."
+            exit 0
+          fi
+          remote=$(git ls-remote --heads origin "refs/heads/$BRANCH" | cut -f1)
+          if [ -n "$remote" ]; then
+            git fetch -q --depth=1 --no-tags origin "refs/heads/$BRANCH"
+            if [ "$(git rev-parse 'FETCH_HEAD^{tree}')" = "$TREE" ]; then
+              echo "$BRANCH already carries $ENGINE_REPO $short; an open PR stays, a closed one stays closed."
+              exit 0
+            fi
+          fi
+          title="house3d: the engine at khe-house3d $short"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -q -c "$BRANCH"
+          git commit -q -m "$title" -m "Written by house3d-bump.yml: scripts/house3d-copy.sh $SHA and HOUSE3D_VERSION bumped."
+          # The branch is this workflow's alone; the lease refuses only a push that raced this run.
+          git push --force-with-lease="refs/heads/$BRANCH:$remote" origin "HEAD:refs/heads/$BRANCH"
+          body=$RUNNER_TEMP/body.md
+          {
+            echo "Moves the pinned copy of the 3D engine to [khe-house3d $short](https://github.com/$ENGINE_REPO/commit/$SHA) and bumps \`HOUSE3D_VERSION\`. Engine commits since ${OLD:0:12}:"
+            echo
+            gh api "repos/$ENGINE_REPO/compare/$OLD...$SHA" --jq '.commits[] | "- " + .sha[0:12] + " " + (.commit.message | split("\n")[0])'
+            echo
+            echo "This repo's whole check passed on this change in the house3d-bump run that opened the PR; ci.yml does not run on a PR the workflow token opens."
+            echo
+            echo "Merging deploys house3d/ to Home Assistant. Then bump the Lovelace resource's ?v= to the new HOUSE3D_VERSION (scripts/ha-ws.py, lovelace/resources/update), or phones keep the old card. Closing the PR declines this engine commit."
+          } > "$body"
+          pr=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --title "$title" --body-file "$body"
+          else
+            gh pr create --base main --head "$BRANCH" --title "$title" --body-file "$body"
+          fi

@@ -198,7 +198,13 @@ Automated writers
 ([estate ADR-007](https://github.com/khelias/khe-architecture/blob/main/decisions/007-automated-writers.md)): Renovate
 automerges GitHub Actions minor and patch updates, digests and pins
 (`renovate.json`) once a release is three days old, and every merge to `main` that touches `config/`,
-`house3d/` or `cards/` deploys the config. The way back is to revert the commit on
+`house3d/` or `cards/` deploys the config. `house3d-bump.yml` runs weekly and on dispatch: it
+copies khe-house3d's `main`, bumps `HOUSE3D_VERSION`, runs `check.sh` and only then opens or
+updates one PR from the bot's branch `house3d-bump` ([estate
+ADR-052](https://github.com/khelias/khe-architecture/blob/main/decisions/052-the-3d-house-engine-has-a-repo-of-its-own.md)
+point 3); a PR closed unmerged declines that engine commit, and the workflow token's PR starts
+no `ci.yml`, so close and reopen it for the required check. Merging deploys, and the Lovelace
+resource's `?v=` stays a manual step. To stop it, disable the workflow. The way back is to revert the commit on
 `main` and push: the revert is a new config deploy, and HA keeps running
 what it loaded last until a restart or reload, so restart or reload it
 after the revert lands.
