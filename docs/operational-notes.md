@@ -287,7 +287,8 @@ behind every value and device. It replaced the Bubble Card trial of
   (`FOUR`, `BELOW_FOUR` in `scripts/dashboard/primitives.py`); HA drops a hidden card from
   the DOM and a section of hidden cards from the grid, so one canvas runs.
   From 1440 to 1715 px without the sidebar the view keeps ADR-010's four
-  columns.
+  columns. The demo, which has no sidebar, takes the left half from 1428 px
+  (`dashboard_demo.SCREENS`).
 - **The hero:** the 3D card's optional `height` (px) sets its height outside
   a panel view and its grid rows; with `stretch` too its grid rows are
   auto and it grows to the tallest section starting on its row, within the

@@ -807,6 +807,11 @@ MIRRORS = {
 # sample text for each templated markdown card, in the subset demo/cards.js renders
 TEXTS = {}
 
+# The demo has no sidebar: its view has four columns from 1408 px (demo/cards.js columnsFor), plus
+# up to 20 px of scrollbar, so ADR-018's wide layout starts there instead of at the house's 1716 px.
+_FOUR = "(min-width: 1428px)"
+SCREENS = {dc.FOUR: _FOUR, dc.BELOW_FOUR: f"not all and {_FOUR}"}
+
 
 def _walk(o, key=None):
     if isinstance(o, dict):
@@ -823,6 +828,8 @@ def _walk(o, key=None):
     if isinstance(o, list):
         return [_walk(v, key) for v in o]
     if isinstance(o, str):
+        if key == "media_query":
+            return SCREENS.get(o, o)
         if ID.match(o):
             if o not in CATALOGUE:
                 raise KeyError(f"no demo entity for {o} (add it to dashboard_demo.CATALOGUE)")

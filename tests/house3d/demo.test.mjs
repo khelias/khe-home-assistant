@@ -68,9 +68,9 @@ function atWidth(width, fn) {
   try { return fn(); } finally { globalThis.matchMedia = was; }
 }
 
-test('A3 shows one 3D hero at every width, the left half from four columns', () => {
+test('A3 shows one 3D hero at every width, the left half from the demo\'s four columns', () => {
   const kodu = dashboard.views[0];
-  for (const [width, stretch, spans] of [[1720, 'beside', [2, 1, 1, 2]], [1600, true, [1, 1, 1, 1]], [820, true, [1, 1, 1, 1]], [375, true, [1, 1, 1, 1]]]) {
+  for (const [width, stretch, spans] of [[1720, 'beside', [2, 1, 1, 2]], [1428, 'beside', [2, 1, 1, 2]], [1420, true, [1, 1, 1, 1]], [820, true, [1, 1, 1, 1]], [375, true, [1, 1, 1, 1]]]) {
     atWidth(width, () => {
       const heroes = typed(kodu).filter(c => c.type === 'custom:house3d-card' && visible(c.visibility, data.states));
       assert.deepEqual(heroes.map(c => c.stretch), [stretch], `${width} px`);

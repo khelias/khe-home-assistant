@@ -29,8 +29,11 @@ HERO = {
 }
 
 
-# ADR-010's hero below four columns, ADR-018's from four
-HEROES = [a3.screen(HERO, a3.BELOW_FOUR), a3.screen({**HERO, "stretch": "beside"}, a3.FOUR)]
+# ADR-010's hero below four columns, ADR-018's from four, at the demo's own four-column width
+HEROES = [
+    a3.screen(HERO, dd.SCREENS[a3.BELOW_FOUR]),
+    a3.screen({**HERO, "stretch": "beside"}, dd.SCREENS[a3.FOUR]),
+]
 
 
 def strings(o, key=None):
@@ -108,6 +111,10 @@ class DemoConfig(unittest.TestCase):
                 {"type": "custom:house3d-card", "views": DEMO_CAMERAS},
             ],
         )
+
+    def test_four_columns_at_the_demos_own_width(self):
+        queries = {s for k, s in strings(CONFIG) if k == "media_query"}
+        self.assertFalse(set(dd.SCREENS) & queries)
 
     def test_every_id_the_generator_emits_is_catalogued(self):
         # without the model: the 3D card carries it inline, fixture ids and all

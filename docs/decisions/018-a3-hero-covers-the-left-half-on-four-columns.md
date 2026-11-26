@@ -1,6 +1,6 @@
 # ADR-018: On four-column screens A3's hero covers the left half
 
-- **Status:** Accepted (2026-11-17)
+- **Status:** Accepted (2026-11-17); amended (2026-11-26): the demo takes B from its own four-column width
 - **Related:** supersedes [ADR-010](010-a3-landscape-hero-beside-the-cards.md) decision 1 from 1716 px and extends its decision 3; [ADR-005](005-a3-glass-cards-history-sheet.md), [ADR-012](012-the-demo-is-the-houses-overview.md)
 
 ## Context
@@ -97,6 +97,10 @@ Read from HA frontend 20261028.5 (HA 2026.11):
 - The demo's numbers (the hero 828 x 681 px at 1720 x 900, ending 24 px
   above the screen's bottom) come from the demo, which has no sidebar; with
   HA's sidebar open the hero is about 680 px wide.
+- The demo has no sidebar, so its view has four columns from 1408 px.
+  `dashboard_demo` rewrites the two screen conditions to 1428 px (1408 plus
+  the scrollbar), so a screen of 1428 to 1715 px gets B there
+  while the house's own dashboard keeps ADR-010's layout.
 - A section added later right of the hero, under Kliima, would pull the
   hero down to the screen's bottom too.
 - An HA bump checks, on a screen of at least 1716 px, that the hero still
