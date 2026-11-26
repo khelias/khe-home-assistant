@@ -540,7 +540,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   so they rise and fade with the roof while the ground floor's glass stays,
   and a ground-floor wall taller than the ceiling is cut at it. Upper rooms
   get no floor, label or chip and the interior layer leaves their walls out;
-  PV lies on shed roofs only. khe-house3d's `fixture-twostorey.md` is the
+  PV lies on a shed roof or one face of a hip or gable roof, never on a flat
+  one. khe-house3d's `fixture-twostorey.md` is the
   made-up house that exercises all of it, and its geometry baseline pins
   where the roof-reading layers stand on the main fixture.
 - **A house's look:** the real style's finishes are the model's

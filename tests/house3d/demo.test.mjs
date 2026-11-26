@@ -45,7 +45,7 @@ const cardsOf = types => all.filter(c => types.includes(c.type));
 const actions = all.flatMap(c => [c.tap_action, c.icon_tap_action]).filter(Boolean);
 const noTimers = { schedule: () => 0, cancel: () => {} };
 
-test("the shipped data: the house's Overview, A3 first and 3D last, on the fixture model", () => {
+test("the shipped data: the house's Overview, A3 first and 3D last, on the demo house", () => {
   assert.ok(model.devices.length > 0 && model.car && model.car.entity);
   const cams = Object.fromEntries(dashboard.views.filter(v => v.path.startsWith('kaamera-')).map(v => [v.path.replace('kaamera-', 'camera.'), `/lovelace/${v.path}`]));
   const [first, last] = [dashboard.views[0], dashboard.views.at(-1)];
