@@ -57,7 +57,7 @@
 //   roof { fns, flat, under, topFn, gap, top(id), faces(id), planeAt(id, x, z), kinks(id), clip }: fns[id], under(id),
 //   topFn(top) and top(id) (the slab's top) are (x, z) -> y for every roof kind (modelFrame()), ceiling, reduceMotion, state (read-only: mode,
 //   roofFade, hovered, selection, night: 0 by day to 1 at night, a lit style's only, sun: the
-//   sun's { alt, dir, time } in both styles, null without a place), layer(id), screen(x, y, z) -> { x, y } | null, invalidate().
+//   sun's { alt, dir, time } in every style, null without a place), layer(id), screen(x, y, z) -> { x, y } | null, invalidate().
 //   build() and the first setOn() run before the loop exists: they must not call invalidate()
 //   or screen().
 // The core puts each layer's group and lift under a wrapper group, and switching a layer sets
@@ -720,7 +720,7 @@ export function stageLayers(style, stage) {
  *   gives the lit styles a fixed afternoon sun. setTime(date | null): the sun's time, null for
  *   live (recomputed once a minute while there is a place). time is the time in use. sun is
  *   { alt, dir: [x, y, z], time } (degrees, the unit vector towards the sun in model axes, the
- *   Date it was computed for), or null without a place, in both styles; only the lit styles
+ *   Date it was computed for), or null without a place, in every style; only the lit styles
  *   draw it. view is { position, target } for options.view; the fog follows the camera.
  * layers: [{ id, on }] for the switchable layers present and listed now; setLayer(id, on) switches
  *   one and ignores an unknown id. Switchable: 'markers' (the overlay; off hides every marker but
@@ -1512,7 +1512,7 @@ export function mount(element, model, options = {}) {
   resize();
   setMode(options.mode === 'open' ? 'open' : 'roof', true);
   updateSun();
-  // live: the sun moves on once a minute, in both styles while there is a place (onSun, ctx.state.sun)
+  // live: the sun moves on once a minute, in every style while there is a place (onSun, ctx.state.sun)
   sunTimer = setInterval(() => { if (!sunTime && sunPlace) updateSun(); }, 60000);
   invalidate();
 

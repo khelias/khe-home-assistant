@@ -1,6 +1,6 @@
 {
  "repo": "khelias/khe-house3d",
- "commit": "3d78d091ceb54a5c901b3a1677ac66af06899008",
+ "commit": "35958b1463b71aaedc95e39c3ee3f700f2be1eb1",
  "include": [
   "house3d/",
   "scripts/house3d_model.py",
@@ -24,10 +24,10 @@
   "house3d/assets/sky-dusk.ktx2": "ee17071f71ff75eeb32f6a0075c167dac77adb5fd2cbc85761bff62f39eed4b5",
   "house3d/assets/sources.json": "259bb8de6a57a3b96e8ddc6925549e0dacca38592e713b1ec28313d3641b709d",
   "house3d/assets/twig.ktx2": "dbb34a70a2767ef328fe1e8331a2ae22a79db4d16ffcc3a0623383b41ad2d6e0",
-  "house3d/house3d.js": "24d9fb2b7a825d9135b60e02fc750cbb7cbc1522ebd87a8b14d041ab0bead536",
+  "house3d/house3d.js": "6e35a6d604c0f1c46efc7baef00b11408e81fe0a0979b4b82c570454b8e4cdbf",
   "house3d/place.html": "5a3c88076886eddfde2730e2496383e4d10fcc3dee8df3c09e4cc94638b1a135",
   "house3d/scene/bake.js": "f97a2b47c40336dfe5a01ff6027605d9a32d98dac39f194c74b812a9bd5c2dce",
-  "house3d/scene/kit.js": "c11a6fee82e9508f25c7b2bf119c46124b084e31f658279e4cb66491d3ff69a8",
+  "house3d/scene/kit.js": "50043471c2493d743ec2b4de234bc1a5ac9fa676cdd609384800eb7ae352da10",
   "house3d/scene/layers/building.js": "b86283d54ebdec697fb30711e384f5afb3d0b7e4bfff3b8fae1bef0ff84b3c7e",
   "house3d/scene/layers/car.js": "85003fde71fde542c9bd32a7f945da8310fb5066252ad9bebe78ca5fd3cc63ee",
   "house3d/scene/layers/fans.js": "7f72ea9f27dea4e8a50e84a078fe7c0e24d627a420428083133daa267420ecae",
