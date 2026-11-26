@@ -4,7 +4,7 @@
 // layer's cap rests on them. A kind gives the clump its habit (KINDS), the tree's id varies it the
 // same way on every mount, and vertex shades darken the underside and the inner lobes. The trunk
 // tapers into the crown, a birch's in white bark, and an apple's or maple's forks into its kind's
-// branches.
+// branches, unless the look draws them itself (look.bareCrown, Foto's bare winter crowns).
 const TRUNK = { apple: 0.3, birch: 0.4, maple: 0.3 };
 // per kind: the lobes' rings as [count, height in the unit sphere, distance out, radius], from the
 // top down; jitter, the share each lobe's place and size may vary
@@ -34,11 +34,13 @@ export default function build({ THREE, kit, C, model, look }) {
       return [id, at];
     })),
     attach: obj => group.add(obj),
-    // winter in a look that strips them: the crowns and their dress hidden, trunks and branches kept
+    // winter in a look that strips them: the crowns and their dress hidden, trunks and branches
+    // kept, the look's twig cards (part 'twigs') shown
     bare(on) {
       group.traverse(o => {
         if (o.userData.part === 'crown') o.visible = !on;
         if (o.userData.part === 'cards') o.visible = !on && !!o.userData.ready;
+        if (o.userData.part === 'twigs') o.visible = on && !!o.userData.ready;
       });
     }
   };
@@ -53,16 +55,18 @@ export default function build({ THREE, kit, C, model, look }) {
       m.castShadow = true;
       m.userData.part = 'crown';
       group.add(m);
-      if (look.crown) look.crown({ group, mesh: m, material: crownM, lobes, rand: kit.seeded(`cards ${id}`), centre: [x, centreY, z], radii: [crown / 2, ry], crown });
+      if (look.crown) look.crown({ group, mesh: m, material: crownM, lobes, rand: kit.seeded(`cards ${id}`), centre: [x, centreY, z], radii: [crown / 2, ry], crown, kind });
       // the trunk runs a third of the way up into the crown, a birch's to its middle
       const birch = kind === 'birch', end = birch ? centreY : top + ry / 3;
+      // a look with its own bare crown draws the branches itself, in place of the struts below
+      if (look.bareCrown) look.bareCrown({ group, kind, top, end, width: w, material: trunkM, stem: birch ? barkM : trunkM, lobes, rand: kit.seeded(`bare ${id}`), centre: [x, centreY, z], radii: [crown / 2, ry], crown });
       const trunk = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.3, w * 0.55, end, TRUNK_SIDES), birch ? barkM : trunkM);
       trunk.position.set(x, end / 2, z);
       trunk.castShadow = true;
       trunk.userData.part = 'trunk';
       group.add(trunk);
       const turn = rand() * 2 * Math.PI;
-      for (let i = 0; i < habit.branches; i++) {
+      if (!look.bareCrown) for (let i = 0; i < habit.branches; i++) {
         const a = turn + (i * 2 * Math.PI) / habit.branches, r = (crown / 2) * 0.45;
         const limb = kit.strut(group, [x, top, z], [x + r * Math.cos(a), top + ry * 0.75, z + r * Math.sin(a)], w * 0.35, w * 0.35, trunkM, 'branch');
         limb.castShadow = true;
