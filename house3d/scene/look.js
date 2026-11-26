@@ -13,6 +13,10 @@
 //                       true when the look drew its own sky, environment and fog; once true,
 //                       true for the rest of the mount (the core drops its own environment)
 //   crown(tree)?, hedge(hedge)?  dress a crown or a hedge (leaf cards), see scene/photo.js
+//   bareCrown(tree)?    draw a tree's branches (in place of the trees layer's struts) and its
+//                       twig cards (part 'twigs', shown while bare)
+//   outsideScale?       how many times the ground layer's plane the ground past the lot reaches
+//                       ('outside' is a material role like the lawn)
 //   snow(amount)?       the ground's snow on the lawn, 0 to 1
 //   bare?               true when winter strips the deciduous crowns
 //   winter(on)?         the winter layer switched, for what else the look changes in winter

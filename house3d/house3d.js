@@ -682,7 +682,7 @@ export function stageLayers(style, stage) {
  *   mode             the starting mode, 'roof' (default) or 'open'
  *   style            'simple' (default), 'real' (Päris) or 'photo' (Foto, scene/photo.js: Päris until its
  *                    textures, house3d/assets/, are in after the first frame); another style is another mount
- *   quality          Foto's tier: 'high', or 'low' (half the leaf cards, no normal maps, no contact
+ *   quality          Foto's tier: 'high', or 'low' (fewer leaf cards, half the twig cards, no normal maps, no contact
  *                    shadows); autoQuality() picks it when left out
  *   stage            a lit style's stage: 'garden' (default), the lot under the sun's clock, or
  *                    'studio', the house alone on a white base in soft studio light, where setSun
@@ -861,6 +861,8 @@ export function mount(element, model, options = {}) {
     const e = layers.find(x => x.L.toggle && x.L.id === id && !x.failed);
     if (!e || e.on === !!on) return;
     switchLayer(e, !!on);
+    // a look may light the winter its own way (Foto's overcast)
+    if (id === 'winter' && look.winter) updateSun();
     // a layer switched off under the mouse no longer takes the hover
     if (!e.on) { hovered = null; renderer.domElement.style.cursor = ''; }
     shadowsDirty();

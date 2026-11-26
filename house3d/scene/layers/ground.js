@@ -1,8 +1,10 @@
 // The ground: a soft glow under the lot and the metre grid. The lit styles lay a mottled lawn
-// (kit.lawn()) over the lot and a neutral plane round it, both taking shadows, and no grid; the
-// plane darkens to OUT_NIGHT of its colour with the night, so the lot stays the lit place.
-// api.snow(amount), from the winter layer, blends both towards the snow's colour, 0 none to 1
-// all; the night's darkening works on top of it.
+// (kit.lawn()) over the lot and a plane round it (the look's 'outside', look.outsideScale times as
+// wide, with metre UVs), both taking shadows, and no grid; the plane darkens to OUT_NIGHT of its
+// colour with the night, so the lot stays the lit place. api.snow(amount), from the winter layer,
+// blends both towards the snow's colour, 0 none to 1 all; the night's darkening works on top of
+// it. A look that colours the plane itself, once its textures are in, sets its material's
+// userData.look, which the snow and the night then work from.
 const OUT_NIGHT = 0.22;
 export default function build({ THREE, kit, C, frame, model, look, state }) {
   const { ext, lotCx, lotCz } = frame;
@@ -12,7 +14,9 @@ export default function build({ THREE, kit, C, frame, model, look, state }) {
     const lawn = new THREE.Mesh(kit.flatShape(lot && lot.length >= 3 ? lot : [[x0, z0], [x1, z0], [x1, z1], [x0, z1]]), look.material('lawn'));
     // under the floors and paving by enough not to flicker at a distance
     lawn.position.y = -0.02;
-    const out = new THREE.Mesh(new THREE.PlaneGeometry(ext * 8, ext * 8).rotateX(-Math.PI / 2), kit.surface('outside'));
+    const size = ext * 8 * (look.outsideScale || 1), plane = new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2), uv = plane.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * size, uv.getY(i) * size);
+    const out = new THREE.Mesh(plane, look.material('outside'));
     out.position.set(lotCx, -0.1, lotCz);
     lawn.receiveShadow = out.receiveShadow = true;
     group.add(out, lawn);
@@ -20,17 +24,24 @@ export default function build({ THREE, kit, C, frame, model, look, state }) {
     // the lawn's daytime colour lives on its material: a look may change it once its photograph is in
     lawn.material.userData.day = lawn.material.color.clone();
     const day = out.material.color.clone();
-    let night = 0;
+    let night = 0, snowed = 0, own;
+    const paint = () => { tint.day[0].copy(own || day).lerp(white, snowed); tint(night); };
     return {
       id: 'ground', group,
-      update() { if (night !== state.night) { night = state.night; tint(night); } },
+      // a look's colour arriving with its textures repaints as a change of night would
+      update() {
+        if (night === state.night && own === out.material.userData.look) return;
+        night = state.night;
+        own = out.material.userData.look;
+        paint();
+      },
       api: {
         snow(amount) {
           const a = Math.min(1, Math.max(0, amount));
           lawn.material.color.copy(lawn.material.userData.day).lerp(white, a);
           if (look.snow) look.snow(a);
-          tint.day[0].copy(day).lerp(white, a);
-          tint(night);
+          snowed = a;
+          paint();
         }
       }
     };

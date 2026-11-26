@@ -54,6 +54,30 @@
    "from": "belfast_sunset_puresky 1K HDR, UASTC HDR 4x4 without zstd",
    "licence": "CC0-1.0",
    "bytes": 524496
+  },
+  "paving.ktx2": {
+   "url": "https://ambientcg.com/view?id=PavingStones099",
+   "from": "PavingStones099 1K-JPG Color, ETC1S",
+   "licence": "CC0-1.0",
+   "bytes": 146352
+  },
+  "paving-normal.ktx2": {
+   "url": "https://ambientcg.com/view?id=PavingStones099",
+   "from": "PavingStones099 1K-JPG NormalGL resized to 512, UASTC",
+   "licence": "CC0-1.0",
+   "bytes": 324317
+  },
+  "sky-winter.ktx2": {
+   "url": "https://polyhaven.com/a/snow_field_puresky",
+   "from": "snow_field_puresky 1K HDR, UASTC HDR 4x4 without zstd",
+   "licence": "CC0-1.0",
+   "bytes": 524496
+  },
+  "bare-twig.ktx2": {
+   "url": "https://github.com/khelias/khe-house3d",
+   "from": "bare twigs drawn for khe-house3d with PIL at 1024, resized to 512, ETC1S",
+   "licence": "CC0-1.0",
+   "bytes": 79071
   }
  }
 }
