@@ -354,22 +354,41 @@ test('card: a poster reads back only as an image, and a failed write keeps the n
   }
 });
 
-test('card: cameraRing starts at the camera, then the rest nearest first, those without a place last', () => {
+test('card: cameraRing walks round the house, right of a viewer looking out next, unplaced cameras last', () => {
+  // a 10 x 10 house centred on (5, 5): plan x grows east, z south, so clockwise from above is
+  // north, east, south, west
+  const at = (x, z) => [x, 2, z];
   const devices = [
-    { entity: 'camera.a', pos: [0, 2, 0] },
-    { entity: 'light.x', pos: [1, 2, 0] },
-    { entity: 'camera.far', pos: [30, 2, 0] },
+    { entity: 'camera.south', pos: at(5, 12) },
+    { entity: 'light.x', pos: at(5, 5) },
     { entity: 'camera.loose' },
-    { entity: 'camera.near', pos: [3, 2, 4] },
-    { entity: 'camera.loose2' }
+    { entity: 'camera.north', pos: at(5, -2) },
+    { entity: 'camera.west', pos: at(-2, 5) },
+    { entity: 'camera.east', pos: at(12, 5) }
   ];
-  assert.deepEqual(card.cameraRing(devices, 'camera.a'), ['camera.a', 'camera.near', 'camera.far', 'camera.loose', 'camera.loose2']);
-  assert.deepEqual(card.cameraRing(devices, 'camera.far'), ['camera.far', 'camera.near', 'camera.a', 'camera.loose', 'camera.loose2']);
-  assert.deepEqual(card.cameraRing(devices, 'camera.loose'), ['camera.loose', 'camera.a', 'camera.far', 'camera.near', 'camera.loose2']);
-  assert.deepEqual(card.cameraRing(devices, 'light.x'), []);
-  assert.deepEqual(card.cameraRing(devices, 'camera.gone'), []);
+  const centre = card.houseCentre([{ rects: [[0, 0, 10, 10]] }, { floor: 'paving', rects: [[10, 0, 30, 4]] }]);
+  assert.deepEqual(centre, [5, 5]);
+  assert.deepEqual(card.cameraRing(devices, 'camera.north', centre), ['camera.north', 'camera.east', 'camera.south', 'camera.west', 'camera.loose']);
+  // the last of the ring is the one to the left
+  assert.deepEqual(card.cameraRing(devices, 'camera.east', centre), ['camera.east', 'camera.south', 'camera.west', 'camera.loose', 'camera.north']);
+  // without a centre the cameras' own middle, here the same
+  assert.deepEqual(card.cameraRing(devices, 'camera.north'), card.cameraRing(devices, 'camera.north', centre));
+  assert.deepEqual(card.cameraRing(devices, 'light.x', centre), []);
+  assert.deepEqual(card.cameraRing(devices, 'camera.gone', centre), []);
+  assert.equal(card.houseCentre([]), null);
   // the fixture's two cameras walk to each other
-  assert.deepEqual(card.cameraRing(model.devices, 'camera.test_garden'), ['camera.test_garden', 'camera.test_drive']);
+  assert.deepEqual(card.cameraRing(model.devices, 'camera.test_garden', card.houseCentre(model.rooms)), ['camera.test_garden', 'camera.test_drive']);
+});
+
+test('card: a camera with a look is drawn ahead on its fan, its pos stays the camera', () => {
+  const cam = { entity: 'camera.a', type: 'camera', pos: [1, 2.6, 1], look: [1, 0] };
+  const m = card.toMarker(cam, { state: 'idle' });
+  assert.deepEqual(m.pos, [1, 2.6, 1]);
+  assert.deepEqual(m.at, [2.5, 2.6, 1]);
+  assert.equal(card.toMarker({ ...cam, look: undefined }, { state: 'idle' }).at, undefined);
+  assert.deepEqual(card.toMarker({ ...cam, look: [0, 4] }, { state: 'idle' }).at, [1, 2.6, 2.5]);
+  assert.deepEqual(card.toMarker({ ...cam, look: [0, 0] }, { state: 'idle' }).at, [1, 2.6, 1]);
+  assert.equal(card.toMarker({ entity: 'light.a', type: 'light', pos: [1, 2, 1], look: [1, 0] }, { state: 'off' }).at, undefined);
 });
 
 test('card: cameraStillUrl adds a time to the picture, null without one', () => {

@@ -729,9 +729,11 @@ export function stageLayers(style, stage) {
  *   an alert), 'fans' (listed while a marker has a look), 'trees', 'surroundings', 'winter' (the
  *   lit styles' lights and snow) and 'car' (off parks a running drive and closes the gate at
  *   once, and 'arrive' then parks). A layer that is off takes no taps.
- * markers: { id, pos: [x, y, z], icon, state: 'idle'|'on'|'alert'|'off', value?, label?,
- *            stateText?, room?, look?: [dx, dz], role?, level?: 0..1, glow?: 0..1, pulse?, warm? }
- *   label and stateText make the marker's accessible name. Markers take no pointer, so a drag
+ * markers: { id, pos: [x, y, z], at?: [x, y, z], icon, state: 'idle'|'on'|'alert'|'off', value?,
+ *            label?, stateText?, room?, look?: [dx, dz], role?, level?: 0..1, glow?: 0..1, pulse?, warm? }
+ *   pos is the device, where its view fan starts; at, when given, is where its marker is drawn,
+ *   so two devices side by side can be drawn apart. label and stateText make the marker's
+ *   accessible name. Markers take no pointer, so a drag
  *   that starts on one orbits; a tap on the canvas tests the shown markers' and chips' rectangles
  *   first. Every frame a collision pass (scene/overlay.js's collide(), which gives the order)
  *   places the markers and chips, shrinks the crowded ones and hides what is left; an alert never

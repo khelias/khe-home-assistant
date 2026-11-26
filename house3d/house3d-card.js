@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 65;
+const HOUSE3D_VERSION = 66;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -152,16 +152,36 @@ export function cameraStillUrl(st, t) {
   return pic ? `${pic}${pic.includes('?') ? '&' : '?'}t=${t}` : null;
 }
 
-// cameraRing(devices, id) -> the camera entities the panel's arrows walk from id: id first, then
-// the other cameras nearest first by plan position (as the camera subviews order them), those
-// without a position last in config order; [] when id is not a camera device.
-export function cameraRing(devices, id) {
+// a camera's marker is drawn this far ahead along its look, on its view fan, so two cameras on
+// one corner looking apart are two markers; the fan itself starts at the camera
+const CAM_AHEAD = 1.5;
+function camAt(d) {
+  const n = d.pos && d.look ? Math.hypot(d.look[0], d.look[1]) : 0;
+  return n ? [d.pos[0] + d.look[0] / n * CAM_AHEAD, d.pos[1], d.pos[2] + d.look[1] / n * CAM_AHEAD] : d.pos;
+}
+
+// houseCentre(rooms) -> [x, z], the middle of the house rooms (every room but a paved one)
+export function houseCentre(rooms) {
+  const rects = (rooms || []).filter(r => r.floor !== 'paving').flatMap(r => r.rects || []);
+  if (!rects.length) return null;
+  const xs = rects.flatMap(([x0, , x1]) => [x0, x1]), zs = rects.flatMap(([, z0, , z1]) => [z0, z1]);
+  return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...zs) + Math.max(...zs)) / 2];
+}
+
+// cameraRing(devices, id, centre) -> the camera entities the panel's arrows walk, id first: round
+// the house as seen from above, the next one to the right of a viewer looking out through the
+// camera (clockwise), the last one to its left, by each marker's place round centre ([x, z], else
+// the cameras' own middle); cameras without a place last in config order. [] when id is not a
+// camera device.
+export function cameraRing(devices, id, centre = null) {
   const cams = devices.filter(d => d.entity.startsWith('camera.'));
-  const here = cams.find(d => d.entity === id);
-  if (!here) return [];
-  const dist = d => (here.pos && d.pos ? Math.hypot(...d.pos.map((v, i) => v - here.pos[i])) : Infinity);
-  const rest = cams.filter(d => d !== here).map((d, i) => ({ id: d.entity, i, k: dist(d) }));
-  return [id, ...rest.sort((a, b) => a.k - b.k || a.i - b.i).map(r => r.id)];
+  if (!cams.some(d => d.entity === id)) return [];
+  const placed = cams.filter(d => d.pos), rest = cams.filter(d => !d.pos);
+  const mid = centre || (placed.length ? [0, 2].map(k => placed.reduce((a, d) => a + camAt(d)[k], 0) / placed.length) : [0, 0]);
+  const angle = d => Math.atan2(camAt(d)[2] - mid[1], camAt(d)[0] - mid[0]);
+  const order = [...placed.sort((a, b) => angle(a) - angle(b)), ...rest].map(d => d.entity);
+  const i = order.indexOf(id);
+  return [...order.slice(i), ...order.slice(0, i)];
 }
 
 // a still is fetched every CAM_STILL_MS while its panel shows, as Kaamerad's large still (ADR-016)
@@ -308,6 +328,7 @@ export function toMarker(d, st, now = new Date(), lang = 'et') {
   const { nf1 } = formatsFor(lang);
   const m = { id: d.entity, pos: d.pos, icon: d.type, room: d.room, label: d.name, state: 'idle' };
   if (d.look) m.look = d.look;
+  if (d.type === 'camera' && d.look && d.pos) m.at = camAt(d);
   if (d.role) m.role = d.role;
   if (!st || st.state === 'unavailable') { m.state = 'off'; return m; }
   const s = st.state, domain = d.entity.split('.')[0];
@@ -989,10 +1010,10 @@ export class House3dCard extends Base {
     });
   }
 
-  // a camera opens its picture over the view, so two cameras drawn on top of each other are one
-  // tap and one arrow apart; anything else goes where _go() sends it
+  // a camera opens its picture over the view, its arrows walking cameraRing(); anything else goes
+  // where _go() sends it
   _open(entityId) {
-    if (entityId.startsWith('camera.') && cameraRing(this._devices, entityId).length) this._openCamera(entityId);
+    if (entityId.startsWith('camera.') && this._ring(entityId).length) this._openCamera(entityId);
     else this._go(entityId);
   }
 
@@ -1003,11 +1024,16 @@ export class House3dCard extends Base {
     else this._moreInfo(entityId);
   }
 
+  // the cameras the panel's arrows walk from id, round this house's middle
+  _ring(id) {
+    return cameraRing(this._devices, id, houseCentre(this._config.model.rooms));
+  }
+
   // a camera's picture over the view: config.stills maps it to the entity its still comes from
   // (the substream, ADR-016), fetched now and every CAM_STILL_MS while the tab shows; ring is the
   // order the arrows walk, kept while they walk it. One panel or sheet is open at a time, and the
   // camera's marker is the engine's selection, which replaces a room's focus.
-  _openCamera(id, ring = cameraRing(this._devices, id)) {
+  _openCamera(id, ring = this._ring(id)) {
     if (!this._view || !this._mod || !ring.length) return;
     const sec = this.shadowRoot.querySelector('.campanel');
     // an arrow's step keeps the panel and its buttons, so keyboard focus stays on the arrow

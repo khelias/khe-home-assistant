@@ -1,6 +1,6 @@
 {
  "repo": "khelias/khe-house3d",
- "commit": "c58085c717c6d1ffa380e4bce40fb7fd3f99a214",
+ "commit": "4268b67d1279acd425570146b91506ddca8e4d4c",
  "include": [
   "house3d/",
   "scripts/house3d_model.py",
@@ -28,7 +28,7 @@
   "house3d/assets/sky-winter.ktx2": "53d8e5155101d38be6e7f147a887f16047f65b27f868ab8e26e2540d7cdd25fa",
   "house3d/assets/sources.json": "2d90af54465b0742654c4ec7545a0a715567513de1bb94b66f777e556c39e8e5",
   "house3d/assets/twig.ktx2": "dbb34a70a2767ef328fe1e8331a2ae22a79db4d16ffcc3a0623383b41ad2d6e0",
-  "house3d/house3d.js": "e3a32fde805e68d9bbde360327f64bd00e02c7cc2570064deabfd0b616182d92",
+  "house3d/house3d.js": "36008a5c4abf4f6131e752f9e0fd5b246a456143360f67f69ec8f4ee6bdeb79c",
   "house3d/place.html": "5a3c88076886eddfde2730e2496383e4d10fcc3dee8df3c09e4cc94638b1a135",
   "house3d/scene/bake.js": "f97a2b47c40336dfe5a01ff6027605d9a32d98dac39f194c74b812a9bd5c2dce",
   "house3d/scene/kit.js": "50043471c2493d743ec2b4de234bc1a5ac9fa676cdd609384800eb7ae352da10",
@@ -46,7 +46,7 @@
   "house3d/scene/layers/trees.js": "409674712543f223fe212937d4f7f4e0e841a0a3af6a1d4984cda39d939df09c",
   "house3d/scene/layers/winter.js": "c583ab2e76df50e55676f2644863d1f00239fdbd5ae183377b822e113415e0a0",
   "house3d/scene/look.js": "672e4c173e6377c09984a1d441bdcdcd85bf35523c5d47a0aad51440aa3d7388",
-  "house3d/scene/overlay.js": "90fbedbb87abfa075f60cbcffec1a0c6ac82cdfd95a5b50345eacff76fd8e638",
+  "house3d/scene/overlay.js": "d7b0f0b4b7f01bd8bfbbaef8e1dee5be1a35233dcc8696d64bed7a0e81eb551b",
   "house3d/scene/photo.js": "3ac87124452db6fcac8445699d16b480c21dc34c288d2eec1e5be077dffb6287",
   "house3d/scene/sun.js": "638ed614a071c0a82393ccf5c72d24e067c0cc397c2a71116a5651dec79ff307",
   "house3d/vendor/three-0.187.0/LICENSE": "8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc",
@@ -79,7 +79,7 @@
   "scripts/house3d-copy.sh": "3d13d1ebd431168e7cae3c41a1d688459fb4955f363f430eaa3de463e2cd0aa0",
   "scripts/house3d_model.py": "99adf517536ec8a448ff67d73be61750da72dbac068579055a4e312421f6bafc",
   "scripts/house3d_viewer.py": "e13ebd568a378619ee517a755cda796141d56d7ab6e9d8975feb820b4bf1fe81",
-  "tests/house3d/engine-harness.mjs": "6c5ec2a767b58f6c24f7cfcb0df23f8908e3f7140f770f078c0d9e5e971b0d7d",
+  "tests/house3d/engine-harness.mjs": "008b9616f45912928627212e472f69b5851aad2abc8d4c3a5a947f2bcb8bc933",
   "tests/house3d/fixture-demo.md": "255c441f296ebe57e50afee77447aba035b5aa3268b084a048d0f5a84e15bfaa",
   "tests/house3d/fixture-model.md": "133c112ccde43df42dbcdbd140ead925535baf9f00a21b2098e6526e75b8b49b"
  }

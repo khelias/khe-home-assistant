@@ -1,7 +1,7 @@
 // The marker and label overlay over the 3D view: the markers, the room labels and the room
 // chips, their DOM and CSS, the collision pass that places them every frame, and the hover and
 // tap rectangles. createOverlay(deps) makes one mount's overlay; collide(), inChip(), hitRect(),
-// markerClass() are pure and exported for the tests.
+// markerClass() and drawnAt() are pure and exported for the tests.
 //
 // The core (house3d.js) owns everything else and passes in what the overlay reads, the deps
 // createOverlay() lists. The overlay's CSS reads the --h3d-* variables the core sets on .h3d,
@@ -111,6 +111,9 @@ export function collide(items, pad = 4) {
   late.forEach(it => { if (!fit(it, 1)) out.set(it.id, -1); });
   return out;
 }
+
+// where a marker is drawn: its own at, else the device's pos (which a view fan keeps)
+export const drawnAt = m => m.at || m.pos;
 
 const hasValue = m => m.value !== undefined && m.value !== null && m.value !== '';
 
@@ -315,12 +318,12 @@ export function createOverlay(deps) {
     for (const [id, rec] of markers) {
       // an alert indoors shows through the roof, so a closed view never hides it
       const m = rec.data, covered = isIndoor(m) && m.state !== 'alert';
-      const p = (markersOn || m.state === 'alert') && !(covered && roofOpen <= 0.02) && !inChip(m, chipOf(m.room), focus) ? toScreen(camera, m.pos, width, height, v) : null;
+      const p = (markersOn || m.state === 'alert') && !(covered && roofOpen <= 0.02) && !inChip(m, chipOf(m.room), focus) ? toScreen(camera, drawnAt(m), width, height, v) : null;
       rec.fac = covered ? roofOpen : 1;
       rec.p = p;
       if (!p) continue;
       if (!rec.size) measure(rec);
-      items.push({ id: `m:${id}`, kind: m.state === 'alert' ? 'alert' : 'marker', x: p.x, y: p.y, dist: camera.position.distanceTo(v.set(m.pos[0], m.pos[1], m.pos[2])), was: rec.level >= 0, sizes: [rec.size, DOT] });
+      items.push({ id: `m:${id}`, kind: m.state === 'alert' ? 'alert' : 'marker', x: p.x, y: p.y, dist: camera.position.distanceTo(v.set(...drawnAt(m))), was: rec.level >= 0, sizes: [rec.size, DOT] });
     }
     const levels = collide(items);
     let fading = false;
