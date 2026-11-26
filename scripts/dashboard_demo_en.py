@@ -2,7 +2,7 @@
 
 dashboard_demo.demo_config_en() and its siblings walk the Estonian demo and look every visible
 string up here; one that is missing fails the English build. EN is visible text (titles,
-headings, names, labels, confirmations, friendly names, the test house's names and facts);
+headings, names, labels, confirmations, friendly names, the demo house's names and facts);
 WORDS are state values, select options and the label sensors' mirrored words, which read
 differently from the same word as a name ("Sees" is "Indoor" on a tile, "On" as a state); SAME
 reads the same in both languages (product names, units); TEXTS_EN is the sample markdown, keyed
@@ -35,6 +35,7 @@ SAME = {
     "Stremio",
     "UniFi AP",
     "UniFi Gateway",
+    "WC",
     "Wi-Fi",
     "YouTube",
     "kW",
@@ -405,7 +406,6 @@ EN = {
     "Arvesti andmed värsked": "Meter data fresh",
     "Boiler sel kuul": "Water heater this month",
     "Boiler täna": "Water heater today",
-    "Eeskoja suitsuandur": "Hall smoke detector",
     "Elutoa lamp": "Living room lamp",
     "Elutoa suitsuandur": "Living room smoke detector",
     "Filtrite kalibreerimine": "Filter calibration",
@@ -426,42 +426,43 @@ EN = {
     "Valgus parem": "Light right",
     "Valgus vasak": "Light left",
     "Valvesüsteem": "Alarm system",
-    "Varikatuse andur": "Porch sensor",
     "Ventilatsioon sel kuul": "Ventilation this month",
     "Ventilatsiooni režiim": "Ventilation mode",
     "Vihmateavitus": "Rain notification",
     "Väravakaamera liikumine": "Gate camera motion",
     "Väravakaamera liikumistuvastus": "Gate camera motion detection",
-    # the test house: rooms, devices, the car, the future items
-    "Eeskoda": "Hall",
-    "Eeskoja liikumisandur": "Hall motion sensor",
+    # the demo house: rooms, devices, the car, the future items
     "Elutoa andur": "Living room sensor",
     "Elutoa temperatuur": "Living room temperature",
     "Elutuba": "Living room",
-    "Galerii": "Gallery",
+    "Esik": "Hall",
+    "Esiku liikumisandur": "Hall motion sensor",
+    "Esiku suitsuandur": "Hall smoke detector",
+    "Koridor": "Corridor",
+    "Köök-elutuba": "Kitchen and living room",
     "Köögi andur": "Kitchen sensor",
     "Lastetuba": "Children's room",
     "Magamistoa andur": "Bedroom sensor",
     "Magamistuba": "Bedroom",
-    "Majapidamisruum": "Utility room",
     "Pere köök-elutuba": "Family kitchen and living room",
+    "Pesuruum": "Bathroom",
+    "Pesuruumi andur": "Bathroom sensor",
+    "Saun": "Sauna",
     "Suur magamistuba": "Main bedroom",
+    "Tehnoruum": "Utility room",
     "Testauto": "Test car",
     "Töötuba": "Study",
-    "Vannitoa andur": "Bathroom sensor",
-    "Vannituba": "Bathroom",
     "Varjualune": "Carport",
     "Varjualuse liikumisandur": "Carport motion sensor",
+    "Veranda andur": "Porch sensor",
     "Õuetemperatuur": "Outdoor temperature",
     "Akusalvesti": "Home battery",
     "Laadimispunkt": "EV charger",
     "Puuküttega kümblustünn": "Wood-fired hot tub",
     "Päikesejaam": "Solar panels",
     "Väike kasvuhoone": "Small greenhouse",
-    "8,8 kWp, 20 paneeli põhjatiiva lõuna poole kalduval katusel": (
-        "8.8 kWp, 20 panels on the north wing's south-facing roof"
-    ),
-    "Aastas umbes 8 000 kWh": "About 8,000 kWh a year",
+    "8,8 kWp, 20 paneeli katuse lõunaküljel": "8.8 kWp, 20 panels on the roof's south side",
+    "Aastas umbes 8 500 kWh": "About 8,500 kWh a year",
     "Hind paigaldatuna umbes 9 000 €": "About €9,000 installed",
     "Tasuvusaeg umbes 10 aastat": "Pays back in about 10 years",
     "11 kW, kolm faasi": "11 kW, three-phase",
@@ -478,7 +479,7 @@ EN = {
     ),
     "Varjualuse liikumisandur näeb inimest.": "The carport motion sensor sees someone.",
     "Välisuks avaneb.": "The front door opens.",
-    "Eeskojas on liikumine.": "Motion in the hall.",
+    "Esikus on liikumine.": "Motion in the hall.",
     "Valve võetakse maha.": "The alarm is disarmed.",
     "Välisuks sulgub.": "The front door closes.",
     "Köök-elutoas on liikumine.": "Motion in the kitchen and living room.",
@@ -496,7 +497,7 @@ EN = {
     "Magamistoa lamp süttib: selle lülitab sisse inimene.": (
         "The bedroom lamp comes on: a person switches it on."
     ),
-    "Vannitoas on liikumine.": "Motion in the bathroom.",
+    "Pesuruumis on liikumine.": "Motion in the bathroom.",
     "Elutoa lamp süttib.": "The living room lamp comes on.",
     "Magamistoa lamp kustutatakse.": "The bedroom lamp is switched off.",
     "Rada näitab hommikust teekonda magamistoast kööki.": (
@@ -513,10 +514,10 @@ EN = {
         "A critical notification reaches the phones, listing the open doors and active sensors."
     ),
     "Sireen vaikib.": "The siren stops.",
-    "Õhtul tunneb eeskoja suitsuandur suitsu.": (
+    "Õhtul tunneb esiku suitsuandur suitsu.": (
         "In the evening the hall smoke detector senses smoke."
     ),
-    "Eeskoja suitsuandur tunneb suitsu.": "The hall smoke detector senses smoke.",
+    "Esiku suitsuandur tunneb suitsu.": "The hall smoke detector senses smoke.",
     "Suitsuandurite tsoon läheb valvepaneelis tööle.": (
         "The smoke detector zone goes off on the alarm panel."
     ),

@@ -13,7 +13,8 @@ const COLORS = {
 // The real style's default surfaces, which a model's look (geometry.look) overrides by name: a
 // light, matt architectural model. The walls are a plain light grey without trims, the roofs a
 // matt mid grey, and every frame, roof edge, the carport's panels and the pergola an off-white
-// (frame); the wall's base strip is in the frame's colour too unless the look names base, and a
+// (frame); the wall's base strip is in the frame's colour too unless the look names base, the
+// casings (opening trims, corner boards, fascias, posts) unless it names trim, and a
 // chimney (geometry.chimneys) a plain mid grey. Inside, the walls are light grey, the doors and
 // their frames white, the living floors light wood planks (planks()) and the wet rooms a grey tile
 // (tiles()). The interior is drawn as an
@@ -33,7 +34,7 @@ const COLORS = {
 // The car and surroundings are plain stand-ins; outside the lot is a light base, like an
 // architectural model's. Snow (the winter layer) is a cool white.
 const REAL = {
-  cladding: '#e6e4df', roof: '#6e7377', frame: '#f0f0ed', base: '#8e8c87', chimney: '#a9a7a1', unit: '#e4e4e0',
+  cladding: '#e6e4df', roof: '#6e7377', frame: '#f0f0ed', base: '#8e8c87', trim: '#ebebe7', chimney: '#a9a7a1', unit: '#e4e4e0',
   glass: '#9fb8c4', interior: '#e4e3df', door: '#f2f1ed', floor: '#cdbfa8', tile: '#9a9690', deck: '#8a8178', paving: '#c4c0b8',
   lawn: '#64904a', outside: '#d8d6cc', hedge: '#355a32', crown: '#4f7a3a', trunk: '#5b4636',
   fence: '#5a5d60', car: '#2f3336', neighbour: '#b9b6ae', road: '#6b6b68',
@@ -50,8 +51,11 @@ const REAL = {
 };
 // the cladding's boards (a look's cladding pattern 'boards'): about 12 cm wide, at 45 degrees
 // rising to the right, 0 horizontal or 90 upright, only their grooves drawn, on a 2 m tile of the
-// walls' metre UVs; BOARDS is the boards across the tile at 45, BOARDS_SQUARE at 0 and 90
+// walls' metre UVs; BOARDS is the boards across the tile at 45, BOARDS_SQUARE at 0 and 90 unless
+// the look's cladding gives a board width (BOARD_RANGE m), GROOVE the groove's share of a board
+// unless it gives one (GROOVE_RANGE)
 const BOARD_TILE = 2, BOARDS = 12, BOARDS_SQUARE = 17, BOARD_PX = 512, GROOVE = 0.045;
+const BOARD_RANGE = [0.08, 0.4], GROOVE_RANGE = [0.02, 0.25];
 // pitched roof profiles (a look's roof pattern 'seam' or 'tile') on slope-aligned metre UVs:
 // u runs along the eave, v runs uphill along the slope surface. 'seam' draws 4 standing-seam
 // sheets per 2 m tile (0.5 m pitch); 'tile' draws 6 staggered courses of 6 fluted tiles (0.30 m
@@ -59,7 +63,7 @@ const BOARD_TILE = 2, BOARDS = 12, BOARDS_SQUARE = 17, BOARD_PX = 512, GROOVE = 
 const ROOF_PX = 512, ROOF_SEAM_TILE = 2, ROOF_SEAM_PITCH = 0.5, ROOF_SEAM_SHADOW = 0.015, ROOF_SEAM_HI = 0.03;
 const ROOF_TILE_SIZE = 1.8, ROOF_TILE_W = 0.3, ROOF_TILE_H = 0.3, ROOF_TILE_LIP = 0.1, ROOF_TILE_SIDE = 0.06;
 // what a look leaves out: plain cladding and roof, no trims
-const LOOK = { cladding: { pattern: 'plain' }, roof: { pattern: 'plain' }, trims: { openings: false, corners: false, base: false } };
+const LOOK = { cladding: { pattern: 'plain' }, roof: { pattern: 'plain' }, trims: { openings: false, corners: false, base: false, fascia: false } };
 // the base strip's height when trims.base is true, and the range a look's {height} may take
 const BASE_H = 0.12, BASE_RANGE = [0.05, 1];
 const GLASS_OPACITY = 0.35, SHEER_OPACITY = 0.55;
@@ -84,26 +88,31 @@ const SPLASH_TILE = 1.2, SPLASH_W = 0.6, SPLASH_H = 0.3, SPLASH_JOINT = 0.003, S
 // each on or off, with the base strip's height and surface apart (trims.base {height} is on);
 // the card's model comes from HA's stored config, not only through the validator, so what is not a
 // known surface, finish or trim is left out rather than drawn
+const within = (v, [lo, hi]) => typeof v === 'number' && v >= lo && v <= hi;
 function resolveLook(look) {
   const given = Object.entries((look && look.surfaces) || {}).filter(([k]) => Object.hasOwn(REAL, k))
     .map(([k, v]) => [k, typeof v === 'string' ? { color: v } : v]).filter(([, v]) => v && typeof v.color === 'string');
   const colors = { ...REAL, ...Object.fromEntries(given.map(([k, v]) => [k, v.color])) };
   const finish = Object.fromEntries(given.map(([k, v]) => [k, Object.fromEntries(['roughness', 'metalness'].filter(f => f in v).map(f => [f, v[f]]))]));
   const c = (look && look.cladding && typeof look.cladding === 'object') ? look.cladding : LOOK.cladding;
-  const cladding = c.pattern === 'boards' ? { pattern: 'boards', angle_deg: [0, 45, 90].includes(c.angle_deg) ? c.angle_deg : 45 } : LOOK.cladding;
+  const cladding = c.pattern === 'boards' ? {
+    pattern: 'boards', angle_deg: [0, 45, 90].includes(c.angle_deg) ? c.angle_deg : 45,
+    ...(within(c.board, BOARD_RANGE) && { board: c.board }), ...(within(c.groove, GROOVE_RANGE) && { groove: c.groove })
+  } : LOOK.cladding;
   const r = (look && look.roof && typeof look.roof === 'object') ? look.roof : LOOK.roof;
   const roof = r.pattern === 'seam' || r.pattern === 'tile' ? { pattern: r.pattern } : LOOK.roof;
   const t = (look && look.trims) || {};
   const h = t.base && typeof t.base === 'object' ? t.base.height : undefined;
-  const high = typeof h === 'number' && h >= BASE_RANGE[0] && h <= BASE_RANGE[1];
+  const high = within(h, BASE_RANGE);
   const trims = { ...LOOK.trims, ...Object.fromEntries(Object.entries(t).filter(([k]) => Object.hasOwn(LOOK.trims, k)).map(([k, v]) => [k, v === true || (k === 'base' && high)])) };
-  const base = { height: high ? h : BASE_H, surface: given.some(([k]) => k === 'base') ? 'base' : 'frame' };
-  return { colors, finish, look: { cladding, roof, trims }, base };
+  const named = k => given.some(([n]) => n === k);
+  const base = { height: high ? h : BASE_H, surface: named('base') ? 'base' : 'frame' };
+  return { colors, finish, look: { cladding, roof, trims }, base, trim: { surface: named('trim') ? 'trim' : 'frame' } };
 }
 
 export function createKit(THREE, style = 'simple', look) {
   const C = Object.fromEntries(Object.entries(COLORS).map(([k, v]) => [k, new THREE.Color(v)]));
-  const { colors, finish, look: resolved, base } = resolveLook(look);
+  const { colors, finish, look: resolved, base, trim } = resolveLook(look);
   const disposables = [];
   const keep = x => (disposables.push(x), x);
   // real style only: a new lit material on every call, so a floor tints alone and a fade on
@@ -179,12 +188,13 @@ export function createKit(THREE, style = 'simple', look) {
   let boardPair;
   function boards() {
     if (boardPair) return boardPair;
-    const S = BOARD_PX, angle = resolved.cladding.angle_deg;
+    const { angle_deg: angle, board, groove = GROOVE } = resolved.cladding;
+    const S = BOARD_PX, square = board ? Math.round(BOARD_TILE / board) : BOARDS_SQUARE;
     // across counts across the boards and wraps with the tile (i - j at 45, j rows at 0, i
     // columns at 90); one shade, a thin groove between
-    const across = angle === 45 ? (i, j) => ((i - j + S) * BOARDS) / S : (i, j) => ((angle === 0 ? j : i) * BOARDS_SQUARE) / S;
+    const across = angle === 45 ? (i, j) => ((i - j + S) * BOARDS) / S : (i, j) => ((angle === 0 ? j : i) * square) / S;
     const front = tileTexture(S, BOARD_TILE, (i, j) => {
-      const t = across(i, j), v = (t - Math.floor(t) < GROOVE ? 0.72 : 1) * 255;
+      const t = across(i, j), v = (t - Math.floor(t) < groove ? 0.72 : 1) * 255;
       return [v, v, v, 255];
     });
     const back = keep(front.clone());
@@ -348,6 +358,23 @@ export function createKit(THREE, style = 'simple', look) {
     return g;
   }
 
+  // a box from point p to point q ([x, y, z]) in group, w wide along across (any direction round
+  // the axis when not given) and d deep, its ends kept for the tests
+  const up = new THREE.Vector3(0, 1, 0);
+  function strut(group, p, q, w, d, mat, part, across) {
+    const a = new THREE.Vector3(...p), b = new THREE.Vector3(...q), dir = b.clone().sub(a), len = dir.length();
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, len, d), mat);
+    m.position.copy(a).add(b).multiplyScalar(0.5);
+    dir.normalize();
+    if (across) {
+      const x = new THREE.Vector3(...across).addScaledVector(dir, -new THREE.Vector3(...across).dot(dir)).normalize();
+      m.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, dir, x.clone().cross(dir)));
+    } else m.quaternion.setFromUnitVectors(up, dir);
+    m.userData = { part, ends: [p, q] };
+    group.add(m);
+    return m;
+  }
+
   // real style: box() without the outline
   function solid(group, mat, [x0, z0, x1, z1], [y0, y1]) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), mat);
@@ -402,5 +429,5 @@ export function createKit(THREE, style = 'simple', look) {
     return out;
   }
 
-  return { C, style, REAL: colors, look: resolved, base, disposables, keep, basic, lineMat, mats, edges, box, prism, canvasTexture, applyFade, nightTint, near, spans, surface, solid, flatShape, boards, roofMap, pavers, planks, tiles, splashTiles, wireMesh, bars };
+  return { C, style, REAL: colors, look: resolved, base, trim, disposables, keep, basic, lineMat, mats, edges, box, prism, canvasTexture, applyFade, nightTint, near, spans, surface, solid, strut, flatShape, boards, roofMap, pavers, planks, tiles, splashTiles, wireMesh, bars };
 }

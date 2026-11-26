@@ -1,4 +1,4 @@
-"""Tests of the demo dashboard (scripts/dashboard_demo.py) on the made-up fixture house: no
+"""Tests of the demo dashboard (scripts/dashboard_demo.py) on the made-up demo house: no
 khe-meta, so CI runs them too.
 
 Run from the repo root: python3 -I -m unittest discover -s tests/dashboard
@@ -17,9 +17,8 @@ import dashboard as dc
 a3 = dc
 import dashboard_demo as dd
 import dashboard_demo_en as en
-import house3d_model
+from helpers import demo_model
 
-FIXTURE = ROOT / "tests/house3d/fixture-model.md"
 # the A3 hero without its inline model, which the demo loads from model.json
 HERO = {
     "type": "custom:house3d-card",
@@ -32,11 +31,6 @@ HERO = {
 
 # ADR-010's hero below four columns, ADR-018's from four
 HEROES = [a3.screen(HERO, a3.BELOW_FOUR), a3.screen({**HERO, "stretch": "beside"}, a3.FOUR)]
-
-
-def fixture_model():
-    layers = house3d_model.read_layers(FIXTURE)
-    return house3d_model.with_room_names(house3d_model.merge(layers, house3d_model.CARD))
 
 
 def strings(o, key=None):
@@ -68,12 +62,12 @@ def is_id(s):
     return bool(dd.ID.match(s) or (dd.STAT.match(s) and not s.startswith("mdi:")))
 
 
-MODEL = fixture_model()
+MODEL = demo_model()
 CONFIG = dd.demo_config(MODEL)
 DEMO_CAMERAS = dc.camera_views(dc.House(dd.DEMO_HOUSE, dd.DEMO_PEOPLE))
 STATES = dd.demo_states(MODEL)["states"]
 SERIES = dd.demo_series()
-FIXTURE_IDS = {d["entity"] for d in MODEL["devices"]} | {MODEL["car"]["entity"]}
+DEMO_IDS = {d["entity"] for d in MODEL["devices"]} | {MODEL["car"]["entity"]}
 CONFIG_EN = dd.demo_config_en(MODEL)
 STATES_EN = dd.demo_states_en(MODEL)
 SERIES_EN = dd.demo_series_en()
@@ -98,7 +92,7 @@ class DemoConfig(unittest.TestCase):
         demo_ids = {e["id"] for e in dd.CATALOGUE.values()} | set(dd.STATISTICS.values())
         for _, s in strings(CONFIG):
             if is_id(s):
-                self.assertTrue(s in demo_ids or s in FIXTURE_IDS, s)
+                self.assertTrue(s in demo_ids or s in DEMO_IDS, s)
                 if dd.ID.match(s):
                     self.assertIn(s, STATES, s)
 

@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""Build the HA dashboard demo of the made-up test house; the standalone viewer build and the
+"""Build the HA dashboard demo of the made-up demo house; the standalone viewer build and the
 privacy scan are the engine's (house3d_viewer.py, vendored from khe-house3d), and every other
 argument goes to it.
 
-Usage:  house3d-build.py --demo OUTDIR                  build the HA dashboard demo of the test house
+Usage:  house3d-build.py --demo OUTDIR                  build the HA dashboard demo of the demo house
         house3d-build.py MODEL OUTDIR                   house3d_viewer.py: build the viewer, then scan
         house3d-build.py --scan [--count] [ALLOW]... MODEL PATH...
                                                         house3d_viewer.py: scan, exit 1 on any hit
 
-The demo build reads only the made-up test house (tests/house3d/fixture-model.md), never a
+The demo build reads only the made-up demo house (tests/house3d/fixture-demo.md), never a
 model argument or HOUSE3D_MODEL, and writes every .html, .js, .css and .svg of demo/, the HA
 card, the engine, the dashboard cards (cards/khe-cards.js), model.json with every layer the card
 gets in HA, and the dashboard: the house's Overview on made-up data
 (scripts/dashboard_demo.py) as dashboard.json, their starting states as states.json, their
 chart data as series.json and the scenarios a visitor plays (scripts/dashboard_scenarios.py) as
 scenarios.json, the simulated recorder it reads its history and dated states from as
-recorder.json (one file for both languages), and the same in English with the test house's model as dashboard.en.json,
+recorder.json (one file for both languages), and the same in English with the demo house's model as dashboard.en.json,
 states.en.json, series.en.json, scenarios.en.json and model.en.json. In the demo's files __HOUSE3D_VERSION__ becomes the card's version,
 __KHE_CARDS_VERSION__ the dashboard cards' version and __DEMO_VERSION__ a hash of the demo's
-files, the generated JSON files and those two versions. khe-sites publishes it at khe.ee/house3d/. The fixture is
+files, the generated JSON files and those two versions. khe-sites publishes it at khe.ee/ha/. The demo house is
 public; the dashboard comes from the generator, which names the real house's devices, so
 check.sh scans the demo build with the real model whenever one is at hand.
 """
@@ -41,7 +41,7 @@ SRC = ROOT / "house3d"
 DEMO = ROOT / "demo"
 CARDS = ROOT / "cards" / "khe-cards.js"
 CARDS_PARTS = ROOT / "cards" / "parts"
-FIXTURE = house3d_viewer.FIXTURE
+DEMO_HOUSE = house3d_viewer.DEMO
 DEMO_SUFFIXES = (".html", ".js", ".css", ".svg")
 
 
@@ -67,13 +67,13 @@ def demo_files(demo=DEMO):
 
 
 def demo_model():
-    layers = house3d_viewer.full_model(FIXTURE)
+    layers = house3d_viewer.full_model(DEMO_HOUSE)
     return house3d_model.with_room_names(house3d_model.merge(layers, house3d_model.CARD))
 
 
 def demo_data(model):
     """The demo dashboard's generated files, name -> text: the config, states, series and
-    scenarios, and the same in English with the test house's model (ADR-003)."""
+    scenarios, and the same in English with the demo house's model (ADR-003)."""
     dump = lambda o: json.dumps(o, ensure_ascii=False, separators=(",", ":"))
     return {
         "dashboard.json": dump(dashboard_demo.demo_config(model)),

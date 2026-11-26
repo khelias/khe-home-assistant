@@ -1,8 +1,8 @@
 // The future: things the house does not have yet (model.future, the private layer), drawn in
 // place and see-through in one violet tint so none reads as built: rooftop PV, an EV charger, a
-// home battery, a greenhouse and a hot tub. The PV panels lie on their roof in the lift, so they
-// rise and fade with it; the rest stand on the ground. Nothing here casts a shadow, so the real
-// house's light stays as it is. A tap on an item is { feature: id }.
+// home battery, a greenhouse and a hot tub. The PV panels lie on their roof (a shed roof or a hip
+// or gable face) in the lift, so they rise and fade with it; the rest stand on the ground. Nothing
+// here casts a shadow, so the real house's light stays as it is. A tap on an item is { feature: id }.
 const PANEL = [1.72, 1.13], PANEL_GAP = 0.02; // as scripts/house3d_model.py's PANEL and PANEL_GAP
 const PANEL_T = 0.04, PANEL_LIFT = 0.05; // a panel's thickness, its underside this far over the roof
 const SIZE = { greenhouse: [3, 4], tub: [2, 2] };
@@ -72,21 +72,28 @@ export default function build({ THREE, kit, C, model, style, state, roof }) {
 
   function pv(it) {
     const top = roof.top(it.roof);
-    // the roof's rise per metre of x, and the tilt that lays a panel on it
-    const rise = top(1, 0) - top(0, 0), tilt = Math.atan(rise);
+    // the card's model is not validated: an item off a hip or gable roof's faces is left out
+    // rather than tilted by a slope it does not lie on
+    const plane = roof.planeAt(it.roof, ...it.pos);
+    if (!plane && roof.faces(it.roof)) return;
+    const [gx, gz] = plane ?? [top(1, 0) - top(0, 0), 0];
+    const tx = Math.atan(gx), tz = Math.atan(gz);
     const [w, d] = it.size, turned = it.rot === 90 || it.rot === 270;
+    // on a face the grid is laid out on the slope's true length and drawn back onto the plan, so
+    // the panels lie edge to edge (scripts/house3d_model.py's pv_size); a shed roof's as planned
+    const sx = plane ? Math.cos(tx) : 1, sz = plane ? Math.cos(tz) : 1;
+    const [su, sv] = turned ? [sz, sx] : [sx, sz];
     const geoL = box(PANEL[0], PANEL_T, PANEL[1]), geoP = box(PANEL[1], PANEL_T, PANEL[0]);
-    panelGrid(w, d, it.panels).forEach(p => {
+    const n = [-Math.sin(tx), Math.cos(tx) * Math.cos(tz), -Math.sin(tz)];
+    panelGrid(w / su, d / sv, it.panels).forEach(p => {
       // the grid's frame turned by rot onto the plan, the long side along u
-      const a = -(it.rot || 0) * D2R, ca = Math.cos(a), sa = Math.sin(a);
-      const x = it.pos[0] + p.u * ca + p.v * sa, z = it.pos[1] - p.u * sa + p.v * ca;
+      const a = -(it.rot || 0) * D2R, ca = Math.cos(a), sa = Math.sin(a), u = p.u * su, v = p.v * sv;
+      const x = it.pos[0] + u * ca + v * sa, z = it.pos[1] - u * sa + v * ca;
       const alongX = (p.long === PANEL[0]) !== turned;
       const m = add(lift, alongX ? geoL : geoP, 'frame', it.id, true);
       m.userData.panel = true;
-      // the underside's centre PANEL_LIFT over the roof, the panel turned to the roof's slope
-      const n = [-Math.sin(tilt), Math.cos(tilt)];
-      m.position.set(x + n[0] * (PANEL_T / 2), top(x, z) + PANEL_LIFT + n[1] * (PANEL_T / 2), z);
-      m.rotation.z = tilt;
+      m.position.set(x + n[0] * (PANEL_T / 2), top(x, z) + PANEL_LIFT + n[1] * (PANEL_T / 2), z + n[2] * (PANEL_T / 2));
+      m.rotation.set(-tz, 0, tx);
     });
   }
 

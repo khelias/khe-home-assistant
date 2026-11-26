@@ -1,4 +1,4 @@
-// A mock Home Assistant dashboard on the made-up test house. The views are the house's own
+// A mock Home Assistant dashboard on the made-up demo house. The views are the house's own
 // Overview, made by the same generator (dashboard.json, scripts/dashboard_demo.py), drawn by
 // demo/cards.js on one simulated hass (demo/sim.js, starting from states.json) with a simulated
 // recorder (demo/recorder.js, recorder.json, ADR-012); A3's hero and the 3D view are the real

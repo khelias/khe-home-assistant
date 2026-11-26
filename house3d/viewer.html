@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Maja 3D</title>
+<!-- house3d_viewer.py --bake fills in the bake's URL -->
+<meta name="house3d-bake" content="">
 <!-- Standalone house view: built by scripts/house3d_viewer.py next to model.json (geometry,
      rooms and showcase layers only). No Home Assistant, no device data. -->
 <style>
@@ -58,7 +60,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 #now { justify-self: start; font: 500 13px/1 var(--body); color: var(--ink); background: var(--chip); border: 1px solid var(--panel-edge);
   border-radius: 8px; padding: 8px 12px; cursor: pointer; }
 #now[aria-pressed="true"] { color: var(--bg); background: var(--line); border-color: var(--line); }
-/* the real style's sky is light: the header and the hint need a dark edge */
+/* the real style's sky and the studio are light: the header and the hint need a dark edge */
 body.real .brand { text-shadow: 0 1px 2px rgba(6, 12, 27, 0.85), 0 0 14px rgba(6, 12, 27, 0.5); }
 body.real .eyebrow { color: var(--ink); }
 body.real .hint { color: var(--ink); text-shadow: 0 1px 2px rgba(6, 12, 27, 0.85); }
@@ -92,6 +94,7 @@ body.real .hint { color: var(--ink); text-shadow: 0 1px 2px rgba(6, 12, 27, 0.85
   <div class="seg" role="group" aria-label="Stiil">
     <button type="button" data-style="simple" aria-pressed="true">Lihtne</button>
     <button type="button" data-style="real" aria-pressed="false">Päris</button>
+    <button type="button" data-style="studio" aria-pressed="false">Stuudio</button>
   </div>
   <button type="button" class="icon-btn" id="reset" aria-label="Lähtesta vaade" title="Lähtesta vaade"></button>
 </nav>
@@ -105,7 +108,7 @@ body.real .hint { color: var(--ink); text-shadow: 0 1px 2px rgba(6, 12, 27, 0.85
   <button type="button" id="now" aria-pressed="true">Praegu</button>
 </div>
 <script type="module">
-import { mount, icon, roomArea, seasonOn } from './house3d.js';
+import { mount, icon, roomArea, seasonOn, homeBox } from './house3d.js';
 
 const stage = document.getElementById('stage');
 const panel = document.getElementById('panel');
@@ -133,12 +136,16 @@ const FEATURE = 'feature:';
 // only the plan's bearing, in whole degrees
 const SUN_PLACE = { lat: 58.6, lon: 25.0 };
 const bearing = (model.orientation || {}).x_axis_bearing_deg;
+// a house's baked contact shadows, when the build put them beside the model
+const bake = document.querySelector('meta[name="house3d-bake"]')?.content || undefined;
+// style is the button's: 'simple', 'real' (the garden) or 'studio' (the real style's studio stage)
 let sel = null, style = 'simple', time = null; // time null: live
 let view;
 function mountView(keep = {}) {
   try {
     view = mount(stage, model, {
-      style, mode: keep.mode, view: keep.view,
+      style: style === 'simple' ? 'simple' : 'real', stage: style === 'studio' ? 'studio' : 'garden', bake,
+      mode: keep.mode, view: keep.view,
       // the winter layer by the season, with its snow falling
       layers: { winter: seasonOn(new Date()) }, snowfall: true,
       onMarker: id => select(sel === id ? null : id),
@@ -152,7 +159,10 @@ function mountView(keep = {}) {
     stage.innerHTML = '<div class="fallback">3D-vaadet ei õnnestunud joonistada.</div>';
     throw e;
   }
-  view.setMarkers(features.map(f => ({ id: FEATURE + f.id, pos: f.pos, icon: f.icon, label: f.name, state: 'idle' })));
+  // the studio has no lot: only the features on the house keep their markers
+  const [x0, z0, x1, z1] = homeBox(model), onHouse = ([x, , z]) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
+  view.setMarkers(features.filter(f => style !== 'studio' || onHouse(f.pos))
+    .map(f => ({ id: FEATURE + f.id, pos: f.pos, icon: f.icon, label: f.name, state: 'idle' })));
   view.setSun(Number.isFinite(bearing) ? { ...SUN_PLACE, bearing } : null);
   if (time) view.setTime(time);
   if (sel) view.setSelection(sel);
@@ -174,7 +184,7 @@ function restyle(s) {
   mountView(keep);
   document.querySelectorAll('[data-style]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.style === style)));
   clock.hidden = style !== 'real';
-  document.body.classList.toggle('real', style === 'real');
+  document.body.classList.toggle('real', style !== 'simple');
   syncClock();
 }
 document.querySelectorAll('[data-style]').forEach(b => b.addEventListener('click', () => restyle(b.dataset.style)));

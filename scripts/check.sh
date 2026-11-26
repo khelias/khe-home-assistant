@@ -16,17 +16,17 @@ python3 -I -m unittest discover -s tests/dashboard || fail "dashboard tests"
 
 # The demo dashboard comes from the real generator, so it is scanned with the real model (the
 # main checkout's khe-meta, also from a worktree, or HOUSE3D_MODEL); CI has none and skips.
-# The whole demo build is scanned, as published, with the test house it is built from. The test
-# house and the demo's two models (Estonian and English) carry its devices layer under a
-# `devices` key by design (the card reads it), so that key is allowed in them only.
+# The whole demo build is scanned, as published, with the demo house it is built from and the
+# test house. The two houses and the demo's two models (Estonian and English) carry a devices
+# layer under a `devices` key by design (the card reads it), so that key is allowed in them only.
 common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
 model=${HOUSE3D_MODEL:-${common:+$(dirname "$common")/../khe-meta/house/house-model.md}}
 if [ -n "$model" ] && [ -f "$model" ]; then
   out=$(mktemp -d)
   if python3 -I scripts/house3d-build.py --demo "$out" >/dev/null; then
-    fixture=tests/house3d/fixture-model.md
+    houses=(tests/house3d/fixture-model.md tests/house3d/fixture-demo.md)
     allow=()
-    for f in "$fixture" "$out/model.json" "$out/model.en.json"; do
+    for f in "${houses[@]}" "$out/model.json" "$out/model.en.json"; do
       allow+=(--allow-devices-key "$f")
     done
     dash_public=()
@@ -36,7 +36,7 @@ if [ -n "$model" ] && [ -f "$model" ]; then
     done
     python3 -I scripts/house3d-build.py --scan --count "${allow[@]}" \
       "$model" house3d cards demo scripts/dashboard_demo.py scripts/dashboard_demo_en.py scripts/dashboard_scenarios.py "${dash_public[@]}" tests/cards/fixtures \
-      "$fixture" "$out" || fail "privacy scan"
+      "${houses[@]}" "$out" || fail "privacy scan"
   else
     fail "demo build"
   fi

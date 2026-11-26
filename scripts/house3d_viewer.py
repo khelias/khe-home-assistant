@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Build the standalone house 3D viewer, and scan files for private house data.
 
-Usage:  house3d_viewer.py MODEL OUTDIR                  build, then scan OUTDIR
+Usage:  house3d_viewer.py MODEL OUTDIR [--bake DIR]     build, then scan OUTDIR
         house3d_viewer.py --scan [--count] [ALLOW]... MODEL PATH...
                                                         scan files or trees, exit 1 on any hit
 
 The build writes OUTDIR/index.html (viewer.html), house3d.js, scene/, vendor/ and model.json
 from the geometry, rooms and showcase layers of MODEL. The private and surroundings layers
 and the georeference never go in; model.json gets only the plan's grid bearing in whole
-degrees as orientation.x_axis_bearing_deg, for the real style's sun. Publishing the folder is
-a separate decision.
+degrees as orientation.x_axis_bearing_deg, for the real style's sun. With --bake it also copies
+DIR's bake.json and bake-ao.png (scripts/house3d-bake.sh), the house's baked contact shadows,
+which the viewer then applies; the scan reads bake.json and skips the atlas, a grey image with no
+text. Publishing the folder is a separate decision.
 
 The scan reads the private layer of MODEL and fails on every occurrence of an entity id,
 a device name, a family room name or the car's entity and name
@@ -43,8 +45,12 @@ import house3d_model
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "house3d"
 FIXTURE = ROOT / "tests/house3d/fixture-model.md"
+# the made-up house the public demo shows, on the test house's device ids
+DEMO = ROOT / "tests/house3d/fixture-demo.md"
 DEVICES_KEY = re.compile(r"""["']?\bdevices["']?\s*:""")
 DEVICES_KEY_LABEL = "a devices key"
+BAKE_FILES = ("bake.json", "bake-ao.png")
+BAKE_META = '<meta name="house3d-bake" content="{}">'
 
 
 def _num(v):
@@ -176,7 +182,7 @@ def run_scan(model, paths, count=False, allow=()):
     return 1 if hits else 0
 
 
-def build(model_path, outdir):
+def build(model_path, outdir, bake=None):
     layers = full_model(model_path)
     public = house3d_model.merge(layers, house3d_model.PUBLIC)
     # a public page should not pin the house; whole degrees of bearing turn the sun, not a map
@@ -186,9 +192,20 @@ def build(model_path, outdir):
     assert "surroundings" not in public, (
         "the surroundings layer fixes the location; it never goes public"
     )
+    for name in BAKE_FILES if bake else ():
+        if not (Path(bake) / name).is_file():
+            raise SystemExit(f"build: {Path(bake) / name} does not exist")
     out = copy_engine(outdir)
-    shutil.copyfile(SRC / "viewer.html", out / "index.html")
+    page = (SRC / "viewer.html").read_text(encoding="utf-8")
     write_model(out, public)
+    for name in BAKE_FILES:
+        # a build without a bake leaves no earlier one behind to be published
+        (out / name).unlink(missing_ok=True)
+        if bake:
+            shutil.copyfile(Path(bake) / name, out / name)
+    if bake:
+        page = page.replace(BAKE_META.format(""), BAKE_META.format(f"./{BAKE_FILES[0]}"))
+    (out / "index.html").write_text(page, encoding="utf-8")
     print(f"built {out}")
     return run_scan(house3d_model.merge(layers, house3d_model.LAYERS), [out])
 
@@ -231,8 +248,11 @@ def main(argv):
             layers = full_model(args[0])
             model = house3d_model.merge(layers, house3d_model.LAYERS)
             return run_scan(model, args[1:], count, allow)
-    if len(argv) == 2 and not argv[0].startswith("-"):
-        return build(*argv)
+    bake = None
+    if len(argv) == 4 and argv[2] == "--bake":
+        argv, bake = argv[:2], argv[3]
+    if len(argv) == 2 and not any(a.startswith("-") for a in argv):
+        return build(*argv, bake=bake)
     print(__doc__.split("\n\n")[1], file=sys.stderr)
     return 2
 

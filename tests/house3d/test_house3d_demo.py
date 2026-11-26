@@ -1,4 +1,4 @@
-"""Tests of scripts/house3d-build.py --demo: the HA dashboard demo of the made-up test house.
+"""Tests of scripts/house3d-build.py --demo: the HA dashboard demo of the made-up demo house.
 
 Run from the repo root: python3 -I -m unittest discover -s tests/house3d -v
 """
@@ -6,7 +6,7 @@ import importlib.util, json, os, re, shutil, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURE = ROOT / "tests/house3d/fixture-model.md"
+DEMO_HOUSE = ROOT / "tests/house3d/fixture-demo.md"
 ENGINE = ROOT / "house3d"
 BUILD = ROOT / "scripts/house3d-build.py"
 DEMO = ROOT / "demo"
@@ -20,7 +20,7 @@ _bspec.loader.exec_module(hb)
 
 
 def layers():
-    return hm.read_layers(FIXTURE)
+    return hm.read_layers(DEMO_HOUSE)
 
 
 def run(*args, env=None):
@@ -122,7 +122,7 @@ class Demo(unittest.TestCase):
     def test_demo_ignores_house3d_model(self):
         with tempfile.TemporaryDirectory() as tmp:
             other = Path(tmp) / "other-model.md"
-            text = FIXTURE.read_text(encoding="utf-8").replace("Testvalgusti", "Muuvalgusti")
+            text = DEMO_HOUSE.read_text(encoding="utf-8").replace("Testauto", "Muuauto")
             other.write_text(text, encoding="utf-8")
             plain = self.build(Path(tmp) / "plain")
             planted = self.build(Path(tmp) / "planted", env={**os.environ, "HOUSE3D_MODEL": str(other)})
@@ -131,7 +131,7 @@ class Demo(unittest.TestCase):
 
     def test_demo_takes_no_model_argument(self):
         with tempfile.TemporaryDirectory() as tmp:
-            r = run("--demo", FIXTURE, tmp)
+            r = run("--demo", DEMO_HOUSE, tmp)
             self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
 
 

@@ -1,12 +1,13 @@
 # ADR-003: The demo's English is a demo-only translation
 
-- **Status:** Accepted (2026-10-20); decision 1 narrowed by [ADR-012](012-the-demo-is-the-houses-overview.md): the dashboard cards carry their own words in both languages and take `language: en` from their config
+- **Status:** Accepted (2026-10-20); decision 1 narrowed by [ADR-012](012-the-demo-is-the-houses-overview.md): the dashboard cards carry their own words in both languages and take `language: en` from their config; amended 2026-11-26: the demo is built on a made-up demo house of its own, khe-house3d's `tests/house3d/fixture-demo.md`, on the test house's device ids ([estate ADR-052](https://github.com/khelias/khe-architecture/blob/main/decisions/052-the-3d-house-engine-has-a-repo-of-its-own.md) point 2)
 - **Related:** [ADR-001](001-own-3d-engine.md), [estate ADR-035](https://github.com/khelias/khe-architecture/blob/main/decisions/035-family-shell-and-design-check-with-its-exceptions.md)
 
 ## Context
 
 The public demo at `khe.ee/ha/` is the real dashboard's generator run on the
-made-up test house (`scripts/dashboard_demo.py`), drawn by `demo/` and the
+made-up demo house (`scripts/dashboard_demo.py`; the test house until
+2026-11-26), drawn by `demo/` and the
 3D card. Every visible string was Estonian: about 220 in
 `dashboard_config.py`, the demo catalogue's names and state words, the test
 house's room, device and future-item names, some 140 in `demo/` and some 45
@@ -24,7 +25,7 @@ household reads Estonian.
 1. **English is a translation of the demo's Estonian output, in the demo
    generator.** `scripts/dashboard_demo_en.py` holds `EN` (visible text:
    titles, headings, names, labels, confirmations, markdown, friendly names,
-   the test house's names and facts), `WORDS` (state values, select options
+   the demo house's names and facts), `WORDS` (state values, select options
    and the label sensors' mirrored words, kept apart because "Sees" and
    "Väljas" read "Indoor" and "Outdoor" as names but "On" and "Off" as
    states), `SAME` (product names and units that read the same in both) and
@@ -66,7 +67,7 @@ household reads Estonian.
 ## Consequences
 
 - A new or changed Estonian string in `dashboard_config.py`,
-  `dashboard_demo.py` or the test house needs its English line in
+  `dashboard_demo.py` or the demo house needs its English line in
   `dashboard_demo_en.py` before `scripts/check.sh` passes; the `KeyError`
   names the string.
 - A new UI string in `demo/` goes into both tables of `demo/strings.js`,

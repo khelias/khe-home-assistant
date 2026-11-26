@@ -29,7 +29,8 @@ also ridge "x" or "z" (the axis its ridge runs along); flat has y. The height at
 highest wing there: hip eave_y + slope * the distance to the wing's nearest edge, gable to the
 nearest edge across the ridge, flat y; outside every wing the nearest wing's at the nearest
 point. roof_height(), roof_rects(), roof_bbox() and roof_area() read every kind. PV items lie
-on shed roofs only.
+on a shed roof inside its outline, or on one face of a hip or gable roof: inside one wing, on one
+side of its ridge, where that wing is the roof's surface; never on a flat roof.
 
 Storeys: geometry.levels is the floor heights [0, 3.05, ...] (default [0]); a wall or room has
 level (default 0). A wall's openings, doors and sills are relative to levels[level]; its top,
@@ -38,18 +39,29 @@ a height or a roof id, and the furniture's y stay absolute. The ceiling is the g
 Look: geometry.look (optional) is the house's finishes in the real style; without it the engine
 draws a light, matt architectural model. surfaces maps an engine surface name (SURFACES) to
 "#rrggbb" or {"color": "#rrggbb", "roughness": 0..1, "metalness": 0..1}; cladding is
-{"pattern": "plain"} or {"pattern": "boards", "angle_deg": 0, 45 or 90} (0 horizontal);
+{"pattern": "plain"} or {"pattern": "boards", "angle_deg": 0, 45 or 90} (0 horizontal), the
+boards optionally with "board", their width in m (0.08-0.4, at 0 and 90 degrees), and "groove",
+the groove's share of a board (0.02-0.25);
 roof is {"pattern": "plain" | "seam" | "tile"} (plain by default, on pitched roofs only);
-trims {"openings", "corners", "base"} are booleans for the opening trims with their reveals and
-sill flashings, the corner boards and the base strip (the plinth), each off by default; base may
-instead be {"height": h}, 0.05 <= h <= 1.0 above floor 0 (true is 0.12). The base strip is in the
-frame's surface unless surfaces names base. The simple style ignores it.
+trims {"openings", "corners", "base", "fascia"} are booleans for the opening trims with their
+reveals and sill flashings, the corner boards, the base strip (the plinth) and the roofs' fascia
+under a lip of roof, each off by default; base may instead be {"height": h}, 0.05 <= h <= 1.0
+above floor 0 (true is 0.12). The base strip is in the frame's surface unless surfaces names
+base; the casings (opening trims, corner boards, the fascias, site.posts) unless it names trim.
+The simple style ignores it.
 
 Chimneys: geometry.chimneys (optional) is a list of {"id", "rect": [x0, z0, x1, z1], "top": y,
 "level": 0}, upright blocks from levels[level] to top, which runs at least 0.5 above that floor.
 A ground floor chimney above the ceiling is cut there like a wall up to a roof, the part above
 rising and fading with the roofs; an upper storey's rises whole. The real style draws them in the
 chimney surface.
+
+Posts and the carport roof: site.posts (optional) is a list of {"at": [x, z], "top": y,
+"size": 0.15, "braces": [[dx, dz], ...]}, square posts from the ground to top, each brace a
+45 degree knee brace from 0.6 m below the top out 0.6 m along its direction; size and braces
+are optional. site.garage_roof may carry "rim" (0-0.2 m), an upstand round each rect's edge,
+and "bands" (1-4), its fascia as that many stacked boards; without them, or with 1, one block. The
+real style draws both in the casings' surface.
 
 Usage:  house3d_model.py --check FILE
         house3d_model.py --layers geometry,rooms,showcase FILE   (or --layers all)
@@ -141,7 +153,7 @@ PANEL_GAP = 0.02
 FUTURE_FACTS, FACT_CHARS = 6, 80
 # the real style's surface names, every key of the engine's kit.js REAL (a test compares them)
 SURFACES = (
-    "cladding", "roof", "frame", "base", "chimney", "unit", "glass", "interior", "door", "floor", "tile", "deck",
+    "cladding", "roof", "frame", "base", "trim", "chimney", "unit", "glass", "interior", "door", "floor", "tile", "deck",
     "paving", "lawn", "outside", "hedge", "crown", "trunk", "fence", "car", "neighbour", "road",
     "timber", "sand", "slide", "nest", "pad", "mat", "net", "mesh", "stone", "cut", "skirting",
     "linen", "fabric", "oak", "worktop", "cabinet", "furniture", "kitchen", "kitchenTop",
@@ -153,9 +165,17 @@ SURFACES = (
 CLADDING_PATTERNS = ("plain", "boards")
 BOARD_ANGLES = (0, 45, 90)
 ROOF_PATTERNS = ("plain", "seam", "tile")
-TRIMS = ("openings", "corners", "base")
+TRIMS = ("openings", "corners", "base", "fascia")
+BOARD_WIDTH = (0.08, 0.4)  # a look's cladding board, m
+GROOVE_SHARE = (0.02, 0.25)  # a look's cladding groove, a share of the board
 BASE_HEIGHT = (0.05, 1.0)  # a look's trims.base {"height": h}: the plinth's range above floor 0
 CHIMNEY_KEYS = ("id", "rect", "top", "level")
+POST_KEYS = ("at", "top", "size", "braces")
+POST_SIZE = (0.05, 0.5)  # a site.posts size, m
+BRACE_DROP = 0.6  # how far below a post's top its knee braces start (the engine's BRACE)
+RIM = (0, 0.2)  # site.garage_roof rim, m
+BANDS = (1, 4)  # site.garage_roof bands
+BAND_GAP, BAND_MIN = 0.01, 0.02  # the engine's gap between two bands, and a band's least height
 CHIMNEY_MIN = 0.5  # how far a chimney's top stands at least above its level's floor
 HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 BLOCK = re.compile(r"^```json house3d:(\w+)[ \t]*\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
@@ -228,6 +248,10 @@ def _num(v):
     return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
+def _within(v, lo_hi):
+    return _num(v) and lo_hi[0] <= v <= lo_hi[1]
+
+
 def _point(v, n=2):
     return isinstance(v, list) and len(v) == n and all(_num(x) for x in v)
 
@@ -295,16 +319,20 @@ def roof_slope(roof):
     return roof["slope"] if _num(roof.get("slope")) else math.tan(math.radians(roof["pitch_deg"]))
 
 
-def _wing_height(roof, q, x, z):
-    kind = _kind(roof)
-    if kind == "flat":
-        return roof["y"]
+def _edge_distances(roof, q, x, z):
+    """(x, z)'s distances to wing q's edges across its ridge (a gable's two, a hip's four, in
+    the order x0, x1, z0, z1); the nearest names the face the point lies on."""
     x0, z0, x1, z1 = q
-    if kind == "gable":
-        d = min(z - z0, z1 - z) if roof["ridge"] == "x" else min(x - x0, x1 - x)
-    else:
-        d = min(x - x0, x1 - x, z - z0, z1 - z)
-    return roof["eave_y"] + roof_slope(roof) * d
+    ds = [x - x0, x1 - x, z - z0, z1 - z]
+    if _kind(roof) == "gable":
+        ds = ds[2:] if roof["ridge"] == "x" else ds[:2]
+    return ds
+
+
+def _wing_height(roof, q, x, z):
+    if _kind(roof) == "flat":
+        return roof["y"]
+    return roof["eave_y"] + roof_slope(roof) * min(_edge_distances(roof, q, x, z))
 
 
 def roof_height(roof, x, z):
@@ -429,6 +457,59 @@ def _quad_in_ring(corners, ring):
     quad = list(zip(corners, corners[1:] + corners[:1]))
     edges = list(zip(ring, ring[1:] + ring[:1]))
     return not any(_segments_cross(p, q, a, b) for p, q in quad for a, b in edges)
+
+
+PV_SAMPLE = 0.05  # m: the grid pv_face() reads a quad's surface on
+
+
+def pv_face(roof, corners, eps=1e-6):
+    """The face of a hip or gable roof a plan quad lies on, as the plan axis its slope runs
+    along ("x" or "z"), or None when the quad is not on one face: its corners inside one wing
+    and on its centre's side of the ridge (a hip's faces are convex, so the corners settle it;
+    one on the ridge counts), with that wing the roof's surface all over it. Where wings meet
+    the surface is not convex, so a higher wing crossing the quad's middle misses every corner:
+    the surface is read on a PV_SAMPLE grid, its edges included."""
+    cx = sum(c[0] for c in corners) / 4
+    cz = sum(c[1] for c in corners) / 4
+    x0, z0 = min(c[0] for c in corners), min(c[1] for c in corners)
+    x1, z1 = max(c[0] for c in corners), max(c[1] for c in corners)
+    nx, nz = math.ceil((x1 - x0) / PV_SAMPLE), math.ceil((z1 - z0) / PV_SAMPLE)
+    grid = [
+        (x0 + (x1 - x0) * i / nx, z0 + (z1 - z0) * j / nz)
+        for i in range(nx + 1)
+        for j in range(nz + 1)
+    ]
+    for q in roof["rects"]:
+        if not all(q[0] <= x <= q[2] and q[1] <= z <= q[3] for x, z in corners):
+            continue
+        mid = _edge_distances(roof, q, cx, cz)
+        face = mid.index(min(mid))
+        if all(
+            (ds := _edge_distances(roof, q, x, z))[face] <= min(ds) + eps for x, z in corners
+        ) and all(
+            abs(roof_height(roof, x, z) - _wing_height(roof, q, x, z)) <= eps for x, z in grid
+        ):
+            if _kind(roof) == "gable":
+                return "z" if roof["ridge"] == "x" else "x"
+            return "x" if face < 2 else "z"
+    return None
+
+
+def pv_size(item, roof, axis=None):
+    """A pv item's [w, d] along its roof: its plan size, on a hip or gable face with the side
+    that runs up the slope lengthened to its true length (a shed roof's low pitch is left as
+    planned), so the panels lie edge to edge on the face as they do in the engine. axis is
+    pv_face()'s answer when the caller has it."""
+    w, d = item["size"]
+    if not axis and _kind(roof) in ("hip", "gable"):
+        axis = pv_face(roof, future_corners(item))
+    if not axis:
+        return [w, d]
+    stretch = math.hypot(1, roof_slope(roof))
+    along_x = item.get("rot", 0) in (0, 180)
+    if (axis == "x") == along_x:
+        return [w * stretch, d]
+    return [w, d * stretch]
 
 
 def panel_fit(w, d):
@@ -738,6 +819,35 @@ def validate(layers):
                 rect(f"site.garage_roof.rects[{i}]", r)
         if not (_point(gr.get("y")) and gr["y"][0] < gr["y"][1]):
             bad("site.garage_roof: y must be [y0, y1] with y0 < y1")
+        if "rim" in gr and not _within(gr["rim"], RIM):
+            bad(f"site.garage_roof: rim {gr['rim']!r} is not between {RIM[0]} and {RIM[1]} m")
+        b = gr.get("bands", 1)
+        if not (isinstance(b, int) and not isinstance(b, bool) and BANDS[0] <= b <= BANDS[1]):
+            bad(f"site.garage_roof: bands {b!r} is not a whole number {BANDS[0]} to {BANDS[1]}")
+        elif _point(gr.get("y")) and gr["y"][1] - gr["y"][0] < b * BAND_MIN + (b - 1) * BAND_GAP:
+            bad(f"site.garage_roof: {b} bands do not fit in y {gr['y']}")
+    posts = site.get("posts", [])
+    if not isinstance(posts, list):
+        bad("site.posts: not a list")
+        posts = []
+    for i, p in enumerate(posts):
+        where = f"site.posts[{i}]"
+        if not isinstance(p, dict):
+            bad(f"{where}: not a JSON object")
+            continue
+        for k in sorted(set(p) - set(POST_KEYS)):
+            bad(f"{where}: unknown key {k!r}")
+        if not _point(p.get("at")):
+            bad(f"{where}: at must be [x, z]")
+        elif lot and not _inside(p["at"], lot):
+            bad(f"{where}: at is outside the lot")
+        if not (_num(p.get("top")) and p["top"] > BRACE_DROP):
+            bad(f"{where}: top is not a height over {BRACE_DROP} m")
+        if "size" in p and not _within(p["size"], POST_SIZE):
+            bad(f"{where}: size {p['size']!r} is not between {POST_SIZE[0]} and {POST_SIZE[1]} m")
+        braces = p.get("braces", [])
+        if not (isinstance(braces, list) and all(_point(d) and math.hypot(*d) > 0 for d in braces)):
+            bad(f"{where}: braces must be a list of [dx, dz] directions")
     for i, u in enumerate(site.get("outdoor_units", [])):
         rect(f"site.outdoor_units[{i}]", u.get("rect"))
         if not (_point(u.get("y")) and u["y"][0] < u["y"][1]):
@@ -948,9 +1058,16 @@ def _validate_look(look, bad):
                 f"look.cladding: pattern {c.get('pattern')!r} is not one of {', '.join(CLADDING_PATTERNS)}"
             )
         else:
-            allowed = {"pattern", "angle_deg"} if c["pattern"] == "boards" else {"pattern"}
+            allowed = (
+                {"pattern", "angle_deg", "board", "groove"}
+                if c["pattern"] == "boards"
+                else {"pattern"}
+            )
             for k in sorted(set(c) - allowed):
                 bad(f"look.cladding: unknown key {k!r} for {c['pattern']}")
+            for k, (lo, hi) in (("board", BOARD_WIDTH), ("groove", GROOVE_SHARE)):
+                if k in c and not _within(c[k], (lo, hi)):
+                    bad(f"look.cladding: {k} {c[k]!r} is not between {lo} and {hi}")
             a = c.get("angle_deg", 45)
             if c["pattern"] == "boards" and not (_num(a) and a in BOARD_ANGLES):
                 bad(f"look.cladding: angle_deg {a!r} is not one of 0, 45, 90")
@@ -1109,23 +1226,33 @@ def _validate_future(model, roofs, bad):
         roof = roofs.get(it.get("roof")) if isinstance(it.get("roof"), str) else None
         if not roof:
             bad(f"{where}: roof {it.get('roof')!r} is not a roof")
-        elif _kind(roof) != "shed":
-            bad(f"{where}: roof {it['roof']} is not a shed roof; PV lies on shed roofs only")
+        elif _kind(roof) == "flat":
+            bad(f"{where}: roof {it['roof']} is flat; PV lies on a shed, hip or gable roof")
             continue
         if not (placed and sized and it.get("rot", 0) in FUTURE_ROT):
             continue
-        outline = roof.get("outline") if roof else None
-        if (
-            isinstance(outline, list)
-            and len(outline) >= 3
-            and all(_point(p) for p in outline)
-            and not _quad_in_ring(future_corners(it), outline)
-        ):
-            bad(f"{where}: its rectangle is not inside roof {it['roof']}'s outline")
-        if panels and panel_fit(*it["size"]) < panels:
+        fit = it["size"]
+        if roof and _kind(roof) != "shed":
+            if _roof_problems(it["roof"], roof):
+                continue
+            axis = pv_face(roof, future_corners(it))
+            if not axis:
+                bad(f"{where}: its rectangle is not on one face of roof {it['roof']}")
+                continue
+            fit = pv_size(it, roof, axis)
+        elif roof:
+            outline = roof.get("outline")
+            if (
+                isinstance(outline, list)
+                and len(outline) >= 3
+                and all(_point(p) for p in outline)
+                and not _quad_in_ring(future_corners(it), outline)
+            ):
+                bad(f"{where}: its rectangle is not inside roof {it['roof']}'s outline")
+        if panels and panel_fit(*fit) < panels:
             bad(
-                f"{where}: {panels} panels do not fit in {it['size'][0]} x {it['size'][1]} m "
-                f"(at most {panel_fit(*it['size'])})"
+                f"{where}: {panels} panels do not fit in {fit[0]:g} x {fit[1]:g} m "
+                f"(at most {panel_fit(*fit)})"
             )
 
 

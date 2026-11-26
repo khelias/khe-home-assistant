@@ -43,22 +43,8 @@ export default function build({ THREE, kit, C, model, style }) {
   }
   // real style: paving stones run on metre UVs, which a prism has and a box has not
   const paved = v => (real && !isOutline(v) ? outlineOf(v) : v);
-  // real style: a box from point p to point q ([x, y, z]), w wide along across (any direction
-  // round the axis when not given) and d deep, its ends kept for the tests
-  const up = new THREE.Vector3(0, 1, 0);
-  function strut(p, q, w, d, mat, part, across) {
-    const a = new THREE.Vector3(...p), b = new THREE.Vector3(...q), dir = b.clone().sub(a), len = dir.length();
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, len, d), mat);
-    m.position.copy(a).add(b).multiplyScalar(0.5);
-    dir.normalize();
-    if (across) {
-      const x = new THREE.Vector3(...across).addScaledVector(dir, -new THREE.Vector3(...across).dot(dir)).normalize();
-      m.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, dir, x.clone().cross(dir)));
-    } else m.quaternion.setFromUnitVectors(up, dir);
-    m.userData = { part, ends: [p, q] };
-    group.add(m);
-    return m;
-  }
+  // real style: kit.strut() in this layer's group
+  const strut = (...a) => kit.strut(group, ...a);
   // an outline's planks run where each line z crosses it: an edge counts when its ends lie on
   // either side of z (one end exactly on z counts as below), so level edges never count and the
   // crossings pair up

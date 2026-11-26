@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 59;
+const HOUSE3D_VERSION = 60;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -976,7 +976,7 @@ export class House3dCard extends Base {
     if (!el || !item) return;
     const roofs = this._config.model.roofs || {};
     if (item.kind !== 'pv' || !sun || !roofs[item.roof] || !(item.kwp > 0)) { el.hidden = true; return; }
-    const kw = mod.pvNow(item.kwp, mod.roofNormal(this._config.model, item.roof), sun);
+    const kw = mod.pvNow(item.kwp, mod.roofNormal(this._config.model, item.roof, item.pos), sun);
     el.textContent = featureText(item, null, { kw, alt: sun.alt, time: sun.time, live: !this._time }, this._lang).pv;
     el.hidden = false;
   }

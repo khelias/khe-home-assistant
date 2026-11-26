@@ -1,4 +1,4 @@
-"""Tests of the demo's scenarios (scripts/dashboard_scenarios.py) on the made-up fixture house:
+"""Tests of the demo's scenarios (scripts/dashboard_scenarios.py) on the made-up demo house:
 every entity and state is the demo's own, and a step labelled as an automation does only what
 that real automation in config/packages/ does. The packages are read as text: no PyYAML under -I.
 
@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import dashboard_demo as dd
 import dashboard_demo_en as en
 import dashboard_scenarios as ds
-from test_dashboard_demo import fixture_model
+from helpers import demo_model
 
 PACKAGES = ROOT / "config/packages"
 ALARM_STATES = {"disarmed", "armed_home", "armed_away", "armed_night", "arming", "pending", "triggered"}
@@ -66,7 +66,7 @@ def names(text, ids):
 class Scenarios(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.model = fixture_model()
+        cls.model = demo_model()
         cls.states = dd.demo_states(cls.model)["states"]
         cls.scenarios = ds.demo_scenarios(cls.model)
         cls.automations = automations()

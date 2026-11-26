@@ -13,6 +13,8 @@ import dashboard as D  # noqa: E402
 import house3d_model  # noqa: E402
 
 FIXTURE_PATH = ROOT / "tests/house3d/fixture-model.md"
+# the made-up house the public demo shows, on the test house's device ids
+DEMO_PATH = ROOT / "tests/house3d/fixture-demo.md"
 HOUSE = {
     "cams": [["cam_one", "Üks"], ["cam_two", "Kaks"]],
     "phone": "sensor.test_phone",
@@ -28,9 +30,17 @@ ENTITY_ID = re.compile(r"^(?:[a-z_]+\.[a-z0-9_]+|[a-z_]+:[a-z0-9_]+)$")
 walk = D.walk
 
 
-def fixture_model():
-    layers = house3d_model.read_layers(FIXTURE_PATH)
+def card_model(path):
+    layers = house3d_model.read_layers(path)
     return house3d_model.with_room_names(house3d_model.merge(layers, house3d_model.CARD))
+
+
+def fixture_model():
+    return card_model(FIXTURE_PATH)
+
+
+def demo_model():
+    return card_model(DEMO_PATH)
 
 
 FIXTURE = fixture_model()

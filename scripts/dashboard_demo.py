@@ -37,7 +37,7 @@ LABELS = {
     dc.SMOKE_GROUP: "Suitsuandur",
     dict(dc.BASE_UPDATES)["update.komfovent_update"]: "Ventilatsiooniseade",
     dc.ROOF_NAME: "Terrassi katus",
-    # the motion rows the test house has no room for keep the demo's own names
+    # the motion rows the demo house has no sensor for keep the demo's own names
     dc.MOTION_ROOMS[dc.PRIVATE[1]]: "Tuba 1",
     dc.MOTION_ROOMS[dc.PRIVATE[2]]: "Tuba 2",
     dc.MOTION_ROOMS[dc.PRIVATE[3]]: "Töötuba",
@@ -90,14 +90,14 @@ binary(dc.DOORS[2][0], "binary_sensor.demo_back_door", "off", "Tagauks", "door")
 # minutes since each door last closed; the back door has not opened in a day
 for (real, _), ago in zip(dc.DOORS, [47, 190, 1600], strict=True):
     CATALOGUE[real]["ago"] = ago
-# five of them are the test house's own, so the 3D view and the motion list agree; two are on,
+# six of them are the demo house's own, so the 3D view and the motion list agree; two are on,
 # so the 3D view shows motion now
 MOTION = [
     ("binary_sensor.test_kitchen_motion", "Köök", 25, "off"),
     ("binary_sensor.test_living_motion", "Elutuba", 1, "on"),
-    ("binary_sensor.test_hall_motion", "Eeskoda", 0, "on"),
+    ("binary_sensor.test_hall_motion", "Esik", 0, "on"),
     ("binary_sensor.test_carport_motion", "Varjualune", 95, "off"),
-    ("binary_sensor.test_bath_motion", "Vannituba", 300, "off"),
+    ("binary_sensor.test_bath_motion", "Pesuruum", 300, "off"),
     ("binary_sensor.test_bedroom_motion", "Magamistuba", 540, "off"),
     ("binary_sensor.demo_room_a_motion", "Tuba 1", 180, "off"),
     ("binary_sensor.demo_room_b_motion", "Tuba 2", 230, "off"),
@@ -837,7 +837,7 @@ def _walk(o, key=None):
 
 
 def _real_ids(model):
-    """The test house with its devices under the house's own ids where the catalogue maps one to
+    """The demo house with its devices under the house's own ids where the catalogue maps one to
     them, so the generator places the PIRs in its rooms (the plan slice) by the ids it knows; the
     walk maps them back."""
     if not model:
@@ -1248,7 +1248,7 @@ def demo_series_en():
 
 
 def demo_model_en(model):
-    """The test house in English: room, device, car and future-item names and facts."""
+    """The demo house in English: room, device, car and future-item names and facts."""
     m = copy.deepcopy(model)
     for item in m.get("rooms", []) + m.get("devices", []):
         item["name"] = _en(item["name"])

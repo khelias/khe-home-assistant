@@ -98,12 +98,12 @@ scripts/           dashboard/ package (entities.py as the single source of house
                    cards' tests),
                    pv-sim.py (rooftop PV, battery and EV simulation against
                    the Estfeed hourly load), check.sh, install-hooks.sh
-tests/house3d/     3D card and demo tests on the made-up test house: the demo
-                   build (Python unittest), the card (engine-card.test.mjs
-                   over the copy's engine-harness.mjs), the demo dashboard,
-                   its recorder and scenario player (node:test); the test
-                   house fixture-model.md and the harness are the engine's
-                   copy
+tests/house3d/     3D card and demo tests: the demo build (Python unittest),
+                   the demo dashboard, its recorder and scenario player
+                   (node:test) on the made-up demo house fixture-demo.md,
+                   the card (engine-card.test.mjs over the copy's
+                   engine-harness.mjs) on the test house fixture-model.md;
+                   both houses and the harness are the engine's copy
 tests/dashboard/   dashboard generator, demo catalogue and scenario tests
                    (Python unittest, split by view area over helpers.py)
 tests/cards/       the dashboard cards' pure helpers and module invariants
@@ -125,7 +125,7 @@ tests/cards/       the dashboard cards' pure helpers and module invariants
   workspace commit gate before each commit.
 - `ruff check --fix scripts && ruff format scripts` before committing Python.
 - `python3 -I scripts/house3d-build.py --demo OUTDIR` builds the demo from the
-  made-up test house only (`tests/house3d/fixture-model.md`): the card, the
+  made-up demo house only (`tests/house3d/fixture-demo.md`): the card, the
   engine, the dashboard cards, `demo/` and the generated dashboard, states,
   series and recorder profiles, in Estonian and as `*.en.json` in English,
   which the demo shows with `?lang=en` ([ADR-003](docs/decisions/003-demo-in-english.md),
@@ -164,10 +164,10 @@ tests/cards/       the dashboard cards' pure helpers and module invariants
    `check.sh` scans `house3d/`, `cards/`, `demo/`, `scripts/dashboard_demo.py`,
    its English, `scripts/dashboard_scenarios.py` and every module under
    `scripts/dashboard/` except `entities.py`, the
-   test house and the whole fresh demo build with `--count` whenever the
+   test and demo houses and the whole fresh demo build with `--count` whenever the
    model is at hand (the main checkout's khe-meta or `HOUSE3D_MODEL`), so the
-   commit gate covers the demo; CI has no model. What the test house may
-   carry anyway (its `devices` key) is allowed
+   commit gate covers the demo; CI has no model. What the two houses may
+   carry anyway (their `devices` key) is allowed
    per file in `check.sh`, with the reason, not by loosening a pattern. The ids and labels the scan flags are spelled once,
    in `scripts/dashboard/entities.py`, and the demo takes them from there.
 3. **Modules under `house3d/scene/` and `cards/parts/` import nothing**

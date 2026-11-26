@@ -484,7 +484,7 @@ stays shadow-only.
 ## The 3D house view (`house3d`)
 
 The engine, its model format, validator and viewer build, the placement
-page, the surroundings writer and the second test house live in
+page, the surroundings writer, the test houses and the demo house live in
 [khe-house3d](https://github.com/khelias/khe-house3d), with its ADR-001 (why
 it is its own engine, a house's look as model data) and its own tests; the
 notes below on the engine describe it as this card runs it. Here are the card
@@ -836,12 +836,12 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   family room name or device coordinate, on the car's name, entity, path and
   outline points, on the surroundings' building and road vertices, on the
   future items' positions (pairs with a decimal) and on the georeference's
-  origin. `tests/house3d/fixture-model.md` and the demo's
+  origin. `tests/house3d/fixture-model.md`, `tests/house3d/fixture-demo.md` and the demo's
   `model.json` have a `devices` key by design, so scanning them takes
   `--allow-devices-key FILE` for each; `--allow-device-name ENTITY FILE`
   lets a test house device name that matches a real one, judged generic,
   stay in that file. The same script builds the standalone viewer from the shareable
-  layers only, and with `--demo` the public demo on the test fixture
+  layers only, and with `--demo` the public demo on the demo house
   (khe.ee/ha/, published by khe-sites), which reads no model: the house's
   Overview from `dashboard.overview()`, rewritten by
   `scripts/dashboard_demo.py` (every entity id to a demo or fixture entity,
@@ -875,7 +875,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   fixed November instant through the card's
   `setScene()`, which stores nothing, and `clearScene()` returns to the
   visitor's own style and live time. The generator names the real house's devices,
-  so `check.sh` scans the whole demo build and the test house with the real
+  so `check.sh` scans the whole demo build, the demo house and the test house with the real
   model when it is at hand.
 - **Tests:** the engine's own (model, build, placement, every layer, the
   simple snapshot, the geometry and look baselines) are khe-house3d's.
@@ -890,8 +890,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   equal to their days, the zone's days, the prices), the scenario player's tests
   (`tests/house3d/scenario.test.mjs`: every built scenario plays to its end in
   both languages, the scene times' sun) and a syntax
-  check of every card, demo and test module, all on a made-up house,
-  `tests/house3d/fixture-model.md`. `scripts/check.sh` runs it and
+  check of every card, demo and test module, on made-up houses: the demo's
+  on `tests/house3d/fixture-demo.md`, the card's on `tests/house3d/fixture-model.md`. `scripts/check.sh` runs it and
   `house3d-copy.sh --check`, so CI and the workspace commit gate do too.
 - **The car** stands in the carport when it is home and drives in from the
   street the first time the view opens after it arrived; a tap on it replays

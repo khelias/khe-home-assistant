@@ -4,10 +4,10 @@ The Home Assistant configuration of one house, public as a reference: the
 YAML packages, a generator for the dashboard, small tools for HA's API, and a
 3D view of the house that shows the devices in place.
 
-[![The 3D view of a made-up courtyard house under Home Assistant's top bar, roof off, with room chips, device markers, the deck and pergola in the courtyard, the car parked under the carport and the surroundings](docs/house3d.png)](https://khe.ee/ha/)
+[![The 3D view of a made-up one-storey gable house under Home Assistant's top bar, roof off, with room chips, device markers, the pergola over the terrace, the car parked in the carport and the surroundings](docs/house3d.png)](https://khe.ee/ha/)
 
 **[Try the dashboard](https://khe.ee/ha/)**: the house's own dashboard,
-made by the same generator, on a made-up test house with simulated devices
+made by the same generator, on a made-up demo house with simulated devices
 and made-up history. It opens on home with the 3D house on top, then energy,
 heat pump, ventilation, pergola, alarm, cameras and TV, with the full 3D view
 last, in Estonian or English; tap a tile to control it as in Home Assistant,

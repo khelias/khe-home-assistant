@@ -13,8 +13,10 @@
 // and the lift on materials of its own, so its fade never reaches the lower walls. With the look's
 // trims (kit.look.trims), its exterior walls also carry opening trims with lined reveals and sill
 // flashings, corner boards on every outer and inner corner and a base strip (the plinth, as high
-// as kit.base has it), in the frame's colour, the strip in the base surface when the look names
-// it; the roofs have an edge, the carport roof a fascia and soffit, in the same colour. At night (ctx.state.night) a room with a light on, or with a marker
+// as kit.base has it), in the casings' surface (kit.trim: trim when the look names it, else the
+// frame's), the strip in the base surface when the look names it; the roofs have an edge band in
+// the frame's colour, or with the look's trims.fascia a fascia in the casings' surface under a lip
+// of roof, and the carport roof a fascia and soffit in the casings' surface. At night (ctx.state.night) a room with a light on, or with a marker
 // carrying glow (recent motion), glows: its floor and its windows, each pane tagged with its room
 // at build, take a warm emissive scaled by the light's level or the glow; there are no real-time
 // lights. The chimneys (roof.chimneys) are upright blocks after the walls, cut at the ceiling like
@@ -24,6 +26,14 @@ const FRAME = 0.06, FRAME_D = 0.1; // real style: an opening's frame width and d
 // sill's metal flashing; common cladding-trim sizes
 const TRIM = 0.1, CORNER = 0.12, PROUD = 0.025, REVEAL = 0.015;
 const FLASH_T = 0.03, FLASH_OUT = 0.06, FLASH_PAST = 0.03;
+// real style with the look's trims.fascia: the roof's own lip over the fascia
+const FASCIA_LIP = 0.05;
+// site.posts: a post's default size, and its knee braces' drop and reach from the top, their
+// section a share of the post's
+const POST = 0.15, BRACE = 0.6, BRACE_T = 0.6;
+// the carport roof's rim and fascia bands: their thickness proud of the roof's core, and the
+// shadow gap between two bands
+const BAND_T = 0.03, BAND_GAP = 0.01;
 // a glass door narrower than this is one leaf, without the centre mullion
 const MULLION_MIN = 1.2;
 // a door with glass: how far its glass strip stops short of the leaf's foot and top
@@ -107,7 +117,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   const ground = rooms.filter(r => levelOf(r) === 0);
   const roomIds = new Set(ground.map(r => r.id));
   const group = new THREE.Group(), lift = new THREE.Group();
-  let mH, mR, wallMats, cladLeaf, glassFor = () => null;
+  let mH, mR, wallMats, cladLeaf, postMat, glassFor = () => null;
   const roomGlass = new Map();
   if (real) {
     // walls and roofs are DoubleSide: a roof's remapped extrusion faces inwards
@@ -126,6 +136,11 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
       return roomGlass.get(room);
     };
     const frame = kit.surface('frame'), panel = kit.surface('frame', two), door = kit.surface('door');
+    // the casings share the frame's material unless the look names trim, so a model without it
+    // draws as before
+    const trimOf = o => (kit.trim.surface === 'frame' ? null : kit.surface('trim', o));
+    const trim = trimOf() || frame;
+    postMat = trim;
     const plinth = kit.surface(kit.base.surface);
     cladLeaf = kit.surface('cladding');
     const boarded = { ...clad(two), inner };
@@ -133,14 +148,15 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     const lifted = clad(fades);
     const rMap = kit.roofMap(), roofMat = kit.surface('roof', fades);
     const roofPitched = rMap ? kit.surface('roof', { ...fades, map: rMap }) : roofMat;
-    mR = { boarded: { ...lifted, inner: lifted.edge }, roof: roofMat, roofPitched, panel: kit.surface('frame', fades), frame: kit.surface('frame', fades), inner: kit.surface('interior', fades), door: kit.surface('door', fades) };
+    const frameLift = kit.surface('frame', fades);
+    mR = { boarded: { ...lifted, inner: lifted.edge }, roof: roofMat, roofPitched, panel: kit.surface('frame', fades), frame: frameLift, trim: trimOf(fades) || frameLift, inner: kit.surface('interior', fades), door: kit.surface('door', fades) };
     // a panel (the carport's walls and posts) is in the frame's colour; else exterior is thick or
     // running up to a roof, and only it gets the cladding, the trims and the base strip
     wallMats = w => {
-      if (w.finish === 'panel') return { wall: panel, glass, frame, base: null };
+      if (w.finish === 'panel') return { wall: panel, glass, frame, trim, base: null };
       const outside = w.t >= 0.3 || typeof w.top === 'string';
       // an interior wall's frames and door leaves are in the door's colour
-      return outside ? { boarded, glass, frame, base: plinth } : { wall: inner, glass, frame: door, base: null };
+      return outside ? { boarded, glass, frame, trim, base: plinth } : { wall: inner, glass, frame: door, trim: door, base: null };
     };
   } else {
     mH = mats();
@@ -168,7 +184,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     // a box between local z0 and z1, tagged for the tests
     const piece = (part, x0, x1, y0, y1, z0, z1) => {
       if (x1 - x0 < 0.005 || y1 - y0 < 0.005) return;
-      const b = bar(x0, x1, y0, y1, Math.abs(z1 - z0));
+      const b = bar(x0, x1, y0, y1, Math.abs(z1 - z0), m.trim || m.frame);
       b.position.z = (z0 + z1) / 2;
       b.userData.part = part;
     };
@@ -352,14 +368,44 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     parent.add(g);
   }
 
+  const shade = o => {
+    if (real) o.castShadow = o.receiveShadow = true;
+    return o;
+  };
   if (site.garage_roof) {
+    const { y, rim = 0, bands = 1 } = site.garage_roof, [y0, y1] = y;
     (site.garage_roof.rects || [site.garage_roof.rect]).forEach(r => {
-      if (!real) return box(lift, mR.wall, mR.edge, r, site.garage_roof.y);
-      // a fascia and soffit in the frame's colour, the roof's on top only (BoxGeometry's +y face is third)
-      const f = mR.frame, s = kit.solid(lift, [f, f, mR.roof, f, f, f], r, site.garage_roof.y);
-      s.castShadow = s.receiveShadow = true;
+      if (!real) return box(lift, mR.wall, mR.edge, r, y);
+      const [x0, z0, x1, z1] = r, f = mR.trim, t = BAND_T;
+      // the four boards t thick round the rect's edge, from a to b
+      const ring = (a, b, part) => [[x0, z0, x1, z0 + t], [x0, z1 - t, x1, z1], [x0, z0 + t, x0 + t, z1 - t], [x1 - t, z0 + t, x1, z1 - t]]
+        .forEach(q => { shade(kit.solid(lift, f, q, [a, b])).userData.part = part; });
+      if (bands < 2) {
+        // a fascia and soffit in the casings' surface, the roof's on top only (BoxGeometry's +y face is third)
+        shade(kit.solid(lift, [f, f, mR.roof, f, f, f], r, y));
+      } else {
+        // a core set back behind the bands, roof-dark so the gaps between them read, its soffit light
+        const k = mR.roof, h = (y1 - y0 - (bands - 1) * BAND_GAP) / bands;
+        shade(kit.solid(lift, [k, k, k, f, k, k], [x0 + t, z0 + t, x1 - t, z1 - t], y));
+        for (let i = 0; i < bands; i++) {
+          const lo = y0 + i * (h + BAND_GAP);
+          ring(lo, lo + h, 'band');
+        }
+      }
+      if (rim > 0) ring(y1, y1 + rim, 'rim');
     });
   }
+
+  // site.posts: a square post from the ground to its top, each knee brace a 45 degree strut from
+  // BRACE below the top out BRACE along its direction, up to the top
+  (site.posts || []).forEach(p => {
+    const [x, z] = p.at, a = p.size || POST, t = a * BRACE_T, rect = [x - a / 2, z - a / 2, x + a / 2, z + a / 2];
+    shade(real ? kit.solid(group, postMat, rect, [0, p.top]) : box(group, mH.wall, mH.edge, rect, [0, p.top])).userData.part = 'post';
+    (p.braces || []).forEach(([dx, dz]) => {
+      const n = Math.hypot(dx, dz), b = shade(kit.strut(group, [x, p.top - BRACE, z], [x + (dx / n) * BRACE, p.top, z + (dz / n) * BRACE], t, t, real ? postMat : mH.wall, 'brace'));
+      if (!real) b.add(edges(b.geometry, mH.edge));
+    });
+  });
 
   // real style: the clad walls' corner boards (with the look's corner trims), each as a span
   // [lo, hi] along its wall, and how far the fillers take each wall's base strip; the fillers
@@ -434,8 +480,8 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
     const top = roof.topFn(w.top)(c.p[0], c.p[1]);
     const cut = cutOf(w), y0 = levels[levelOf(w)];
     const mW = wallMats(w);
-    const spans = levelOf(w) > 0 ? [[lift, y0, top, mR.frame, mR.boarded]]
-      : cut ? [[group, 0, cut, mW.frame, mW.boarded], [lift, cut, top, mR.frame, mR.boarded]] : [[group, 0, top, mW.frame, mW.boarded]];
+    const spans = levelOf(w) > 0 ? [[lift, y0, top, mR.trim, mR.boarded]]
+      : cut ? [[group, 0, cut, mW.trim, mW.boarded], [lift, cut, top, mR.trim, mR.boarded]] : [[group, 0, top, mW.trim, mW.boarded]];
     spans.forEach(([parent, y0, y1, frame, boarded]) => {
       if (y1 - y0 < 0.01) return;
       const key = `${parent === lift} ${c.wall}`;
@@ -539,24 +585,42 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   }
 
   const roofMeshes = [];
+  // real style with the look's trims.fascia: the edge band is a fascia under a lip of roof
+  const fascia = real && kit.look.trims.fascia;
+  const lipOf = thick => (fascia ? Math.min(FASCIA_LIP, thick / 2) : 0);
   function shedRoof(id, points, h, thick) {
     const shape = new THREE.Shape(points.map(([x, z]) => new THREE.Vector2(x, z)));
-    const geo = new THREE.ExtrudeGeometry(shape, { depth: thick, bevelEnabled: false });
-    const p = geo.attributes.position, uv = geo.attributes.uv;
     const a = h(1, 0) - h(0, 0), s = a >= 0 ? 1 : -1, scale = Math.hypot(1, Math.abs(a));
-    for (let i = 0; i < p.count; i++) {
-      const x = p.getX(i), z = p.getY(i), d = p.getZ(i);
-      p.setXYZ(i, x, h(x, z) - roof.gap + d, z);
-      uv.setXY(i, s * z, s * x * scale);
-    }
-    uv.needsUpdate = true;
-    geo.computeVertexNormals();
-    addRoof(geo, id, true);
+    // with a fascia, two slabs: the fascia's below and the lip's on top, the lip all roof; the
+    // caps where they meet are left out, so the fading roof shows no plane inside it
+    const lip = lipOf(thick);
+    [[0, thick - lip, false], ...(lip ? [[thick - lip, lip, true]] : [])].forEach(([d0, depth, top]) => {
+      const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
+      if (lip) {
+        // the first group holds the bottom cap, then the top one
+        const [caps, sides] = geo.groups, half = caps.count / 2;
+        geo.clearGroups();
+        geo.addGroup(top ? caps.start + half : caps.start, half, 0);
+        geo.addGroup(sides.start, sides.count, 1);
+      }
+      const p = geo.attributes.position, uv = geo.attributes.uv;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), z = p.getY(i), d = p.getZ(i);
+        p.setXYZ(i, x, h(x, z) - roof.gap + d0 + d, z);
+        uv.setXY(i, s * z, s * x * scale);
+      }
+      uv.needsUpdate = true;
+      geo.computeVertexNormals();
+      addRoof(geo, id, true, top);
+    });
   }
-  function addRoof(geo, id, pitched) {
+  // lip: the band is roof as well (a shed roof's lip slab); a geometry's third group, a wing roof's
+  // lip, is roof too
+  function addRoof(geo, id, pitched, lip = false) {
     if (real) {
       // the extrusion's first group is the top and underside, the second the edge band
-      const mesh = new THREE.Mesh(geo, [pitched ? mR.roofPitched : mR.roof, mR.frame]);
+      const top = pitched ? mR.roofPitched : mR.roof, band = lip ? mR.roof : fascia ? mR.trim : mR.frame;
+      const mesh = new THREE.Mesh(geo, fascia ? [top, band, mR.roof] : [top, band]);
       mesh.castShadow = mesh.receiveShadow = true;
       mesh.userData.roof = id;
       roofMeshes.push(mesh);
@@ -571,7 +635,8 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
   // a wing roof (hip, gable, flat): its faces as a slab, the top and underside in the first group
   // and the band along the outer outline in the second, as a shed roof's extrusion has them
   function wingRoof(id, { faces, edges: outer }, thick, pitched) {
-    const caps = [], capUv = [], band = [], bandUv = [];
+    const caps = [], capUv = [], band = [], lipBand = [];
+    const cut = thick - lipOf(thick);
     const at = ([a, b, c], [x, z], d) => [x, a * x + b * z + c - roof.gap + d, z];
     const uvAt = ([a, b], [x, z]) => {
       const g = Math.hypot(a, b);
@@ -598,16 +663,21 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, styl
         tri(at(plane, poly[0], 0), at(plane, poly[i], 0), at(plane, poly[i + 1], 0), uv0, uvi, uvj, false);
       }
     });
+    const quad = (out, p, q, plane, d0, d1) => {
+      const a = at(plane, p, d0), b = at(plane, q, d0), c = at(plane, q, d1), d = at(plane, p, d1);
+      out.push(...a, ...b, ...c, ...a, ...c, ...d);
+    };
     outer.forEach(([p, q, plane]) => {
-      const a = at(plane, p, 0), b = at(plane, q, 0), c = at(plane, q, thick), d = at(plane, p, thick);
-      band.push(...a, ...b, ...c, ...a, ...c, ...d);
-      bandUv.push(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+      quad(band, p, q, plane, 0, cut);
+      if (cut < thick) quad(lipBand, p, q, plane, cut, thick);
     });
+    const bandCount = (band.length + lipBand.length) / 3;
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute([...caps, ...band], 3));
-    geo.setAttribute('uv', new THREE.Float32BufferAttribute([...capUv, ...bandUv], 2));
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(caps.concat(band, lipBand), 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(capUv.concat(new Array(bandCount * 2).fill(0)), 2));
     geo.addGroup(0, caps.length / 3, 0);
     geo.addGroup(caps.length / 3, band.length / 3, 1);
+    if (lipBand.length) geo.addGroup((caps.length + band.length) / 3, lipBand.length / 3, 2);
     geo.computeVertexNormals();
     addRoof(geo, id, pitched);
   }
