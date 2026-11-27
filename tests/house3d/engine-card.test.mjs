@@ -347,6 +347,21 @@ test('card: a browser that picked no style gets Foto, and a stored pick stands',
   } finally { delete globalThis.localStorage; }
 });
 
+test('card: in Foto the poster waits for the look\'s textures, then is taken at the next settle', () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  try {
+    const el = Object.create(card.House3dCard.prototype);
+    Object.assign(el, { _isHero: true, _style: 'photo', _posterDue: true, _posterLook: true, _view: { snapshot: () => 'data:image/png;base64,AAAA' } });
+    el._savePoster();
+    assert.equal(store.size, 0, 'no picture before the textures');
+    el._posterLook = false;
+    el._savePoster();
+    assert.equal(store.get(card.posterKey(true, 'photo')), 'data:image/png;base64,AAAA');
+    assert.equal(el._posterDue, false);
+  } finally { delete globalThis.localStorage; }
+});
+
 test('card: a poster is kept per hero or full view and per style', () => {
   const keys = [true, false].flatMap(h => ['simple', 'real', 'photo'].map(s => card.posterKey(h, s)));
   assert.equal(new Set(keys).size, 6);

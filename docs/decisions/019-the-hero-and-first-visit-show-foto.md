@@ -42,8 +42,10 @@ Android tablets were not measured.
 
 - Undo: revert the commit that brought this ADR (card, tests, demo, docs)
   and the README picture's after it, bump the Lovelace resource's `?v=` and run khe-sites' `deploy.yml`.
-- The hero's loading picture is taken when the first frame settles, before
-  Foto's textures arrive, so it matches the first live frame and the
-  textures appear a moment later, on every load.
+- The loading picture in Foto waits for its textures (the engine's
+  `onLook()`), so it shows the look the household chose; on every load the
+  first live frame, drawn before the textures arrive again, is plainer than
+  the picture for a moment. The operator chose that over a picture that
+  matches the first frame.
 - The tablets' frame time is unmeasured; the household's look at one
   decides whether the hero stays.

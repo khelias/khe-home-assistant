@@ -1,6 +1,6 @@
 {
  "repo": "khelias/khe-house3d",
- "commit": "e5f8624de620c45e380eff184ea4995ee2c8c4bb",
+ "commit": "9e44782f1dea5eeb7f7bd0de46eb8c643737ad60",
  "include": [
   "house3d/",
   "scripts/house3d_model.py",
@@ -28,7 +28,7 @@
   "house3d/assets/sky-winter.ktx2": "53d8e5155101d38be6e7f147a887f16047f65b27f868ab8e26e2540d7cdd25fa",
   "house3d/assets/sources.json": "2d90af54465b0742654c4ec7545a0a715567513de1bb94b66f777e556c39e8e5",
   "house3d/assets/twig.ktx2": "dbb34a70a2767ef328fe1e8331a2ae22a79db4d16ffcc3a0623383b41ad2d6e0",
-  "house3d/house3d.js": "c252be1f6b83bf9da08814c3a0025df8402aa0cfc48bd7e6c153c20971aaa223",
+  "house3d/house3d.js": "cd7debc55a357efe59e25213a98dd6f1fcf750a51926f85a3b5279d3ff31781a",
   "house3d/place.html": "5a3c88076886eddfde2730e2496383e4d10fcc3dee8df3c09e4cc94638b1a135",
   "house3d/scene/bake.js": "50fe73cb23e119668e08e88d5a454ccd1b6c01adfad34b4a74996997fef22fa5",
   "house3d/scene/kit.js": "50043471c2493d743ec2b4de234bc1a5ac9fa676cdd609384800eb7ae352da10",

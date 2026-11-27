@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 71;
+const HOUSE3D_VERSION = 72;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -257,9 +257,10 @@ function writeStyle(v) {
 
 // A picture of the view, per hero or full view and style, shown at once on the next load until the
 // first live frame covers it; a first visit shows a slow wave instead. It is taken when a fresh
-// mount (home view, live time, no scene) first settles, since a next load starts from just that;
-// a picture taken on leaving would show the last orbit and time, and jump. Only a failed write
-// keeps it in memory, since it is an image; that newer copy then wins over the stored one.
+// mount (home view, live time, no scene) first settles, in Foto once its textures are in (ADR-019),
+// since a next load starts from just that; a picture taken on leaving would show the last orbit and
+// time, and jump. Only a failed write keeps it in memory, since it is an image; that newer copy then
+// wins over the stored one.
 const POSTER_W = 640;
 export const posterKey = (hero, style) => `house3d-poster:${hero ? 'hero' : 'full'}:${style}`;
 export function readPoster(key) {
@@ -720,7 +721,7 @@ export class House3dCard extends Base {
     setTimeout(() => img.remove(), 400);
   }
   _savePoster() {
-    if (!this._posterDue || !this._view) return;
+    if (!this._posterDue || this._posterLook || !this._view) return;
     this._posterDue = false;
     const url = this._view.snapshot(POSTER_W);
     if (url) writePoster(posterKey(this._isHero, this._style), url);
@@ -771,6 +772,7 @@ export class House3dCard extends Base {
       this._keep = null;
       this._mod = mod;
       this._posterDue = fresh && !this._time && this._sceneTime === undefined;
+      this._posterLook = this._style === 'photo';
       const now = new Date();
       this._season = mod.seasonOn(this._time || now);
       this._window = mod.seasonWindow(now);
@@ -794,6 +796,7 @@ export class House3dCard extends Base {
         onSun: sun => { if (this._view && this._sheet === 'feature') this._renderPv(sun); },
         onFirstFrame: () => this._unveil(),
         onIdle: () => this._savePoster(),
+        onLook: () => { this._posterLook = false; },
         layers: start.layers,
         snowfall: start.snowfall,
         ao: start.ao,
