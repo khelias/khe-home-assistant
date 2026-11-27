@@ -12,6 +12,9 @@ Direction and priorities for the house automation, beyond current state.
   opt-in DHW price control behind a toggle (`heating_price.yaml`, 45-55 °C,
   documented in khe-homelab's `SECURITY.md`). The next step that changes
   space heating is moving the heating-curve offset from shadow mode to writes.
+- **A shared shopping list** on the family's phones, from Home Assistant's
+  own to-do list in the companion app, before any separate app (the homelab
+  wishlist pass, 2026-11-27).
 
 ## Ambitions
 
