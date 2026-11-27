@@ -303,8 +303,8 @@ behind every value and device. It replaced the Bubble Card trial of
   that starts at or below its top, so the left half reaches Kliima's
   bottom or the screen's; the height is floored so it cannot creep. With `height`
   a vertical swipe on the house scrolls the page, a horizontal drag turns
-  the house and the mouse wheel scrolls instead of zooming. A hero is always the real style with the live
-  sun; it draws the surroundings with their ETAK credit (ADR-009), its layer
+  the house and the mouse wheel scrolls instead of zooming. A hero is always Foto at its light tier with the live
+  sun (ADR-019); it draws the surroundings with their ETAK credit (ADR-009), its layer
   switches are its own and are not stored, and its sheet has no style row.
   Without `height` the card is as before.
 - **The sheet's data:** `recorder/statistics_during_period` for entities with
@@ -567,7 +567,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   is logged once and switched off for good, so the frame loop keeps running.
   The kit, `sun.js` and `overlay.js` are required: if any of them fails to
   load, the card shows its load error.
-- **Styles:** "Lihtne" (the neon wireframe, the default) and "Päris" (lit
+- **Styles:** "Lihtne" (the neon wireframe) and "Päris" (lit
   surfaces in the house's colours and diagonal boarding with anthracite
   trims and corners from photos, paving stones, the play area, bar and mesh
   fences, the sun in the sky, the real sun and shadows; interior walls'
@@ -587,7 +587,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   the engine's `house3d/assets/`, loaded after the first frame, so khe.ee/ha
   allows a `blob:` worker, WebAssembly and eval for their decoder), chosen per
   browser in the Kihid sheet and kept in `localStorage` under
-  `house3d-style`. Switching remounts the engine with the roof mode, camera
+  `house3d-style`; a browser with none gets Foto (ADR-019). Switching remounts the engine with the roof mode, camera
   and fog kept. The lit styles have no bloom; their shadow map is 2048 px, 1024
   below 720 px width, and the roof and the car cast only while fully shown,
   since the shadow pass ignores opacity. The shadow camera is fixed to the
@@ -902,7 +902,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   engine by `HOUSE3D_VERSION`. The toolbar's scenarios (`scenarios.json` from
   `scripts/dashboard_scenarios.py`, played by `demo/scenario.js`) reset the
   simulated hass to their start and apply their steps on time; one told in
-  the 3D house plays on A3, whose hero shows the card's real style at a
+  the 3D house plays on A3, whose hero shows Foto at a
   fixed November instant through the card's
   `setScene()`, which stores nothing, and `clearScene()` returns to the
   visitor's own style and live time. The generator names the real house's devices,

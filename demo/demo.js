@@ -522,7 +522,7 @@ function startScenario(s) {
     onEnd: () => sceneDone(true)
   });
   for (const el of cards3d) if (!sky.includes(el)) el.clearScene();
-  for (const el of sky) el.setScene({ style: 'real', time: s.time });
+  for (const el of sky) el.setScene({ style: 'photo', time: s.time });
 
   sceneBar.style.minHeight = '';
   beat(s.title, null, s.summary);

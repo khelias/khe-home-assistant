@@ -37,9 +37,10 @@ This file holds rules and pointers; the reference lives in:
   camera stills drawn from `camera_proxy`
   ([ADR-016](docs/decisions/016-a3-cards-draw-camera-stills-from-camera-proxy.md)),
   Teler's cards reading the session list, with a stacked days series
-  ([ADR-017](docs/decisions/017-teler-cards-read-the-session-list-and-a-stacked-days-chart.md))
-  and the hero covering the left half on four-column screens, two of three
+  ([ADR-017](docs/decisions/017-teler-cards-read-the-session-list-and-a-stacked-days-chart.md)),
+  the hero covering the left half on four-column screens, two of three
   columns on three ([ADR-018](docs/decisions/018-a3-hero-covers-the-left-half-on-four-columns.md))
+  and Foto in the hero and on a first visit ([ADR-019](docs/decisions/019-the-hero-and-first-visit-show-foto.md))
 - [ROADMAP.md](ROADMAP.md) - house automation, near-term and the long form
 
 House documentation (HA rollout, dashboard layout, HVAC protocols, energy)

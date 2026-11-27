@@ -203,16 +203,16 @@ test('card: a stretching hero leaves its grid rows at auto', () => {
   assert.deepEqual(el.getGridOptions(), { columns: 'full', rows: 5 });
 });
 
-test('card: heroMount puts a hero in the real style with its layers as given, and leaves any other card as stored', () => {
+test('card: heroMount puts a hero in Foto at its light tier with its layers as given, and leaves any other card as stored', () => {
   const stored = { surroundings: true, garden: false };
   assert.deepEqual(card.heroMount(true, 'simple', stored),
-    { style: 'real', layers: { future: false, surroundings: true, garden: false }, snowfall: false, ao: false });
+    { style: 'photo', quality: 'low', layers: { future: false, surroundings: true, garden: false }, snowfall: false, ao: false });
   assert.deepEqual(card.heroMount(false, 'simple', stored),
     { style: 'simple', layers: { future: false, surroundings: true, garden: false }, snowfall: true, ao: true });
   assert.deepEqual(card.heroMount(false, 'real', undefined), { style: 'real', layers: { future: false }, snowfall: true, ao: true });
   assert.deepEqual(stored, { surroundings: true, garden: false });
   // the season's defaults sit under the switches
-  assert.deepEqual(card.heroMount(true, 'simple', {}, { winter: true }), { style: 'real', layers: { future: false, winter: true }, snowfall: false, ao: false });
+  assert.deepEqual(card.heroMount(true, 'simple', {}, { winter: true }), { style: 'photo', quality: 'low', layers: { future: false, winter: true }, snowfall: false, ao: false });
   assert.deepEqual(card.heroMount(true, 'simple', { winter: false }, { winter: true }).layers.winter, false);
 });
 
@@ -288,7 +288,7 @@ test('card: the hero mounts with the season\'s default and no snowfall, keeping 
   const el = Object.create(card.House3dCard.prototype);
   Object.assign(el, { _heroLayers: {}, _isHero: true, _mod: mod, _view: { setLayer() {} }, _renderLayers() {} });
   const start = card.heroMount(true, 'simple', card.resolveLayers(el._readLayers(), seasonWindow(now)), { winter: mod.seasonOn(now) });
-  assert.deepEqual(start, { style: 'real', layers: { future: false, winter: true }, snowfall: false, ao: false });
+  assert.deepEqual(start, { style: 'photo', quality: 'low', layers: { future: false, winter: true }, snowfall: false, ao: false });
   el._switchLayer('winter', false);
   assert.deepEqual(card.resolveLayers(el._heroLayers, seasonWindow(new Date())), { winter: false });
 });
@@ -335,13 +335,25 @@ test('card: the hero rule lets vertical swipes scroll the page only outside a pa
   assert.match(src, /:host \{ display: block; height: var\(--house3d-height, 480px\); \}/);
 });
 
+test('card: a browser that picked no style gets Foto, and a stored pick stands', async () => {
+  // a fresh module copy, so no earlier test's in-memory style answers
+  const fresh = await import(new URL('house3d-card.js?fresh-style', E));
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  try {
+    assert.equal(fresh.readStyle(), 'photo');
+    store.set('house3d-style', 'simple');
+    assert.equal(fresh.readStyle(), 'simple');
+  } finally { delete globalThis.localStorage; }
+});
+
 test('card: a poster is kept per hero or full view and per style', () => {
   const keys = [true, false].flatMap(h => ['simple', 'real', 'photo'].map(s => card.posterKey(h, s)));
   assert.equal(new Set(keys).size, 6);
   keys.forEach(k => assert.match(k, /^house3d-poster:/));
 });
 
-test('card: Foto is a stored, lit style the hero leaves for Päris, with its word in both languages', () => {
+test('card: Foto is a stored, lit style the hero always shows, with its word in both languages', () => {
   const store = new Map([['house3d-style', 'photo']]);
   globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
   try {
@@ -359,7 +371,7 @@ test('card: Foto is a stored, lit style the hero leaves for Päris, with its wor
     el._restyle('simple');
     el._restyle('photo');
     assert.equal(store.get('house3d-style'), 'photo');
-    assert.equal(card.heroMount(true, 'photo').style, 'real');
+    assert.equal(card.heroMount(true, 'real').style, 'photo');
     assert.equal(card.heroMount(false, 'photo').style, 'photo');
     for (const lang of ['et', 'en']) assert.ok(card.TEXT[lang].photo, lang);
   } finally { delete globalThis.localStorage; }

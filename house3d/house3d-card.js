@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 70;
+const HOUSE3D_VERSION = 71;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -238,16 +238,17 @@ function writeLayers(layers) {
   try { localStorage.setItem(LAYERS_KEY, JSON.stringify(layers)); } catch (e) { /* the in-memory copy stands */ }
 }
 
-// The style is kept per browser too; the time of day is not.
+// The style is kept per browser too; the time of day is not. A browser that has picked none gets
+// Foto (ADR-019).
 const STYLE_KEY = 'house3d-style';
 const STYLES = ['simple', 'real', 'photo'];
-function readStyle() {
+export function readStyle() {
   try {
     const v = localStorage.getItem(STYLE_KEY);
     if (STYLES.includes(v)) return v;
   } catch (e) { /* the in-memory copy answers */ }
   const v = seenMemory.get(STYLE_KEY);
-  return STYLES.includes(v) ? v : 'simple';
+  return STYLES.includes(v) ? v : 'photo';
 }
 function writeStyle(v) {
   seenMemory.set(STYLE_KEY, v);
@@ -443,15 +444,16 @@ export function stretchHeight({ min, top, rest, beside, bottom }) {
   return Math.max(min, Math.floor(Math.min(bottom, Math.max(...beside)) - top - rest));
 }
 
-// heroMount(hero, style, layers, season) -> { style, layers, snowfall, ao }: what the engine mounts
-// with. A hero (a card with `height`, a dashboard's top) is always the real style with the live
-// sun; it keeps its layer switches to itself, not in the stored ones of the full 3D view (ADR-006,
-// ADR-009). Any other card is as the visitor left it. season holds the seasonal layers' defaults
-// for the day shown ({ winter: seasonOn(at) }), under the switches; snow falls and the contact shadows
-// show in the full view only, since the hero sits on an always-on dashboard.
+// heroMount(hero, style, layers, season) -> { style, quality?, layers, snowfall, ao }: what the
+// engine mounts with. A hero (a card with `height`, a dashboard's top) is always Foto at its light
+// tier with the live sun; it keeps its layer switches to itself, not in the stored ones of the full
+// 3D view (ADR-006, ADR-009, ADR-019). Any other card is as the visitor left it, at the engine's own
+// tier. season holds the seasonal layers' defaults for the day shown ({ winter: seasonOn(at) }),
+// under the switches; snow falls and the contact shadows show in the full view only, since the hero
+// sits on an always-on dashboard.
 export function heroMount(hero, style, layers, season) {
   const all = { ...LAYERS_OFF, ...(season || {}), ...(layers || {}) };
-  return { style: hero ? 'real' : style, layers: all, snowfall: !hero, ao: !hero };
+  return { style: hero ? 'photo' : style, ...(hero && { quality: 'low' }), layers: all, snowfall: !hero, ao: !hero };
 }
 
 // The seasonal layer's switch holds only for the season window, or the gap between windows, it
@@ -796,6 +798,7 @@ export class House3dCard extends Base {
         snowfall: start.snowfall,
         ao: start.ao,
         style: this._style,
+        quality: start.quality,
         mode: keep.mode,
         view: keep.view,
         car: this._car ? { profile: this._car.profile, path: this._car.path } : undefined,

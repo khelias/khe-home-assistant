@@ -1,6 +1,6 @@
 # ADR-009: The hero shows the surroundings and their credit
 
-- **Status:** Accepted (2026-11-12; amended 2026-11-27: the credit opens from an info button)
+- **Status:** Accepted (2026-11-12; amended 2026-11-27: the credit opens from an info button; the hero's style is Foto, ADR-019)
 - **Related:** [ADR-006](006-a3-front-page-live-hero.md), [ADR-001](001-own-3d-engine.md)
 
 ## Context
@@ -19,8 +19,9 @@ licence sets for that.
 
 1. **A hero draws the surroundings** like the full 3D view, with their
    switch in its Vaade sheet. Its layer switches stay its own and are not
-   stored (ADR-006 decision 2 otherwise holds: the real style with the live
-   sun, no style row).
+   stored (ADR-006 decision 2 otherwise holds: the live sun, no style row;
+   the style is Foto at its light tier since
+   [ADR-019](019-the-hero-and-first-visit-show-foto.md)).
 2. **A hero shows the ETAK credit** top left, as the full view does, kept
    clear of its corner button. Since 2026-11-27 the line opens from an info
    button there, so the picture is not under a caption.
