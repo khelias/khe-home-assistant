@@ -1,6 +1,6 @@
 # ADR-018: On four-column screens A3's hero covers the left half
 
-- **Status:** Accepted (2026-11-17); amended (2026-11-26): the demo takes the layouts at its own column counts, and decision 4 adds a layout for three columns
+- **Status:** Accepted (2026-11-17); amended (2026-11-27): the demo takes the layouts at its own column counts, and decision 4 adds a layout for three columns
 - **Related:** supersedes [ADR-010](010-a3-landscape-hero-beside-the-cards.md) decision 1 from 1716 px and extends its decision 3; [ADR-005](005-a3-glass-cards-history-sheet.md), [ADR-012](012-the-demo-is-the-houses-overview.md)
 
 ## Context
@@ -115,7 +115,9 @@ Read from HA frontend 20261028.5 (HA 2026.11):
   column empty.
 - In the house, decision 4 covers a band of 76 px. Other screens with
   three columns keep ADR-010's layout: a 1440 to 1680 px laptop with the
-  sidebar open, and a 1180 px tablet with it collapsed.
+  sidebar open, and a 1180 px tablet with it collapsed The household uses the
+  tablet and phones, and on a laptop the sidebar folds away, so a card that
+  reads HA's column count stays turned down (2026-11-27).
 - Each hero carries the model inline, so the stored view holds it three
   times; a hidden hero starts no WebGL view.
 - A section added later right of the hero, under Kliima, would pull the
