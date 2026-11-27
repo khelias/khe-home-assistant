@@ -242,7 +242,7 @@ test('languages: the helpers in English', () => {
   assert.equal(A3.hourSpan({ s: at(13, 23), tomorrow: true }, 'en'), 'tomorrow 23–00');
   assert.equal(A3.whenLabel(at(11, 22), '24h', true, now, 'en'), 'yesterday 22–23');
   assert.equal(A3.whenLabel(at(11, 9), '7d', false, now, 'en'), 'Wednesday 11/11 at 09');
-  assert.deepEqual(A3.lineAxis(at(10, 21), at(12, 21), 'en'), ['Tuesday 21', 'yesterday 21', 'now']);
+  assert.deepEqual(A3.lineAxis(at(10, 21), at(12, 21), 'en'), ['Tuesday 21:00', 'yesterday 21:00', 'now']);
   assert.equal(A3.inLastMonth(Date.parse('2027-01-10T12:00:00Z'), 'Europe/Tallinn', 'en'), 'in December');
   assert.equal(A3.stepNote(0, 'en'), 'Heating water right on the curve');
   assert.equal(A3.stepNote(-2, 'en'), 'Heating water 2° cooler than the curve');

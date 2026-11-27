@@ -25,7 +25,7 @@ export default function init({ esc, hasValue, stateOf, words, withUnit, attrText
   // ('täna', 'eile' or the weekday) and the hour in the browser's zone
   function lineAxis(t0, now, lang = 'et') {
     const w = words(lang);
-    const at = t => { const d = new Date(t); return `${dayWord(t, now, lang) ?? w.weekdays[d.getDay()]} ${hh(d.getHours())}`; };
+    const at = t => { const d = new Date(t); return `${dayWord(t, now, lang) ?? w.weekdays[d.getDay()]} ${hh(d.getHours())}:00`; };
     return [at(t0), at((t0 + now) / 2), w.now];
   }
 

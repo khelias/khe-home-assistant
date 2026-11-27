@@ -9,7 +9,7 @@
 // retry, wires the custom elements and re-exports the pure helpers for Node tests and the demo.
 // Bump KHE_CARDS_VERSION on every change under cards/, and the same ?v= on the Lovelace
 // resource URL: HA's /local and the phone app cache aggressively.
-export const KHE_CARDS_VERSION = 30;
+export const KHE_CARDS_VERSION = 31;
 
 const CORE_PARTS = ['i18n', 'core', 'sheet', 'base'];
 const LEAF_PARTS = ['front', 'tile', 'energy', 'reading', 'forecast', 'motion', 'media'];

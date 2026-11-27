@@ -142,11 +142,11 @@ export default function init({ esc, hasValue, stateOf, words, formatNumber, with
       if (price !== null && lastPrice) {
         const r = price / lastPrice;
         const tone = r > 1.03 ? 'high' : r < 0.97 ? 'good' : 'mid';
-        badge = `<span class="badge ${tone}">${esc(w.compare[tone](lastName))}</span>`;
+        badge = `<span class="badge ${tone}">${esc(w.compare[tone](inLastMonth(now, tz, L)))}</span>`;
       }
       const [m0, m1] = monthSpan(now, tz), days = Math.round((m1 - m0) / DAY);
       const pace = monthPace(cost, cutoff, now, tz);
-      const monthName = cap(new Intl.DateTimeFormat(w.locale, { month: 'long', timeZone: tz }).format(new Date(now)));
+      const monthName = new Intl.DateTimeFormat(w.locale, { month: 'long', timeZone: tz }).format(new Date(now));
       this._sheets = new Map(c.usage_history ? [['m', usageSheet(c.month, c.usage_history, L)]] : []);
       this._actions = new Map();
       const cell = (name, e, dec, show = true) => {

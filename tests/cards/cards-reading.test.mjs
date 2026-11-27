@@ -40,8 +40,8 @@ test('Soojuspump: the range takes in a floor outside the data', () => {
 
 test('Soojuspump: the axis says the day by distance, then the weekday', () => {
   const at = (d, h) => new Date(2026, 10, d, h).getTime();
-  assert.deepEqual(A3.lineAxis(at(10, 21), at(12, 21)), ['teisipäev 21', 'eile 21', 'nüüd']);
-  assert.deepEqual(A3.lineAxis(at(12, 3), at(12, 21)), ['täna 03', 'täna 12', 'nüüd']);
+  assert.deepEqual(A3.lineAxis(at(10, 21), at(12, 21)), ['teisipäev 21:00', 'eile 21:00', 'nüüd']);
+  assert.deepEqual(A3.lineAxis(at(12, 3), at(12, 21)), ['täna 03:00', 'täna 12:00', 'nüüd']);
 });
 
 test('Soojuspump: the shift notes at -1, 0 and +1', () => {

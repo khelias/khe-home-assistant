@@ -232,7 +232,7 @@ button.t-info { cursor: pointer; }
 
 /* the more-info dialog's thermostat */
 .thermostat { padding: 12px 16px 16px; display: grid; justify-items: center; gap: 8px; }
-.thermo { position: relative; width: min(100%, 240px); aspect-ratio: 1; }
+.thermo { position: relative; width: 240px; max-width: 100%; aspect-ratio: 1; }
 .thermo > svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke-linecap: round; stroke-width: 12; }
 .thermo .track { stroke: var(--secondary-background-color); }
 .thermo .value { stroke: var(--c); transition: d .2s; }
