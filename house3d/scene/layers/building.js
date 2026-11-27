@@ -2,8 +2,12 @@
 // garage roof. A lit style's furniture, skirting and the walls' cut tops are the interior
 // layer's, which reads inRoom and cutOf through this layer's api; the winter layer finds the
 // walls behind its lights through wallBehind.
-// Walls that run up to a roof are cut at the ceiling, and the part above goes in lift with the
-// roofs, which rises and fades with the roof mode. The floors are the room tap targets and warm
+// Every storey (ctx.storeys) is drawn: its walls, floors and, in the simple style, furniture go
+// where its contents go (the group for the lowest storey, else the lift band under it), and a wall
+// that runs up to a roof or above its storey's cut is cut there, standing up to the lower of the
+// roof and the cut, its part above, where the roof is higher, in the band over that storey with
+// the roofs in the top band, which rise and fade with the roof mode and the storey shown. The
+// floors are the room tap targets, the shown storey's alone, and warm
 // with a room's markers in state 'on'. The lit styles draw them as lit surfaces: exterior walls
 // clad outside (boards when the look's cladding asks) and plain inside, interior walls plain with white doors and frames, framed
 // openings (a door with finish 'cladding' gets a leaf of plain cladding, one with glass a
@@ -19,8 +23,8 @@
 // of roof, and the carport roof a fascia and soffit in the casings' surface. At night (ctx.state.night) a room with a light on, or with a marker
 // carrying glow (recent motion), glows: its floor and its windows, each pane tagged with its room
 // at build, take a warm emissive scaled by the light's level or the glow; there are no real-time
-// lights. The chimneys (roof.chimneys) are upright blocks after the walls, cut at the ceiling like
-// a wall up to a roof, the part above in lift on a material of its own.
+// lights. The chimneys (roof.chimneys) are upright blocks after the walls, cut at their storey's
+// cut like a wall up to a roof, the part above in the band over it on a material of its own.
 const FRAME = 0.06, FRAME_D = 0.1; // lit styles: an opening's frame width and depth
 // lit styles: an opening's trim and a corner board, both standing PROUD off the face, and a
 // sill's metal flashing; common cladding-trim sizes
@@ -107,16 +111,15 @@ export function crossings(a, b, segs) {
   return out;
 }
 
-export default function build({ THREE, kit, C, model, roof, ceiling, state, look }) {
+export default function build({ THREE, kit, C, model, roof, ceiling, state, look, storeys: st, bands, levelOf, storeyOf }) {
   const { basic, mats, edges, box, near } = kit;
   const lit = look.lit;
   const site = model.site || {};
-  const levels = model.levels || [0], levelOf = o => o.level || 0;
+  const levels = st.list.map(s => s.floor);
   const rooms = model.rooms || [];
-  // the ground floor's rooms: the floors, the taps and the labels are theirs alone
-  const ground = rooms.filter(r => levelOf(r) === 0);
-  const roomIds = new Set(ground.map(r => r.id));
+  const roomIds = new Set(rooms.map(r => r.id));
   const group = new THREE.Group(), lift = new THREE.Group();
+  const B = bands(group, lift);
   let mH, mR, wallMats, cladLeaf, postMat, glassFor = () => null;
   const roomGlass = new Map();
   if (lit) {
@@ -126,11 +129,9 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
     const mapped = (o, map) => (map ? { ...o, map } : o);
     const clad = o => ({ front: kit.surface('cladding', mapped(o, front)), back: kit.surface('cladding', mapped(o, back)), edge: kit.surface('cladding', o) });
     const inner = kit.surface('interior', two), glass = kit.surface('glass');
-    // one glass per room, so a lit room's windows glow alone; panes in no room share the first
-    // an upper storey's panes are in the lift, which fades them: one glass of their own
-    const liftGlass = kit.surface('glass');
-    glassFor = (room, lifted) => {
-      if (lifted) return liftGlass;
+    // one glass per room, so a lit room's windows glow alone, every storey's; panes in no room
+    // share the first (a band's own copy, B.separate())
+    glassFor = room => {
       if (!room) return glass;
       if (!roomGlass.has(room)) roomGlass.set(room, kit.surface('glass'));
       return roomGlass.get(room);
@@ -192,7 +193,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
     const face = side * (w.t / 2), proud = side * (w.t / 2 + PROUD);
     // a pane of glass w wide centred at c, tagged with the room it looks into
     const pane = (c, pw, y0, ph) => {
-      const room = paneRoom(w, L, c, side), p = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), glassFor(room, levelOf(w) > 0));
+      const room = paneRoom(w, L, c, side), p = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), glassFor(room));
       p.position.set(c, y0 + ph / 2, 0);
       p.userData.pane = room;
       g.add(p);
@@ -287,10 +288,12 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
 
   // +1 or -1 for the wall group's local z that faces out, 0 when both or neither side has a room;
   // a paved room (the carport) is outdoors under a roof
-  // a ground-floor wall up to a roof or above the ceiling is cut there (an upper storey's wall is
-  // in the lift whole, never asked)
-  const cutOf = w => w.cut ?? (typeof w.top === 'string' || w.top > ceiling ? ceiling : 0);
-  const inRoom = (x, z, level = 0) => rooms.some(r => levelOf(r) === level && r.floor !== 'paving' && r.rects.some(([x0, z0, x1, z1]) => x >= x0 && x <= x1 && z >= z0 && z <= z1));
+  // a wall up to a roof or above its storey's cut is cut there
+  const cutOf = w => {
+    const cut = st.list[levelOf(w)] ? st.list[levelOf(w)].cut : ceiling;
+    return w.cut ?? (typeof w.top === 'string' || w.top > cut ? cut : 0);
+  };
+  const inRoom = (x, z, level = st.ground) => rooms.some(r => levelOf(r) === level && r.floor !== 'paving' && r.rects.some(([x0, z0, x1, z1]) => x >= x0 && x <= x1 && z >= z0 && z <= z1));
   // probed at the midpoint first, then at a quarter and three quarters, for a wall that is
   // exterior over part of its length only
   function outerSide(w, L) {
@@ -328,6 +331,16 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
     for (let i = steps; i >= 0; i--) us.push((L * i) / steps);
     const extra = [];
     if (w.kinks) crossings(w.a, w.b, w.kinks).forEach(u => { if ([...us, ...extra].every(v => Math.abs(v - u) > 1e-4)) extra.push(u); });
+    // where the roof crosses the cut, so a wall cut under a pitched roof meets it there
+    if (w.cross) {
+      const f = u => w.cross.raw(w.a[0] + ux * u, w.a[1] + uz * u) - w.cross.at;
+      for (let i = 0; i < us.length - 1; i++) {
+        const p = us[i], q = us[i + 1], fp = f(p), fq = f(q);
+        if (fp * fq >= 0) continue;
+        const u = p + ((q - p) * fp) / (fp - fq);
+        if ([...us, ...extra].every(v => Math.abs(v - u) > 1e-4)) extra.push(u);
+      }
+    }
     (extra.length ? [...us, ...extra].sort((p, q) => q - p) : us).forEach(u => shape.lineTo(u, top(u)));
     ops.filter(o => o.kind === 'window').forEach(o => {
       const h = new THREE.Path();
@@ -442,27 +455,54 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
     });
   });
 
-  // the lift's materials for a wall: an upper storey's interior wall plain with white frames
-  const lifted = w => (w.finish === 'panel' && mR.panel ? { wall: mR.panel } : mR.inner && levelOf(w) > 0 && !wallMats(w).boarded ? { wall: mR.inner, frame: mR.door } : mR);
+  // the band's materials for a wall's part above its cut: an upper storey's interior wall plain with
+  // white frames
+  const lifted = w => (w.finish === 'panel' && mR.panel ? { wall: mR.panel } : mR.inner && levelOf(w) !== st.ground && !wallMats(w).boarded ? { wall: mR.inner, frame: mR.door } : mR);
+  // the stretches [u0, u1] along a wall where its top stands above y, ends where it crosses y found
+  // between samples (a knee wall under the roof has none, a gable wall the middle)
+  const risesOver = (w, top, y) => {
+    const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), n = Math.max(1, Math.ceil(L / 0.25));
+    const f = u => top(w.a[0] + ((w.b[0] - w.a[0]) * u) / L, w.a[1] + ((w.b[1] - w.a[1]) * u) / L) - y;
+    const out = [];
+    let from = f(0) > 0.005 ? 0 : null;
+    for (let i = 1; i <= n; i++) {
+      const p = (L * (i - 1)) / n, q = (L * i) / n, fp = f(p), fq = f(q);
+      const at = fp !== fq ? p + ((q - p) * fp) / (fp - fq) : q;
+      if (from === null && fq > 0.005) from = fp > 0 ? p : at;
+      else if (from !== null && fq <= 0.005) { out.push([from, fq < 0 ? at : q]); from = null; }
+    }
+    if (from !== null) out.push([from, L]);
+    return out.filter(([u0, u1]) => u1 - u0 > 0.01);
+  };
+  // the part of wall w from u0 to u1 along it, its own ends exactly where they fall on w's
+  const partOf = (w, u0, u1) => {
+    const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), at = u => [w.a[0] + ((w.b[0] - w.a[0]) * u) / L, w.a[1] + ((w.b[1] - w.a[1]) * u) / L];
+    return { a: u0 === 0 ? w.a : at(u0), b: u1 === L ? w.b : at(u1) };
+  };
   (model.walls || []).forEach((w, i) => {
-    const base = { ...w, top: roof.topFn(w.top), strip: strips.get(i), kinks: typeof w.top === 'string' ? roof.kinks(w.top) : null };
-    if (levelOf(w) > 0) return buildWall(lift, { ...base, y0: levels[levelOf(w)] }, lifted(w));
-    const cut = cutOf(w);
-    const mW = wallMats(w);
-    if (!cut) return buildWall(group, base, mW);
-    buildWall(group, { ...base, top: roof.flat(cut) }, mW);
-    buildWall(lift, { ...base, openings: [], bot: roof.flat(cut) }, lifted(w));
+    const s = levelOf(w), base = { ...w, top: roof.topFn(w.top), strip: strips.get(i), kinks: typeof w.top === 'string' ? roof.kinks(w.top) : null, y0: levels[s] || 0 };
+    // a storey over the ground's lifts with the roofs, on their fading materials
+    const cut = cutOf(w), mW = s > st.ground ? lifted(w) : wallMats(w), here = B.of(s), raw = base.top;
+    if (!cut) return buildWall(here, base, mW);
+    // below the cut up to the lower of the roof and the cut, above it only where the roof is higher
+    buildWall(here, { ...base, top: (x, z) => Math.min(raw(x, z), cut), cross: { at: cut, raw } }, mW);
+    risesOver(w, raw, cut).forEach(([u0, u1]) => buildWall(B.above(s), { ...base, ...partOf(w, u0, u1), openings: [], bot: roof.flat(cut) }, lifted(w)));
   });
 
-  // a chimney from its level's floor to its top: on the ground floor in group up to the ceiling and
-  // the rest in lift, an upper storey's in lift whole; a lit style's lift part on a material of
-  // its own, so its fade stays off the lower part
+  // a chimney from its level's floor to its top, with its storey's contents up to its cut and a
+  // piece in each band over it; a lit style's upper pieces on a material of their own, so their
+  // fade stays off the lower part
   const chimneys = roof.chimneys || [], chimneyMeshes = [];
   const mC = !chimneys.length ? null : lit ? { group: kit.surface('chimney'), lift: kit.surface('chimney', { transparent: true }) } : { group: mH, lift: mR };
   chimneys.forEach(c => {
-    const parts = c.cut ? [[group, 0, c.cut], [lift, c.cut, c.top]] : [[c.level > 0 ? lift : group, levels[c.level], c.top]];
-    parts.forEach(([parent, a, b]) => {
-      const m = parent === lift ? mC.lift : mC.group;
+    // up to its storey's cut with that storey, then a piece in each band it rises through
+    const parts = [[B.of(c.level), levels[c.level] || 0, c.cut || c.top, c.level > st.ground]];
+    if (c.cut) for (let k = c.level; k < st.list.length && st.list[k].cut < c.top; k++) {
+      const next = st.list[k + 1];
+      parts.push([B.above(k), st.list[k].cut, next && next.cut < c.top ? next.cut : c.top, true]);
+    }
+    parts.forEach(([parent, a, b, up]) => {
+      const m = up ? mC.lift : mC.group;
       const mesh = lit ? kit.solid(parent, m, c.rect, [a, b]) : box(parent, m.wall, m.edge, c.rect, [a, b]);
       if (lit) mesh.castShadow = mesh.receiveShadow = true;
       else mesh.renderOrder = 2;
@@ -472,19 +512,18 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
     });
   });
 
-  // a board or filler is split at the wall's cut like the wall, the upper part in lift; a filler
+  // a board or filler is split at the wall's cut like the wall, the upper part in the band over it; a filler
   // is cladding with the wall face's metre UVs, so the boards run on from the face
   const cornerGroups = new Map();
   corners.forEach(c => {
     const w = model.walls[c.wall], { u, side, t } = c.f;
     const top = roof.topFn(w.top)(c.p[0], c.p[1]);
-    const cut = cutOf(w), y0 = levels[levelOf(w)];
-    const mW = wallMats(w);
-    const spans = levelOf(w) > 0 ? [[lift, y0, top, mR.trim, mR.boarded]]
-      : cut ? [[group, 0, cut, mW.trim, mW.boarded], [lift, cut, top, mR.trim, mR.boarded]] : [[group, 0, top, mW.trim, mW.boarded]];
+    const s = levelOf(w), cut = cutOf(w), y0 = levels[s] || 0, here = B.of(s);
+    const mW = s > st.ground ? mR : wallMats(w);
+    const spans = cut ? [[here, y0, Math.min(top, cut), mW.trim, mW.boarded], [B.above(s), cut, top, mR.trim, mR.boarded]] : [[here, y0, top, mW.trim, mW.boarded]];
     spans.forEach(([parent, y0, y1, frame, boarded]) => {
       if (y1 - y0 < 0.01) return;
-      const key = `${parent === lift} ${c.wall}`;
+      const key = `${parent.uuid} ${c.wall}`;
       let g = cornerGroups.get(key);
       if (!g) {
         g = new THREE.Group();
@@ -518,11 +557,15 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
   // face, since rooms are drawn to centrelines and drawings round, and the ground would show
   // between the floor and the wall; an edge already under a wall stays, and so does one whose
   // strip would cover another room's rect (an open plan beside a short wall)
-  const wallLines = (model.walls || []).filter(w => w.finish !== 'panel' && levelOf(w) === 0).flatMap(w => {
+  // (each storey's own walls and rooms)
+  const floorMeshes = [], floorsOf = st.list.map(() => []);
+  st.list.forEach((_, level) => {
+  const wallLines = (model.walls || []).filter(w => w.finish !== 'panel' && levelOf(w) === level).flatMap(w => {
     const axis = Math.abs(w.a[0] - w.b[0]) < 1e-6 ? 0 : Math.abs(w.a[1] - w.b[1]) < 1e-6 ? 1 : -1, o = 1 - axis;
     return axis < 0 ? [] : [[axis, w.a[axis], w.t / 2, Math.min(w.a[o], w.b[o]), Math.max(w.a[o], w.b[o])]];
   });
-  const houseRects = ground.filter(r => r.floor !== 'paving').flatMap(r => r.rects);
+  const storeyRooms = rooms.filter(r => levelOf(r) === level);
+  const houseRects = storeyRooms.filter(r => r.floor !== 'paving').flatMap(r => r.rects);
   const overlaps = ([a0, b0, a1, b1]) => houseRects.some(([x0, z0, x1, z1]) => Math.min(a1, x1) - Math.max(a0, x0) > 1e-6 && Math.min(b1, z1) - Math.max(b0, z0) > 1e-6);
   function snapRect(rect) {
     // each edge: its axis, its index in the rect and which way is out
@@ -543,8 +586,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
   }
 
   // a room can be several rectangles
-  const floorMeshes = [];
-  ground.forEach(r => {
+  storeyRooms.forEach(r => {
     r.rects.map(rc => (lit && r.floor !== 'paving' ? snapRect(rc) : rc)).forEach(([x0, z0, x1, z1]) => {
       const stones = lit && r.floor === 'paving';
       const map = !lit ? null : stones ? kit.pavers() : r.floor === 'tile' ? kit.tiles() : kit.planks();
@@ -563,25 +605,28 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
       const mesh = new THREE.Mesh(geo, mat);
       mesh.rotation.x = -Math.PI / 2;
       // a paved floor lies 5 mm over the paving under it, so a tint never z-fights with it
-      mesh.position.set(cx, stones ? 0.025 : 0.02, cz);
+      mesh.position.set(cx, (levels[level] || 0) + (stones ? 0.025 : 0.02), cz);
       mesh.renderOrder = 1;
-      mesh.userData = { room: r.id, warm: 0, hover: 0, sel: 0, base: lit ? mat.color.clone() : C.floor };
+      mesh.userData = { room: r.id, storey: level, warm: 0, hover: 0, sel: 0, base: lit ? mat.color.clone() : C.floor };
       mesh.receiveShadow = lit;
-      group.add(mesh);
+      B.of(level).add(mesh);
       floorMeshes.push(mesh);
+      floorsOf[level].push(mesh);
     });
+  });
   });
 
   // the simple style's furniture; a lit style's is the interior layer's
   if (!lit) {
     (model.furniture || []).forEach(f => {
-      if (f.rect) return box(group, mH.furn, mH.furnEdge, f.rect, f.y);
+      const here = B.of(storeyOf(f));
+      if (f.rect) return box(here, mH.furn, mH.furnEdge, f.rect, f.y);
       const [x, z, r] = f.circle;
       const cg = new THREE.CylinderGeometry(r, r, f.y[1] - f.y[0], 18);
       const c = new THREE.Mesh(cg, mH.furn);
       c.position.set(x, (f.y[0] + f.y[1]) / 2, z);
       c.add(edges(cg, mH.furnEdge, 30));
-      group.add(c);
+      here.add(c);
     });
   }
 
@@ -711,7 +756,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
     if (!walls) {
       const skip = new Set([...floorMeshes, ...roofMeshes, ...chimneyMeshes]);
       walls = [];
-      [group, lift].forEach(g => { g.updateMatrixWorld(true); g.traverse(o => { if (o.isMesh && !skip.has(o)) walls.push(o); }); });
+      [group, ...B.lifts].forEach(g => { g.updateMatrixWorld(true); g.traverse(o => { if (o.isMesh && !skip.has(o)) walls.push(o); }); });
     }
     let best = null;
     probe.far = reach;
@@ -723,10 +768,12 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
     return best;
   }
 
+  B.separate();
   return {
     id: 'building',
     group,
     lift,
+    lifts: B.lifts,
     // for the interior layer, which dresses a lit style's walls, and the winter layer's wash
     api: { inRoom, cutOf, wallBehind },
     markers(list) {
@@ -739,10 +786,10 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
       on.filter(m => m.icon === 'light').forEach(m => up(m.room, m.level ?? 1));
       list.forEach(m => { if (m.glow > 0 && roomIds.has(m.room)) up(m.room, m.glow); });
     },
-    // the floors take taps only with the roof off
+    // the floors take taps only with the roof off, the shown storey's alone
     hit(ray) {
       if (state.mode !== 'open') return null;
-      const hits = ray.intersectObjects(floorMeshes, false);
+      const hits = ray.intersectObjects(floorsOf[state.level ?? st.list.length - 1] || [], false);
       return hits.length ? { room: hits[0].object.userData.room, target: hits[0].object } : null;
     },
     update(dt, k) {

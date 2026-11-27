@@ -14,8 +14,8 @@
 // so the glow is colour and size on additive materials, never opacity.
 //
 // Each site.festive.christmas_trees item is a dressed tree on the floor (spruce below): a stand,
-// stacked cones, baubles, a gold star and an LED string wound up it, drawn with the ground, not
-// the lift, since it stands indoors under the cut.
+// stacked cones, baubles, a gold star and an LED string wound up it, drawn with the ground storey's
+// contents (the group, or with a basement lift band 0), not the lift, since it stands indoors under the cut.
 //
 // The snow: a slab on every roof and on the garage roof (in the lift), the lawn and the land round
 // the lot blended white through the ground layer's api.snow, a light dusting over the paving and
@@ -156,10 +156,12 @@ function radiusAt(profile, h) {
   return 0;
 }
 
-export default function build({ THREE, kit, model, options, look, state, roof, frame, reduceMotion, layer }) {
+export default function build({ THREE, kit, model, options, look, state, roof, frame, reduceMotion, layer, storeys, bands }) {
   const group = new THREE.Group();
   if (!look.lit) return { id: 'winter', group };
   const lift = new THREE.Group(), site = model.site || {}, festive = site.festive || {};
+  // with a basement the ground storey's contents are lift band 0's
+  const B = bands(group, lift), indoors = B.of(storeys.ground);
   const api = id => { const L = layer(id); return (L && L.api) || {}; };
   const siteApi = api('site'), treesApi = api('trees'), ground = api('ground');
   const plants = siteApi.planters ? siteApi.planters() : [];
@@ -292,8 +294,8 @@ export default function build({ THREE, kit, model, options, look, state, roof, f
       im.receiveShadow = true;
       tree.add(im);
     });
-    group.add(tree);
-    points([...spruces.flatMap(s => s.leds), ...spruces.map(s => s.star)], group, 'tree-leds');
+    indoors.add(tree);
+    points([...spruces.flatMap(s => s.leds), ...spruces.map(s => s.star)], indoors, 'tree-leds');
   }
   group.userData.winter = { icicles, plants: plantLeds.length, trees: spruces.map(s => ({ leds: s.leds.length, baubles: s.baubles.length })) };
 
@@ -410,10 +412,12 @@ export default function build({ THREE, kit, model, options, look, state, roof, f
     if (flakeM) flakeM.color.setScalar(1 - (1 - FLAKE_NIGHT) * g);
   };
   light(0);
+  B.separate();
   return {
     id: 'winter',
     group,
     lift,
+    lifts: B.lifts,
     toggle: true,
     // mount() calls it with the starting state before the first frame
     setOn(v) {

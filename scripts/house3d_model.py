@@ -32,9 +32,25 @@ point. roof_height(), roof_rects(), roof_bbox() and roof_area() read every kind.
 on a shed roof inside its outline, or on one face of a hip or gable roof: inside one wing, on one
 side of its ridge, where that wing is the roof's surface; never on a flat roof.
 
-Storeys: geometry.levels is the floor heights [0, 3.05, ...] (default [0]); a wall or room has
-level (default 0). A wall's openings, doors and sills are relative to levels[level]; its top,
-a height or a roof id, and the furniture's y stay absolute. The ceiling is the ground floor's.
+Storeys: geometry.levels is the floor heights, ascending and holding 0, the ground storey's
+(default [0]): [-2.6, 0, 2.9] has a basement, [0, 1.4, 2.8] a split level. A wall, room, chimney
+or piece of furniture has level, an index into levels, by default the ground storey's. A wall's
+openings, doors and sills are relative to levels[level]; its top, a height or a roof id, and the
+furniture's y stay absolute. ceiling is the ground storey's cut, absolute; ceilings (optional,
+one per level) is each storey's cut above its own floor, more than 1.8 (the ground storey's equal
+to ceiling); a storey without one takes ceiling above its floor. Where a storey's rooms overlap
+a higher storey's in plan, its cut stays CEILING_GAP below that storey's floor. A wall up to a
+roof or above its storey's cut is cut there: below the cut it stands up to the lower of the roof
+and the cut, above it only where the roof is higher, so a knee wall stands whole. The view
+shows one storey at a time from inside: everything above that storey's cut lifts away with the
+roofs. storeys() gives each storey's floor and cut and the ground's index. A piece of furniture
+is on its level, else on the storey of the room under its centre whose floor is at or below its
+y0, else on the highest storey whose floor is; item_level() says which. A room below 0 lies
+inside the box round the ground storey's rooms, FOOTPRINT_SLACK out for their walls. A room may have a type (ROOM_TYPES) and furnish (false keeps
+a furnisher out of it). A stair is a straight flight, its rect climbing to the edge up names from
+y0 to y1, about STAIR_RISE a step; a landing is a slab whose top is y1; an L or U stair is two
+flights and a landing. showcase.level_names {"<index>": name} names the storeys in a viewer's
+picker; without it one above ground is "N. korrus", one below "Kelder".
 
 Look: geometry.look (optional) is the house's finishes in the real style; without it the engine
 draws a light, matt architectural model. surfaces maps an engine surface name (SURFACES) to
@@ -52,9 +68,9 @@ The simple style ignores it.
 
 Chimneys: geometry.chimneys (optional) is a list of {"id", "rect": [x0, z0, x1, z1], "top": y,
 "level": 0}, upright blocks from levels[level] to top, which runs at least 0.5 above that floor.
-A ground floor chimney above the ceiling is cut there like a wall up to a roof, the part above
-rising and fading with the roofs; an upper storey's rises whole. The real style draws them in the
-chimney surface.
+A chimney above its storey's cut is cut there like a wall up to a roof and again at each cut it
+rises through, each part above rising and fading with the band over that cut. The real style
+draws them in the chimney surface.
 
 Posts and the carport roof: site.posts (optional) is a list of {"at": [x, z], "top": y,
 "size": 0.15, "braces": [[dx, dz], ...]}, square posts from the ground to top, each brace a
@@ -125,7 +141,20 @@ FURNITURE_KINDS = (
     "office_chair",
     "plant",
     "picture",
+    "stair",
+    "landing",
 )
+# a room's type, which a furnisher reads; neutral like the rooms layer's names
+ROOM_TYPES = (
+    "living", "kitchen", "kitchen_living", "dining", "bedroom", "kids", "office", "bathroom", "wc",
+    "sauna", "washroom", "utility", "hall", "corridor", "storage", "dressing", "garage", "stairs",
+    "other",
+)  # fmt: skip
+CEILING_MIN = 1.8  # a storey's cut above its floor, at least
+CEILING_GAP = 0.1  # how far a storey's cut stays under the floor of a higher storey over it
+STAIR_RISE = 0.18  # a stair's rise per step, the engine rounding the count
+LEVEL_NAME_CHARS = 24
+FOOTPRINT_SLACK = 0.5  # how far a basement room may reach past the ground rooms' box: their walls
 # a run of units: along is the axis its fronts run on, fronts [type, width] from that axis's low end
 FRONTED_KINDS = ("base_units", "wall_units", "tall_units", "vanity")
 FINISHES = (
@@ -143,7 +172,7 @@ FRONTS_SUM = 0.01  # how far the fronts' widths may miss the item's size on alon
 SOFA_EDGES = ("x0", "x1", "z0", "z1")  # a sofa's back and arm: the rect's edges that carry one
 # the edges a kind may name for its back and arm: None for any number, else exactly that many
 EDGE_KEYS = {"sofa": {"back": None, "arm": None}, "chair": {"back": 1}, "office_chair": {"back": 1}}
-RECT_ONLY_KINDS = ("stove", "plant", "picture")
+RECT_ONLY_KINDS = ("stove", "plant", "picture", "stair", "landing")
 WALL_HUNG_KINDS = ("mirror", "picture")  # y0 above the floor
 PICTURE_ARTS = 4  # a picture's art: the engine's three palettes, 0 by default, or 3, its grey-blue brush strokes
 DOOR_GLASS_MARGIN = 0.2  # how far a door's glass strip stays inside its opening on each side
@@ -218,6 +247,61 @@ def with_room_names(model):
     # new room dicts: merge() shares them with the layers, and the rooms layer is shareable
     model["rooms"] = [dict(r, name=names.get(r["id"], r["name"])) for r in model["rooms"]]
     return model
+
+
+def storeys(model):
+    """(ground, [{"floor": f, "cut": c}, ...]): the ground storey's index and each storey's floor
+    and cut, absolute; the engine's storeysOf() gives the same."""
+    # a malformed list reads as one storey, so the validator reports it rather than dies on it
+    levels = model.get("levels")
+    if not (isinstance(levels, list) and levels and all(_num(v) for v in levels)):
+        levels = [0]
+    ground = levels.index(0) if 0 in levels else 0
+    ceiling = model["ceiling"] if _num(model.get("ceiling")) else 0
+    ceilings = model["ceilings"] if isinstance(model.get("ceilings"), list) else []
+    out = []
+    for i, floor in enumerate(levels):
+        h = ceilings[i] if i < len(ceilings) and _num(ceilings[i]) else ceiling
+        out.append({"floor": floor, "cut": ceiling if i == ground else floor + h})
+    return ground, out
+
+
+def _centre(item):
+    if _rect(item.get("rect")):
+        x0, z0, x1, z1 = item["rect"]
+        return (x0 + x1) / 2, (z0 + z1) / 2
+    c = item.get("circle")
+    return (c[0], c[1]) if _point(c, 3) else None
+
+
+def item_level(model, item, eps=0.01):
+    """The storey a piece of furniture is on: its level, else the room under its centre whose floor
+    is at or below its y0 (the highest such floor), else the highest storey whose floor is."""
+    ground, st = storeys(model)
+    if isinstance(item.get("level"), int) and not isinstance(item["level"], bool):
+        return item["level"]
+    y0 = item["y"][0] if _point(item.get("y")) else 0
+    c = _centre(item)
+    under = [
+        lv
+        for r in model.get("rooms", [])
+        if isinstance(lv := r.get("level", ground), int)
+        and not isinstance(lv, bool)
+        and 0 <= lv < len(st)
+        and st[lv]["floor"] <= y0 + eps
+        and c
+        and any(
+            _rect(q) and q[0] <= c[0] <= q[2] and q[1] <= c[1] <= q[3] for q in r.get("rects", [])
+        )
+    ]
+    if under:
+        return max(under, key=lambda lv: st[lv]["floor"])
+    below = [i for i, s in enumerate(st) if s["floor"] <= y0 + eps]
+    return max(below, key=lambda i: st[i]["floor"]) if below else 0
+
+
+def _overlap(a, b):
+    return min(a[2], b[2]) - max(a[0], b[0]) > 1e-6 and min(a[3], b[3]) - max(a[1], b[1]) > 1e-6
 
 
 def _door_glass_ok(o):
@@ -624,16 +708,27 @@ def validate(layers):
         isinstance(levels, list)
         and levels
         and all(_num(v) for v in levels)
-        and levels[0] == 0
+        and 0 in levels
         and all(a < b for a, b in pairwise(levels))
     ):
-        bad(f"geometry: levels {levels!r} must be ascending floor heights from 0")
+        bad(f"geometry: levels {levels!r} must be ascending floor heights holding 0")
         levels = [0]
+    ground = levels.index(0)
+    if "ceilings" in model:
+        cs = model["ceilings"]
+        if not (isinstance(cs, list) and len(cs) == len(levels) and all(_num(c) for c in cs)):
+            bad(f"geometry: ceilings must be one number per level ({len(levels)})")
+        else:
+            for i, c in enumerate(cs):
+                if c <= CEILING_MIN:
+                    bad(f"geometry: ceilings[{i}] {c} is not more than {CEILING_MIN}")
+            if _num(model.get("ceiling")) and abs(cs[ground] - model["ceiling"]) > 1e-6:
+                bad(f"geometry: ceilings[{ground}] is not ceiling {model['ceiling']}")
     if "look" in model:
         _validate_look(model["look"], bad)
 
     def level_of(where, item):
-        lv = item.get("level", 0)
+        lv = item.get("level", ground)
         if isinstance(lv, int) and not isinstance(lv, bool) and 0 <= lv < len(levels):
             return lv
         bad(f"{where}: level {lv!r} is not an index into levels (0..{len(levels) - 1})")
@@ -724,9 +819,22 @@ def validate(layers):
             bad(f"{where}: y must be [y0, y1] with y0 < y1")
         if "kind" in f and f["kind"] not in FURNITURE_KINDS:
             bad(f"{where}: kind {f['kind']!r} is not one of {', '.join(FURNITURE_KINDS)}")
+        if "level" in f:
+            level_of(where, f)
+        floor = levels[ground]
+        if _point(f.get("y")):
+            if f["y"][0] < levels[0] - 1e-6:
+                bad(f"{where}: y0 {f['y'][0]} is below the lowest floor {levels[0]}")
+            lv = item_level(model, f)
+            floor = levels[lv] if 0 <= lv < len(levels) else floor
+        if f.get("kind") == "stair":
+            if f.get("up") not in SOFA_EDGES:
+                bad(f"{where}: a stair's up {f.get('up')!r} is not one of {', '.join(SOFA_EDGES)}")
+        elif "up" in f:
+            bad(f"{where}: up is only for stair")
         _validate_fronts(where, f, bad)
         _validate_edges(where, f, bad)
-        _validate_fitted(where, f, bad)
+        _validate_fitted(where, f, bad, floor)
 
     site = model.get("site", {})
     lot = _lot(model)
@@ -900,6 +1008,11 @@ def validate(layers):
             bad(f"{where}: label must be [x, z]")
         if "floor" in r and r["floor"] not in ROOM_FLOORS:
             bad(f"{where}: floor {r['floor']!r} is not one of {', '.join(ROOM_FLOORS)}")
+        if "type" in r and r["type"] not in ROOM_TYPES:
+            bad(f"{where}: type {r['type']!r} is not one of {', '.join(ROOM_TYPES)}")
+        if "furnish" in r and not isinstance(r["furnish"], bool):
+            bad(f"{where}: furnish is true or false")
+    _validate_storeys(model, levels, ground, rooms, bad)
 
     known = set(room_ids)
     for rid in model.get("room_names", {}):
@@ -934,12 +1047,70 @@ def validate(layers):
     for rid in show.get("rooms", {}):
         if rid not in known:
             bad(f"showcase.rooms: {rid!r} is not a room")
+    names = show.get("level_names", {})
+    if not isinstance(names, dict):
+        bad("showcase.level_names: not a JSON object")
+        names = {}
+    for k, v in names.items():
+        if not (k.isdigit() and int(k) < len(levels)):
+            bad(f"showcase.level_names: {k!r} is not a level index (0..{len(levels) - 1})")
+        if not (isinstance(v, str) and 0 < len(v) <= LEVEL_NAME_CHARS):
+            bad(f"showcase.level_names[{k}]: a name of 1 to {LEVEL_NAME_CHARS} characters")
     features = show.get("features", [])
     ids("showcase.features", [f.get("id") for f in features])
     for f in features:
         if not _point(f.get("pos"), 3):
             bad(f"showcase feature {f.get('id')}: pos must be [x, y, z]")
     return problems
+
+
+def _validate_storeys(model, levels, ground, rooms, bad):
+    """A storey's cut stays under the floor of a higher storey whose rooms overlap its own in plan,
+    and a room below 0 lies inside the box round the ground storey's rooms, grown by their walls."""
+    _, st = storeys(dict(model, levels=levels))
+    by = {}
+    for r in rooms:
+        lv = r.get("level", ground)
+        if isinstance(lv, int) and not isinstance(lv, bool) and 0 <= lv < len(levels):
+            by.setdefault(lv, []).extend(q for q in r.get("rects", []) if _rect(q))
+    for lo, hi in combinations(sorted(by), 2):
+        gap = st[hi]["floor"] - st[lo]["cut"]
+        if gap < CEILING_GAP - 1e-6 and any(_overlap(a, b) for a in by[lo] for b in by[hi]):
+            bad(
+                f"geometry: level {lo}'s cut {st[lo]['cut']:.2f} is not {CEILING_GAP} under "
+                f"level {hi}'s floor {st[hi]['floor']} over it"
+            )
+    s = FOOTPRINT_SLACK
+    above = [
+        q
+        for r in rooms
+        if r.get("level", ground) == ground and r.get("floor") != "paving"
+        for q in r.get("rects", [])
+        if _rect(q)
+    ]
+    box = (
+        [min(q[0] for q in above) - s, min(q[1] for q in above) - s]
+        + [max(q[2] for q in above) + s, max(q[3] for q in above) + s]
+        if above
+        else None
+    )
+    for r in rooms:
+        lv = r.get("level", ground)
+        below = (
+            isinstance(lv, int)
+            and not isinstance(lv, bool)
+            and 0 <= lv < len(levels)
+            and levels[lv] < 0
+        )
+        inside = box and all(
+            box[0] <= q[0] and box[1] <= q[1] and q[2] <= box[2] and q[3] <= box[3]
+            for q in r.get("rects", [])
+            if _rect(q)
+        )
+        if below and not inside:
+            bad(
+                f"room {r.get('id')}: a room below ground must lie inside the ground storey's rooms' box"
+            )
 
 
 def _validate_fronts(where, f, bad):
@@ -977,7 +1148,7 @@ def _validate_fronts(where, f, bad):
             bad(f"{where}: fronts sum to {total:.3f} m, the item is {size:.3f} m on {along}")
 
 
-def _validate_fitted(where, f, bad):
+def _validate_fitted(where, f, bad, floor=0):
     """A vanity counts its basins, a finished kind may name its finish, some kinds need a rect or
     hang above the floor, a plant may bloom and a picture name its art."""
     kind = f.get("kind")
@@ -994,8 +1165,8 @@ def _validate_fitted(where, f, bad):
         bad(f"{where}: finish is only for {', '.join(FINISHED_KINDS)}")
     if kind in RECT_ONLY_KINDS and "rect" not in f:
         bad(f"{where}: a {kind} needs a rect")
-    if kind in WALL_HUNG_KINDS and _point(f.get("y")) and f["y"][0] <= 0:
-        bad(f"{where}: a {kind} hangs on the wall, its y0 above 0")
+    if kind in WALL_HUNG_KINDS and _point(f.get("y")) and f["y"][0] <= floor:
+        bad(f"{where}: a {kind} hangs on the wall, its y0 above its floor {floor}")
     if "bloom" in f and (kind != "plant" or not isinstance(f["bloom"], bool)):
         bad(f"{where}: bloom is true or false on a plant")
     if "art" in f and (

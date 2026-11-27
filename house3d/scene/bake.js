@@ -5,7 +5,7 @@
 //
 // A target is a mesh of the building or pergola layer whose every material is opaque when the
 // layer is built (opacity 1, the roof's fading materials included) and takes an aoMap. Its key is
-// <layer>:<n>, the n-th target of that layer in group-then-lift order; count is its vertex count
+// <layer>:<n>, the n-th target of that layer in group-then-lift-bands order; count is its vertex count
 // once non-indexed and uv that many [u, v] pairs as three.js reads them. mount() takes the keys right
 // after the build, as the bake's export does in Node over the engine tests' harness, so both find
 // the same targets in the same order whatever the roof's fade or the night later do to an opacity.
@@ -20,8 +20,8 @@ export const materialsOf = o => (Array.isArray(o.material) ? o.material : [o.mat
 export const opaque = m => !!m && (m.userData.base ?? m.opacity) === 1;
 const takesAO = m => opaque(m) && 'aoMap' in m;
 
-/** bakeRoots(layer) -> the layer's group and lift, in key order. */
-export const bakeRoots = L => [L.group, L.lift].filter(Boolean);
+/** bakeRoots(layer) -> the layer's group and its lift bands (or its one lift), in key order. */
+export const bakeRoots = L => [L.group, ...(Array.isArray(L.lifts) ? L.lifts : [L.lift])].filter(Boolean);
 
 /** bakeCount(geometry) -> the vertex count the bake's uv list runs over: the index's, else the positions'. */
 export const bakeCount = g => (g.index ? g.index.count : g.attributes.position.count);

@@ -87,7 +87,7 @@ body.real .hint { color: var(--ink); text-shadow: 0 1px 2px rgba(6, 12, 27, 0.85
   <p id="intro"></p>
 </header>
 <nav class="views" aria-label="Vaade">
-  <div class="seg" role="group">
+  <div class="seg" role="group" id="modes">
     <button type="button" data-mode="roof" aria-pressed="true">Katusega</button>
     <button type="button" data-mode="open" aria-pressed="false">Katuseta</button>
   </div>
@@ -141,19 +141,22 @@ const bearing = (model.orientation || {}).x_axis_bearing_deg;
 const bake = document.querySelector('meta[name="house3d-bake"]')?.content || undefined;
 // style is the button's: 'simple', 'real' or 'photo' (the garden) or 'studio' (Päris's studio stage)
 let sel = null, style = 'simple', time = null; // time null: live
+let shownLevel = null;
 let view;
 function mountView(keep = {}) {
   try {
     view = mount(stage, model, {
       style: style === 'studio' ? 'real' : style, stage: style === 'studio' ? 'studio' : 'garden', bake,
-      mode: keep.mode, view: keep.view,
-      // the winter layer by the season, with its snow falling
-      layers: { winter: seasonOn(new Date()) }, snowfall: true,
+      mode: keep.mode, level: keep.level, view: keep.view,
+      // the winter layer by the season of the day shown, with its snow falling
+      layers: { winter: seasonOn(time || new Date()) }, snowfall: true,
       onMarker: id => select(sel === id ? null : id),
       onRoom: id => select(id),
-      onMode: m => {
-        document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
-        if (m === 'roof' && sel && !sel.startsWith(FEATURE)) select(null);
+      onMode: (m, level) => {
+        document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.level !== undefined ? Number(b.dataset.level) === level : b.dataset.mode === m)));
+        // a room's panel belongs to its storey
+        if ((m === 'roof' || level !== shownLevel) && sel && !sel.startsWith(FEATURE)) select(null);
+        shownLevel = level;
       }
     });
   } catch (e) {
@@ -169,8 +172,21 @@ function mountView(keep = {}) {
   if (sel) view.setSelection(sel);
 }
 mountView();
+// a house of more storeys picks one from the top down in place of Katuseta
+if (view && view.storeys.length > 1) {
+  const modes = document.getElementById('modes');
+  modes.querySelector('[data-mode="open"]').remove();
+  view.storeys.slice().reverse().forEach(({ index, name }) => {
+    const b = document.createElement('button');
+    Object.assign(b, { type: 'button', textContent: name });
+    b.dataset.mode = 'open';
+    b.dataset.level = String(index);
+    b.setAttribute('aria-pressed', String(view.level === index));
+    modes.append(b);
+  });
+}
 // after a failed remount view is null and the controls do nothing
-document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => view?.setMode(b.dataset.mode)));
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => (b.dataset.level !== undefined ? view?.setLevel(Number(b.dataset.level)) : view?.setMode(b.dataset.mode))));
 document.getElementById('reset').addEventListener('click', () => view?.reset());
 
 // a new style remounts the engine with the mode and the camera kept
@@ -179,7 +195,7 @@ function restyle(s) {
   if (s === style) return;
   style = s;
   if (!view) return;
-  const keep = { mode: view.mode, view: view.view };
+  const keep = { mode: view.mode, level: view.level, view: view.view };
   view.dispose();
   view = null;
   mountView(keep);
@@ -210,12 +226,13 @@ function syncClock() {
 function setTime(t) {
   time = t;
   view?.setTime(t);
+  view?.setLayer('winter', seasonOn(t || new Date()));
   syncClock();
 }
 [hour, day].forEach(el => el.addEventListener('input', () => setTime(new Date(year, 0, 1 + Number(day.value), 0, Number(hour.value) * 15))));
 now.addEventListener('click', () => setTime(null));
-// live, the label and the sliders follow the sun's minute
-setInterval(() => { if (!time) syncClock(); }, 60000);
+// live, the label, the sliders and the season follow the minute; the engine moves the sun itself
+setInterval(() => { if (!time) { view?.setLayer('winter', seasonOn(new Date())); syncClock(); } }, 60000);
 syncClock();
 
 function select(id) {

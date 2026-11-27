@@ -38,7 +38,10 @@
 // Layer contract: a layer module's default export is build(ctx), which returns null when the
 // model has nothing for it, otherwise:
 //   id, group       the layer's name and its objects
-//   lift?           a group that rises and fades with the roof mode (the building's upper part)
+//   lift?           a group that rises and fades with the roof mode (the building's upper part):
+//                   the top lift band, over the top storey's cut, with the roofs
+//   lifts?          every lift band, one per storey, the last being lift (ctx.bands, storeysOf());
+//                   band i rises and fades when storey i or a lower one is shown from inside
 //   toggle?         true for a switchable layer; listed()? says whether view.layers shows it now
 //   update(dt, k)?  per frame, dt in seconds and k the easing step; true while still animating
 //   shades?         true when what update() animates casts shadows (a lit style's shadow map
@@ -55,12 +58,14 @@
 // ctx: THREE, kit, C (kit.C), model, options, style (look.id), look (scene/look.js), stage ('garden' | 'studio'),
 //   frame { lotBox, wallBox, ext, E, lotCx, lotCz } (modelFrame),
 //   roof { fns, flat, under, topFn, gap, top(id), faces(id), planeAt(id, x, z), kinks(id), clip }: fns[id], under(id),
-//   topFn(top) and top(id) (the slab's top) are (x, z) -> y for every roof kind (modelFrame()), ceiling, reduceMotion, state (read-only: mode,
-//   roofFade, hovered, selection, night: 0 by day to 1 at night, a lit style's only, sun: the
+//   topFn(top) and top(id) (the slab's top) are (x, z) -> y for every roof kind (modelFrame()), ceiling, storeys
+//   (storeysOf()), levelOf(o) (levelOf()), storeyOf(furniture) (storeyOfItem()), pit (pitOf()), bands(group, lift) (liftBands()), reduceMotion, state (read-only: mode, level (the storey
+//   shown from inside, null with the roof on), bandFade(i), roofFade (the top band's),
+//   hovered, selection, night: 0 by day to 1 at night, a lit style's only, sun: the
 //   sun's { alt, dir, time } in every style, null without a place), layer(id), screen(x, y, z) -> { x, y } | null, invalidate().
 //   build() and the first setOn() run before the loop exists: they must not call invalidate()
 //   or screen().
-// The core puts each layer's group and lift under a wrapper group, and switching a layer sets
+// The core puts each layer's group and lift bands under a wrapper group, and switching a layer sets
 // only the wrapper's visible. Nothing leaves the scene, so dispose() still reaches every object.
 import * as THREE from './vendor/three-0.187.0/build/three.module.js';
 import { OrbitControls } from './vendor/three-0.187.0/examples/jsm/controls/OrbitControls.js';
@@ -336,18 +341,141 @@ export function faceAt({ faces }, [x, z]) {
 }
 
 /**
- * chimneysOf(model) -> [{ id, rect, top, level, cut }]: geometry.chimneys with level 0 filled in
- * and cut, the ceiling where a ground floor chimney runs above it, else 0; the card's model is
+ * storeysOf(model) -> { ground, list: [{ index, floor, cut }] }: the ground storey's index (the
+ * level at 0) and each storey's floor and cut, absolute: the ground storey's cut is ceiling, any
+ * other's its floor plus its ceilings entry, else plus ceiling (scripts/house3d_model.py storeys()).
+ * A house of n storeys has n lift bands: band i holds what stands above storey i's cut, up to and
+ * with storey i + 1's contents, and the last one the top storey's upper part and the roofs; the
+ * lowest storey's contents are a layer's group. Showing storey k lifts bands k and up.
+ */
+export function storeysOf(model) {
+  const levels = Array.isArray(model.levels) && model.levels.length ? model.levels : [0];
+  const ground = Math.max(0, levels.indexOf(0)), ceiling = model.ceiling || 0;
+  const cs = Array.isArray(model.ceilings) ? model.ceilings : [];
+  return { ground, list: levels.map((floor, index) => ({ index, floor, cut: index === ground ? ceiling : floor + (Number.isFinite(cs[index]) ? cs[index] : ceiling) })) };
+}
+
+/**
+ * pitOf(model, storeys = storeysOf(model)) -> the outer outlines [[[x, z], ...], ...] of the storeys
+ * below the ground: the union of their rooms' and stairs' rects grown by half their thickest wall, so it reaches
+ * the walls' outer face; [] for a house with none. The ground surfaces leave it open.
+ */
+export function pitOf(model, storeys = storeysOf(model)) {
+  const below = i => Number.isInteger(i) && i < storeys.ground;
+  const g = Math.max(0, ...(model.walls || []).filter(w => below(w.level)).map(w => (w.t || 0) / 2));
+  // a stair down is often in no room of its own
+  const flights = (model.furniture || []).filter(f => (f.kind === 'stair' || f.kind === 'landing') && below(storeyOfItem(model, storeys, f))).map(f => f.rect);
+  const rects = (model.rooms || []).filter(r => below(r.level)).flatMap(r => r.rects).concat(flights).map(([x0, z0, x1, z1]) => [x0 - g, z0 - g, x1 + g, z1 + g]);
+  if (!rects.length) return [];
+  const xs = [...new Set(rects.flatMap(r => [r[0], r[2]]))].sort((a, b) => a - b);
+  const zs = [...new Set(rects.flatMap(r => [r[1], r[3]]))].sort((a, b) => a - b);
+  const cells = xs.slice(1).map((x, i) => zs.slice(1).map((z, j) => inRects(rects, [(xs[i] + x) / 2, (zs[j] + z) / 2], true)));
+  const on = (i, j) => !!(cells[i] && cells[i][j]);
+  // the boundary's edges between grid corners, each with the covered cell on its one side
+  const next = new Map(), key = (i, j) => `${i},${j}`;
+  for (let i = 0; i < xs.length - 1; i++) for (let j = 0; j < zs.length - 1; j++) {
+    if (!on(i, j)) continue;
+    if (!on(i, j - 1)) next.set(key(i, j), [i + 1, j]);
+    if (!on(i + 1, j)) next.set(key(i + 1, j), [i + 1, j + 1]);
+    if (!on(i, j + 1)) next.set(key(i + 1, j + 1), [i, j + 1]);
+    if (!on(i - 1, j)) next.set(key(i, j + 1), [i, j]);
+  }
+  const loops = [];
+  while (next.size) {
+    const [start] = next.keys(), loop = [];
+    for (let k = start; next.has(k);) {
+      const [i, j] = k.split(',').map(Number), to = next.get(k);
+      next.delete(k);
+      const prev = loop[loop.length - 2], last = loop[loop.length - 1], p = [xs[i], zs[j]];
+      // corners only: a point in line with the two before it is dropped
+      if (prev && (prev[0] === last[0] && last[0] === p[0] || prev[1] === last[1] && last[1] === p[1])) loop.pop();
+      loop.push(p);
+      k = key(...to);
+    }
+    // walked with the covered side on the right in x-z, so an outer outline turns one way and a
+    // courtyard inside the pit the other; only outer outlines are kept, so a courtyard opens with it
+    const area = loop.reduce((s, [x, z], n) => { const [x2, z2] = loop[(n + 1) % loop.length]; return s + x * z2 - x2 * z; }, 0);
+    if (area > 0) loops.push(loop);
+  }
+  return loops;
+}
+
+/**
+ * liftBands(THREE, storeys, group, lift) -> { lifts, of(s), above(s) }: a layer's lift bands, one
+ * per storey, lift the last (a house of one storey has lift alone); of(s) is
+ * where storey s's contents go (the group for the lowest), above(s) the band over its cut.
+ */
+export function liftBands(THREE, storeys, group, lift) {
+  const n = storeys.list.length;
+  const lifts = storeys.list.map((_, i) => (i === n - 1 ? lift : new THREE.Group()));
+  const matsOf = o => (Array.isArray(o.material) ? o.material : [o.material]);
+  return {
+    lifts,
+    of: s => (s <= 0 ? group : lifts[Math.min(s, n) - 1]),
+    above: s => lifts[Math.max(0, Math.min(s, n - 1))],
+    // each band fades on its own, so a material it shares with the group or another band becomes
+    // its own copy; call it once everything is built. A house of one storey keeps its materials.
+    separate() {
+      if (n < 2) return;
+      const roots = [group, ...lifts], users = new Map();
+      roots.forEach((r, i) => r.traverse(o => { if (o.material) matsOf(o).forEach(m => { if (!users.has(m)) users.set(m, new Set()); users.get(m).add(i); }); }));
+      lifts.forEach(r => {
+        const mine = new Map();
+        const own = m => (users.get(m).size < 2 ? m : mine.get(m) || mine.set(m, m.clone()).get(m));
+        r.traverse(o => { if (o.material) o.material = Array.isArray(o.material) ? o.material.map(own) : own(o.material); });
+      });
+    }
+  };
+}
+
+/** bandTargets(level, n) -> each of n bands' fade target: 0 (lifted) from storey level up, else 1; level null is the roof on. */
+export const bandTargets = (level, n) => Array.from({ length: n }, (_, i) => (level === null || i < level ? 1 : 0));
+
+/** liftsOf(L, n) -> a built layer's n lift bands: its lifts, else its one lift as the last band. */
+export function liftsOf(L, n = 1) {
+  if (Array.isArray(L.lifts)) return L.lifts;
+  return L.lift ? [...Array(Math.max(0, n - 1)).fill(null), L.lift] : [];
+}
+
+/** levelOf(item, storeys) -> a wall's, room's or chimney's storey: its level, else the ground's. */
+export const levelOf = (o, storeys) => (Number.isInteger(o.level) ? o.level : storeys.ground);
+
+/**
+ * storeyOfItem(model, storeys, f) -> a piece of furniture's storey: its level, else the room under
+ * its centre whose floor is at or below its foot, the highest such, else the highest storey whose
+ * floor is (scripts/house3d_model.py item_level).
+ */
+export function storeyOfItem(model, storeys, f) {
+  if (Number.isInteger(f.level)) return f.level;
+  const levels = storeys.list.map(s => s.floor), rooms = model.rooms || [];
+  const y0 = (f.y || [0])[0], [x, z] = f.rect ? [(f.rect[0] + f.rect[2]) / 2, (f.rect[1] + f.rect[3]) / 2] : f.circle || [0, 0];
+  const under = rooms.map(r => levelOf(r, storeys)).filter((lv, i) => levels[lv] !== undefined && levels[lv] <= y0 + 0.01 && inRects(rooms[i].rects, [x, z]));
+  const pick = list => list.reduce((a, b) => (a === null || levels[b] > levels[a] ? b : a), null);
+  return pick(under) ?? pick(levels.map((_, i) => i).filter(i => levels[i] <= y0 + 0.01)) ?? 0;
+}
+
+/**
+ * storeyName(storeys, index, names) -> the picker's name for a storey: names[index] (the model's
+ * showcase.level_names), else "N. korrus" counted from the ground as 1, below it "Kelder".
+ */
+export function storeyName({ ground }, index, names = {}) {
+  if (names[index]) return names[index];
+  return index < ground ? 'Kelder' : `${index - ground + 1}. korrus`;
+}
+
+/**
+ * chimneysOf(model) -> [{ id, rect, top, level, cut }]: geometry.chimneys with the ground's level
+ * filled in and cut, its storey's cut where the chimney runs above it, else 0; the card's model is
  * not validated, so an entry without a name, or not a rect on a level of the model with its top
  * above that floor, is left out rather than drawn.
  */
 export function chimneysOf(model) {
-  const levels = model.levels || [0], ceiling = model.ceiling || 0;
+  const st = storeysOf(model), levels = st.list.map(s => s.floor);
   return (Array.isArray(model.chimneys) ? model.chimneys : []).filter(Boolean)
-    .map(c => ({ id: c.id, rect: c.rect, top: c.top, level: c.level ?? 0 }))
+    .map(c => ({ id: c.id, rect: c.rect, top: c.top, level: c.level ?? st.ground }))
     .filter(({ id, rect: r, top, level }) => typeof id === 'string' && id && Array.isArray(r) && r.length === 4 && r.every(Number.isFinite) && r[0] < r[2] && r[1] < r[3]
       && Number.isInteger(level) && level >= 0 && level < levels.length && Number.isFinite(top) && top > levels[level])
-    .map(c => ({ ...c, cut: c.level === 0 && c.top > ceiling ? ceiling : 0 }));
+    .map(c => ({ ...c, cut: c.top > st.list[c.level].cut ? st.list[c.level].cut : 0 }));
 }
 
 /**
@@ -521,14 +649,15 @@ export function homeDir(aspect) {
  * homeView(box, dir, aspect, fov, margin = 0.12) -> { target, distance }: the orbit target and the
  * distance along dir (unit, target to camera) at which every corner of box (homeBox's, from the
  * ground to its top) projects inside the viewport, margin of its width and height clear of each
- * edge. The projected box is centred, and the target slid along the view line to 0.3 of the top.
+ * edge. The projected box is centred, and the target slid along the view line to 0.3 of the way
+ * from the box's bottom (box[5], default the ground) to its top.
  */
 export function homeView(box, dir, aspect, fov, margin = 0.12) {
-  const [x0, z0, x1, z1, top] = box;
+  const [x0, z0, x1, z1, top, bottom = 0] = box;
   const corners = [];
-  for (const x of [x0, x1]) for (const y of [0, top]) for (const z of [z0, z1]) corners.push(new THREE.Vector3(x, y, z));
+  for (const x of [x0, x1]) for (const y of [bottom, top]) for (const z of [z0, z1]) corners.push(new THREE.Vector3(x, y, z));
   const cam = new THREE.PerspectiveCamera(fov, aspect, 0.01, 1e5), v = new THREE.Vector3();
-  const lift = top * 0.3, target = new THREE.Vector3((x0 + x1) / 2, lift, (z0 + z1) / 2);
+  const lift = bottom + (top - bottom) * 0.3, target = new THREE.Vector3((x0 + x1) / 2, lift, (z0 + z1) / 2);
   const extent = d => {
     cam.position.copy(target).addScaledVector(dir, d);
     cam.lookAt(target);
@@ -648,11 +777,11 @@ export function stageLayers(style, stage) {
 }
 
 /**
- * mount(element, model, options) -> { setMarkers, setRoomChips, focusRoom, setMode, setSelection, setCar,
- *                                     setLayer, setSun, setTime, reset, resize, dispose, mode, carState,
- *                                     carScreen, layers, time, view, sun }
+ * mount(element, model, options) -> { setMarkers, setRoomChips, focusRoom, setMode, setLevel, setSelection, setCar,
+ *                                     setLayer, setSun, setTime, reset, resize, dispose, mode, level, storeys,
+ *                                     carState, carScreen, layers, time, view, sun }
  *
- * model: geometry + rooms layers (private and showcase are ignored). A wall with finish 'panel' is
+ * model: geometry + rooms layers (private is ignored, showcase gives only level_names). A wall with finish 'panel' is
  *   drawn in the lit styles as a panel in the frame's colour (the carport's walls and posts); a room's floor
  *   ('tile' or 'paving', else oak) is its floor finish there. site.decks and site.paving:
  *   items that are rects [x0, z0, x1, z1] or outlines [[x, z], ...]. site.gates: [{ a, b, kind,
@@ -669,7 +798,7 @@ export function stageLayers(style, stage) {
  * options:
  *   onMarker(id)     a marker was tapped
  *   onRoom(id|null)  a room floor was tapped with the roof off; null for empty space
- *   onMode(mode)     the mode changed ('roof' | 'open')
+ *   onMode(mode, level) the mode changed ('roof' | 'open'), level the storey shown from inside or null
  *   onCar()          the car's body was tapped (either mode, while it shows); no room tap follows
  *   onFeature(id)    a layer's feature (a future item) was tapped; no room tap follows
  *   onSun(sun)       the sun changed: setSun, setTime and the minute tick while live, in both
@@ -679,7 +808,8 @@ export function stageLayers(style, stage) {
  *   bloom            default true; always off below 720 px width and in the lit styles
  *   ao               default true; false keeps a lit style's contact shadows off, which are
  *                    otherwise on from 720 px width with the roof fully off
- *   mode             the starting mode, 'roof' (default) or 'open'
+ *   mode             the starting mode, 'roof' (default) or 'open' (the top storey from inside)
+ *   level            the starting storey shown from inside, an index into model.levels; over mode
  *   style            'simple' (default), 'real' (Päris) or 'photo' (Foto, scene/photo.js: Päris until its
  *                    textures, house3d/assets/, are in after the first frame); another style is another mount
  *   quality          Foto's tier: 'high', or 'low' (fewer leaf cards, half the twig cards, no normal maps, no contact
@@ -708,6 +838,11 @@ export function stageLayers(style, stage) {
  *                    the neighbouring buildings and the street as a flat surface, faint, never
  *                    tapped; the simple style draws a building as a box, the lit styles give a
  *                    house-sized rectangular one a gable (surroundings.js)
+ * setLevel(k | null): storey k from inside, everything over its cut lifted away; null puts the roof
+ *   on. setMode('open') is setLevel of the top storey, setMode('roof') setLevel(null); mode reads
+ *   'open' while any storey is shown. level is the storey shown or null; storeys is
+ *   [{ index, name }] in levels' order, each name the picker's (storeyName()). Room labels, chips
+ *   and an indoor marker show for the shown storey's rooms alone.
  * snapshot(maxWidth): the scene as it stands, without the markers, as a JPEG data URL at most
  *   maxWidth pixels wide, or null (not framed yet, the WebGL context lost, no WebGL); the card
  *   keeps one as the next load's first picture.
@@ -744,7 +879,7 @@ export function stageLayers(style, stage) {
  *   are counted in the chip instead of drawn (scene/overlay.js's inChip()). Below 720 px a chip
  *   keeps its parts and drops the room name, and one without parts hides. A tap on a chip calls onRoom(room).
  * focusRoom(id | null): frames that room (0.6 s; at once under reduced motion), shows all its
- *   markers and selects its floor; null returns to the overview and leaves the camera. The card
+ *   markers and selects its floor, showing its storey when another one is shown from inside; null returns to the overview and leaves the camera. The card
  *   uses this; setSelection(id) marks a room's floor or a marker by id: the viewer's selection,
  *   and the card's open camera. The two share one selection, so focusRoom() replaces it.
  *   A marker whose room is a house room shows only with the roof off, unless its state is
@@ -776,8 +911,8 @@ export function mount(element, model, options = {}) {
     msg.textContent = options.noWebGL || 'See seade ei toeta WebGL-i, mistõttu 3D-vaadet ei saa näidata.';
     stage.appendChild(msg);
     const noop = () => {};
-    return { failed: true, setMarkers: noop, setRoomChips: noop, focusRoom: noop, setMode: noop, setSelection: noop, setCar: noop, setLayer: noop, reset: noop, resize: noop,
-      setSun: noop, setTime: noop, snapshot: () => null, dispose: () => root.remove(), mode: 'roof', carState: 'away', carScreen: null, layers: [], time: null, view: null, sun: null };
+    return { failed: true, setMarkers: noop, setRoomChips: noop, focusRoom: noop, setMode: noop, setLevel: noop, setSelection: noop, setCar: noop, setLayer: noop, reset: noop, resize: noop,
+      setSun: noop, setTime: noop, snapshot: () => null, dispose: () => root.remove(), mode: 'roof', level: null, storeys: [], carState: 'away', carScreen: null, layers: [], time: null, view: null, sun: null };
   }
   const PR = Math.min(window.devicePixelRatio || 1, 2);
   renderer.setPixelRatio(PR);
@@ -793,9 +928,13 @@ export function mount(element, model, options = {}) {
   scene.fog = new THREE.Fog(C.bg, 34, 78);
 
   /* ---------- model ---------- */
-  // an upper storey's rooms have no floor, label or chip yet, but their markers are indoor ones
-  const rooms = (model.rooms || []).filter(r => !(r.level > 0));
-  const roomById = Object.fromEntries((model.rooms || []).map(r => [r.id, r]));
+  // every storey's rooms; the overlay shows the shown storey's labels and chips
+  const storeys = storeysOf(model), topStorey = storeys.list.length - 1, pit = pitOf(model, storeys);
+  const levelNames = (model.showcase && model.showcase.level_names) || {};
+  const storeyList = storeys.list.map(s => ({ index: s.index, name: storeyName(storeys, s.index, levelNames) }));
+  const storeyOfRoom = r => storeys.list[Math.min(topStorey, Math.max(0, levelOf(r, storeys)))];
+  const rooms = model.rooms || [];
+  const roomById = Object.fromEntries(rooms.map(r => [r.id, r]));
   const { roof, frame: modelBox } = modelFrame(model);
   const { ext, E } = modelBox;
 
@@ -809,10 +948,13 @@ export function mount(element, model, options = {}) {
   controls.screenSpacePanning = false;
 
   /* ---------- layers ---------- */
-  let mode = 'roof', sel = null, hovered = null, night = 0, sunNow = null;
-  const fade = { cur: 1, to: 1 };
+  // level: the storey shown from inside, null with the roof on; a fade per lift band, the last the roofs'
+  let mode = 'roof', level = null, sel = null, hovered = null, night = 0, sunNow = null;
+  const fades = storeys.list.map(() => ({ cur: 1, to: 1 })), fade = fades[topStorey];
   const state = {
     get mode() { return mode; },
+    get level() { return level; },
+    bandFade: i => (fades[i] ? fades[i].cur : 1),
     get roofFade() { return fade.cur; },
     get hovered() { return hovered; },
     get selection() { return sel; },
@@ -827,6 +969,11 @@ export function mount(element, model, options = {}) {
     frame: modelBox,
     roof,
     ceiling: model.ceiling,
+    storeys,
+    levelOf: o => levelOf(o, storeys),
+    storeyOf: f => storeyOfItem(model, storeys, f),
+    pit,
+    bands: (group, lift) => liftBands(THREE, storeys, group, lift),
     layer: id => byId[id] || null,
     invalidate: () => invalidate()
   };
@@ -837,12 +984,12 @@ export function mount(element, model, options = {}) {
   BUILDERS.forEach((mod, i) => {
     const L = mod && built.has(LAYERS[i]) && buildLayer(mod, LAYERS[i], ctx);
     if (!L) return;
-    const wrap = new THREE.Group();
+    const wrap = new THREE.Group(), bands = liftsOf(L, fades.length);
     wrap.add(L.group);
-    if (L.lift) wrap.add(L.lift);
+    bands.forEach(g => { if (g) wrap.add(g); });
     scene.add(wrap);
     byId[L.id] = L;
-    const e = { L, wrap, on: true, failed: false };
+    const e = { L, wrap, bands, on: true, failed: false };
     // a failed layer stays hidden, leaves the Kihid list and takes no more taps, and is told it is
     // off (once, unguarded), so what it changed in another layer (the winter's snow on the
     // ground) goes too
@@ -952,7 +1099,8 @@ export function mount(element, model, options = {}) {
 
   /* ---------- a lit style's sun, sky and shadows ---------- */
   // sun is the one shadow-casting light: the sun while it is up, the moon below the horizon
-  let sun = null, fill = null, hemi = null, glow = null, sunPlace = null, sunTime = null, sunTimer = 0, liftCasts = true, liftAt = null;
+  let sun = null, fill = null, hemi = null, glow = null, sunPlace = null, sunTime = null, sunTimer = 0;
+  const liftCasts = fades.map(() => true), liftAt = fades.map(() => null);
   // the sky behind the scene, and the same sky as the environment the surfaces reflect, both
   // redrawn only when their colours move by a 40th (skyKey), not on every minute or slider step
   let skyTex = null, pmrem = null, envScene = null, envMat = null, envTarget = null, skyKey = '';
@@ -1020,7 +1168,7 @@ export function mount(element, model, options = {}) {
   }
   const sunV = new THREE.Vector3(), corner = new THREE.Vector3(), shadowCentre = new THREE.Vector3();
   // the key light towards dir, its shadow camera holding the plan box [x0, z0, x1, z1] from y0 to y1
-  function placeSun(dir, [x0, z0, x1, z1] = modelBox.lotBox, y0 = 0, y1 = shadowTop) {
+  function placeSun(dir, [x0, z0, x1, z1] = modelBox.lotBox, y0 = Math.min(0, storeys.list[0].floor), y1 = shadowTop) {
     shadowCentre.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
     sunV.set(dir[0], dir[1], dir[2]).normalize();
     sun.position.copy(shadowCentre).addScaledVector(sunV, ext * 2);
@@ -1061,17 +1209,31 @@ export function mount(element, model, options = {}) {
     const { x: x0, z: z0 } = bounds.min, { x: x1, y: top, z: z1 } = bounds.max, m = STUDIO.margin, d = STUDIO.baseDepth;
     const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
     // the base's top sits just under the floor, so nothing at the house's floor fights with it
-    const base = kit.solid(scene, kit.keep(new THREE.MeshStandardMaterial({ color: STUDIO.base, roughness: 0.85, metalness: 0 })), [x0 - m, z0 - m, x1 + m, z1 + m], [-d - 0.003, -0.003]);
+    const baseMat = kit.keep(new THREE.MeshStandardMaterial({ color: STUDIO.base, roughness: 0.85, metalness: 0 }));
+    let base;
+    if (pit.length) {
+      // a basement opens its pit through the base and the floor; the shape's y is -z, so the turn
+      // onto the ground extrudes it upwards
+      const shape = new THREE.Shape([[x0 - m, z0 - m], [x1 + m, z0 - m], [x1 + m, z1 + m], [x0 - m, z1 + m]].map(([x, z]) => new THREE.Vector2(x, -z)));
+      pit.forEach(l => shape.holes.push(new THREE.Path(l.map(([x, z]) => new THREE.Vector2(x, -z)))));
+      base = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: d, bevelEnabled: false }).rotateX(-Math.PI / 2), baseMat);
+      base.position.y = -d - 0.003;
+      scene.add(base);
+    } else base = kit.solid(scene, baseMat, [x0 - m, z0 - m, x1 + m, z1 + m], [-d - 0.003, -0.003]);
     kit.keep(base.geometry);
     base.castShadow = base.receiveShadow = true;
     // the floor is the backdrop's colour unlit, so it meets the background with no horizon, and a
     // shadow catcher over it takes the key's shadow past the base
-    const plane = kit.keep(new THREE.PlaneGeometry(600 * E, 600 * E));
+    const h = 300 * E;
+    const plane = kit.keep(pit.length ? kit.flatShape([[cx - h, cz - h], [cx + h, cz - h], [cx + h, cz + h], [cx - h, cz + h]], pit) : new THREE.PlaneGeometry(600 * E, 600 * E));
     const floor = new THREE.Mesh(plane, kit.keep(new THREE.MeshBasicMaterial({ color: backdrop, toneMapped: false })));
     const catcher = new THREE.Mesh(plane, kit.keep(new THREE.ShadowMaterial({ opacity: STUDIO.floorShadow })));
     [floor, catcher].forEach((o, i) => {
-      o.rotation.x = -Math.PI / 2;
-      o.position.set(cx, -d - 0.003 + i * 0.002, cz);
+      if (pit.length) o.position.y = -d - 0.003 + i * 0.002;
+      else {
+        o.rotation.x = -Math.PI / 2;
+        o.position.set(cx, -d - 0.003 + i * 0.002, cz);
+      }
     });
     catcher.receiveShadow = true;
     scene.add(floor, catcher);
@@ -1172,6 +1334,7 @@ export function mount(element, model, options = {}) {
     THREE, root, el: overlayEl, camera, rooms, roomById, options, reduceMotion, toScreen, icon,
     width: () => width, height: () => height,
     roofFade: () => fade.cur, mode: () => mode, selection: () => sel, focus: () => focus, markersOn: () => markerLayer.on,
+    shown: () => (level === null ? storeys.ground : level), storeyOf: r => storeyOfRoom(r).index, floorOf: r => storeyOfRoom(r).floor,
     invalidate, narrowBelow: BLOOM_MIN_WIDTH
   });
   function setMarkers(list) {
@@ -1180,14 +1343,19 @@ export function mount(element, model, options = {}) {
   }
 
   /* ---------- modes and selection ---------- */
-  function setMode(m, instant) {
-    mode = m === 'open' ? 'open' : 'roof';
-    fade.to = mode === 'roof' ? 1 : 0;
+  // setLevel(k): storey k from inside, every band from k up lifted; null puts the roof on
+  function setLevel(k, instant) {
+    level = Number.isInteger(k) && k >= 0 && k <= topStorey ? k : null;
+    mode = level === null ? 'roof' : 'open';
+    const to = bandTargets(level, fades.length);
+    fades.forEach((f, i) => { f.to = to[i]; });
     // an instant switch skips the frames that ease the fade, which would mark the shadows stale
-    if (instant || reduceMotion) { fade.cur = fade.to; shadowsDirty(); }
+    if (instant || reduceMotion) { fades.forEach(f => { f.cur = f.to; }); shadowsDirty(); }
     invalidate();
-    if (options.onMode) options.onMode(mode);
+    if (options.onMode) options.onMode(mode, level);
   }
+  // 'open' is the top storey from inside
+  const setMode = (m, instant) => setLevel(m === 'open' ? topStorey : null, instant);
   function setSelection(id) {
     sel = id || null;
     overlay.rerender();
@@ -1209,7 +1377,10 @@ export function mount(element, model, options = {}) {
       orbitV.copy(camera.position).sub(controls.target);
       const flat = Math.hypot(orbitV.x, orbitV.z) || 1, el = Math.max(50 * D2R, Math.atan2(orbitV.y, flat));
       const dir = new THREE.Vector3((orbitV.x / flat) * Math.cos(el), Math.sin(el), (orbitV.z / flat) * Math.cos(el));
-      const h = homeView([...b, model.ceiling || 2.6], dir, camera.aspect, camera.fov, 0.15);
+      const st = storeyOfRoom(r);
+      // a room on another storey than the one shown from inside is framed with its storey shown
+      if (level !== null && st.index !== level) setLevel(st.index);
+      const h = homeView([...b, st.cut, st.floor], dir, camera.aspect, camera.fov, 0.15);
       const to = { target: h.target, dist: Math.min(controls.maxDistance, Math.max(controls.minDistance, h.distance)) };
       tween = { t: reduceMotion ? 1 : 0, dir, from: { target: controls.target.clone(), dist: camera.position.distanceTo(controls.target) }, to };
       spin = null;
@@ -1423,28 +1594,32 @@ export function mount(element, model, options = {}) {
       samples.push(sampleNow(now));
       while (samples.length > 2 && now - samples[0].t > 200) samples.shift();
     }
-    if (!kit.near(fade.cur, fade.to)) { fade.cur += (fade.to - fade.cur) * k; moving = true; shadowsDirty(); } else if (fade.cur !== fade.to) { fade.cur = fade.to; shadowsDirty(); }
-    // the lifts move only with the roof; a layer that keeps animating (falling snow) leaves them be
-    if (liftAt !== fade.cur) {
-      liftAt = fade.cur;
-      layers.forEach(({ L }) => {
-        if (!L.lift) return;
-        L.lift.position.y = (1 - fade.cur) * 4.5;
-        kit.applyFade(L.lift, Math.max(0, fade.cur * 1.25 - 0.25));
-      });
-    }
-    // the shadow pass ignores opacity, so the lift casts only while the roof is fully on
-    if (lit && liftCasts !== fade.cur > 0.99) {
-      liftCasts = fade.cur > 0.99;
-      shadowsDirty();
-      layers.forEach(({ L }) => {
-        if (L.lift) L.lift.traverse(o => {
-          if (!o.isMesh) return;
-          if (o.userData.cast === undefined) o.userData.cast = o.castShadow;
-          o.castShadow = liftCasts && o.userData.cast;
+    fades.forEach((f, i) => {
+      if (!kit.near(f.cur, f.to)) { f.cur += (f.to - f.cur) * k; moving = true; shadowsDirty(); } else if (f.cur !== f.to) { f.cur = f.to; shadowsDirty(); }
+      // a band moves only with its fade; a layer that keeps animating (falling snow) leaves it be
+      if (liftAt[i] !== f.cur) {
+        liftAt[i] = f.cur;
+        layers.forEach(({ bands }) => {
+          const g = bands && bands[i];
+          if (!g) return;
+          g.position.y = (1 - f.cur) * 4.5;
+          kit.applyFade(g, Math.max(0, f.cur * 1.25 - 0.25));
         });
-      });
-    }
+      }
+      // the shadow pass ignores opacity, so a band casts only while it is fully on
+      if (lit && liftCasts[i] !== f.cur > 0.99) {
+        liftCasts[i] = f.cur > 0.99;
+        shadowsDirty();
+        layers.forEach(({ bands }) => {
+          const g = bands && bands[i];
+          if (g) g.traverse(o => {
+            if (!o.isMesh) return;
+            if (o.userData.cast === undefined) o.userData.cast = o.castShadow;
+            o.castShadow = liftCasts[i] && o.userData.cast;
+          });
+        });
+      }
+    });
     layers.forEach(({ L }) => { if (L.update && L.update(dt, k)) { moving = true; if (L.shades) shadowsDirty(); } });
     if (stepAO(dt)) moving = true;
     if (!moving && !dirty) { raf = 0; if (options.onIdle) options.onIdle(); return; }
@@ -1517,7 +1692,8 @@ export function mount(element, model, options = {}) {
   }
 
   resize();
-  setMode(options.mode === 'open' ? 'open' : 'roof', true);
+  if (Number.isInteger(options.level)) setLevel(options.level, true);
+  else setMode(options.mode === 'open' ? 'open' : 'roof', true);
   updateSun();
   // live: the sun moves on once a minute, in every style while there is a place (onSun, ctx.state.sun)
   sunTimer = setInterval(() => { if (!sunTime && sunPlace) updateSun(); }, 60000);
@@ -1560,9 +1736,11 @@ export function mount(element, model, options = {}) {
 
   // carState and carScreen stay getters, so a copy of this object would freeze them
   return {
-    setMarkers, setRoomChips: overlay.setRoomChips, focusRoom, setMode, setSelection, setLayer, reset, resize, dispose, setSun, setTime, snapshot,
+    setMarkers, setRoomChips: overlay.setRoomChips, focusRoom, setMode, setLevel, setSelection, setLayer, reset, resize, dispose, setSun, setTime, snapshot,
     setCar: s => { if (byId.car) byId.car.api.setCar(s); },
     get mode() { return mode; },
+    get level() { return level; },
+    get storeys() { return storeyList; },
     get time() { return sunTime ? new Date(sunTime) : new Date(); },
     get sun() { return sunNow; },
     get view() { return { position: camera.position.toArray(), target: controls.target.toArray() }; },

@@ -36,11 +36,13 @@ export function panelGrid(w, d, panels) {
   return out;
 }
 
-export default function build({ THREE, kit, C, model, look, state, roof }) {
+export default function build({ THREE, kit, C, model, look, state, roof, layer, storeys, bands }) {
   const items = ((model.future || {}).items || []).filter(it => it && Array.isArray(it.pos));
   if (!items.length) return null;
   const lit = look.lit;
   const group = new THREE.Group(), lift = new THREE.Group();
+  // with a basement the ground storey's contents are lift band 0's
+  const B = bands(group, lift);
 
   // a lit style's one material per surface; the simple style's one fill and its line
   const mats = {};
@@ -68,7 +70,8 @@ export default function build({ THREE, kit, C, model, look, state, roof }) {
 
   // a house room's floor covers what stands in it: such an item takes taps with the roof off only
   const indoor = new Set();
-  const inHouse = ([x, z]) => (model.rooms || []).some(r => r.floor !== 'paving' && r.rects.some(([x0, z0, x1, z1]) => x >= x0 && x <= x1 && z >= z0 && z <= z1));
+  // an item stands on the ground, so the house is the ground storey's rooms (building's inRoom)
+  const building = layer('building'), inHouse = ([x, z]) => !!(building && building.api && building.api.inRoom(x, z));
 
   function pv(it) {
     const top = roof.top(it.roof);
@@ -161,13 +164,16 @@ export default function build({ THREE, kit, C, model, look, state, roof }) {
     g.rotation.y = -(it.rot || 0) * D2R;
     KINDS[it.kind](g, it);
     if (inHouse(it.pos)) indoor.add(it.id);
-    group.add(g);
+    // an item in the house stands with the ground storey's contents: with a basement, lift band 0
+    (indoor.has(it.id) ? B.of(storeys.ground) : group).add(g);
   });
 
+  B.separate();
   return {
     id: 'future',
     group,
     lift,
+    lifts: B.lifts,
     toggle: true,
     // the raycaster ignores visibility: the panels take no tap while the roof is raised and
     // hidden, an item in a house room none while the roof is on

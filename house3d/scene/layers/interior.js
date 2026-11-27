@@ -1,17 +1,21 @@
-// A lit style's interior, drawn as an architectural model: a near-black section cap on every
-// wall's flat cut top, oak skirting and a soft shade on the floor along every wall face that
-// has a house room in front of it, and the furniture shaped by its kind (scripts/house3d_model.py
+// A lit style's interior, drawn as an architectural model, every storey's with its storey's
+// contents (ctx.bands: the group for the lowest storey, else the lift band under it): a near-black
+// section cap on every wall's flat cut top, oak skirting and a soft shade on the floor along every
+// wall face that has a house room of its storey in front of it, and the furniture, on the storey
+// ctx.storeyOf gives it, its legs down to that floor, shaped by its kind (scripts/house3d_model.py
 // FURNITURE_KINDS; an item without one is a warm grey block; a chair's or sofa's back is on the
 // edge it names, else the side nearer a wall). It reads the building layer's
 // inRoom and cutOf through its api, so it builds after it, and builds nothing in the
 // simple style or without the building. Caps, skirting and shade are one InstancedMesh each, the
-// furniture one per material, so the interior costs a handful of draw calls; every mesh carries
+// furniture one per material and storey, so the interior costs a handful of draw calls; every mesh carries
 // userData.part, the furniture userData.items (the item index of each instance) and the caps
 // userData.walls (the wall index of each, or the id of a chimney cut at the ceiling). A run of fitted units draws its fronts in order from
 // the low end of its along axis, in the item's finish (the kitchen's blue-grey under a brown worktop
 // without one), a stack of drawers about DRAWER_H a drawer. A splashback and a curtain are each
-// one mesh of their own, part 'splashback' or 'curtain'. With the roof fully on, the cut walls'
-// caps are hidden: the lifted wall above sits on them.
+// one mesh of their own, part 'splashback' or 'curtain'. A stair is a closed flight, a white block
+// under each oak tread, about STAIR_RISE a step, climbing to its rect's edge up; a landing a white
+// block under an oak top. While a storey's band over its cut is fully on, that storey's cut caps
+// are hidden: the lifted wall above sits on them.
 const CAP_H = 0.01, CAP_LIFT = 0.002, CAP_INSET = 0.005; // inset from each face and a free end
 const SKIRT_H = 0.07, SKIRT_D = 0.012, FLOOR_Y = 0.02;
 const PROBE = 0.25, PROBE_OUT = 0.3; // how often and how far out a face is probed for a room
@@ -23,7 +27,7 @@ const MAIN = {
   bed: 'oak', headboard: 'fabric', wardrobe: 'cabinet', sofa: 'sofa', table: 'oak', desk: 'oak',
   counter: 'cabinet', cabinet: 'oak', bath: 'sanitary', bench: 'oak', appliance: 'unit', rug: 'rug',
   toilet: 'sanitary', mirror: 'mirror', washer: 'white', bookcase: 'kitchen', chair: 'shell', office_chair: 'sofa',
-  plant: 'leaf', picture: 'canvas'
+  plant: 'leaf', picture: 'canvas', stair: 'oak', landing: 'oak'
 };
 // an item's finish other than the kitchen's: the surfaces its kitchen and kitchenTop parts and
 // its handles take; scripts/house3d_model.py FINISHES lists the same names
@@ -68,14 +72,18 @@ const STROKES = [
 ];
 // a washer's door and control strip; a stove's cage bars, their spacing and the stones' lumps
 const DOOR_R = 0.33, STRIP_H = 0.07, BAR_T = 0.012, BAR_STEP = 0.1, LUMPS = 3;
+// a stair's rise per step (scripts/house3d_model.py STAIR_RISE) and its treads' and a landing's oak
+const STAIR_RISE = 0.18, TREAD = 0.04;
 
-export default function build({ THREE, kit, model, roof, state, look, layer }) {
+export default function build({ THREE, kit, model, roof, state, look, layer, storeys: st, bands, levelOf, storeyOf }) {
   if (!look.lit) return null;
   const building = layer('building');
   if (!building || !building.api) return null;
   const { inRoom, cutOf } = building.api;
+  const floorOf = s => (st.list[s] ? st.list[s].floor : 0);
   const walls = model.walls || [];
-  const group = new THREE.Group();
+  const group = new THREE.Group(), lift = new THREE.Group();
+  const B = bands(group, lift);
   const unitBox = new THREE.BoxGeometry(1, 1, 1);
   const Y = new THREE.Vector3(0, 1, 0), ONE = new THREE.Vector3(1, 1, 1);
   const q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
@@ -89,15 +97,17 @@ export default function build({ THREE, kit, model, roof, state, look, layer }) {
   // a box in wall frame f, centre (x, y, z) and size (sx, sy, sz), turned turn radians about y
   const inWall = (f, x, y, z, sx, sy, sz, turn = 0) => f.m.clone().multiply(new THREE.Matrix4().compose(p.set(x, y, z), q.setFromAxisAngle(Y, turn), sc.set(sx, sy, sz)));
 
-  function instanced(geo, mat, list, part) {
+  function instanced(geo, mat, list, part, parent = group) {
     const im = new THREE.InstancedMesh(geo, mat, list.length);
     list.forEach((m, i) => im.setMatrixAt(i, m));
     im.instanceMatrix.needsUpdate = true;
     im.computeBoundingSphere();
     im.userData.part = part;
-    group.add(im);
+    parent.add(im);
     return im;
   }
+  // a list per storey, in storey order
+  const perStorey = () => st.list.map(() => []);
 
   /* ---------- section caps ---------- */
   // how far a cap runs on past end P of wall f (dir d points away from the wall) over the wall it
@@ -106,7 +116,7 @@ export default function build({ THREE, kit, model, roof, state, look, layer }) {
   function endReach(f, P, d) {
     let reach = -1;
     frames.forEach(g => {
-      if (g === f || g.w.finish === 'panel' || g.w.level > 0) return;
+      if (g === f || g.w.finish === 'panel' || levelOf(g.w) !== levelOf(f.w)) return;
       if (Math.abs(f.ux * g.ux + f.uz * g.uz) > 0.9) {
         if ([g.w.a, g.w.b].some(Q => Math.hypot(Q[0] - P[0], Q[1] - P[1]) < 0.01)) reach = Math.max(reach, 0);
         return;
@@ -121,38 +131,42 @@ export default function build({ THREE, kit, model, roof, state, look, layer }) {
     });
     return reach < 0 ? -CAP_INSET : Math.min(reach, 1);
   }
-  const capUncut = [], capCut = [];
+  const capUncut = perStorey(), capCut = perStorey();
   frames.forEach((f, i) => {
     const { w, L, ux, uz } = f;
-    // an upper storey's walls are the lift's, outside the interior for now
-    if (w.finish === 'panel' || w.level > 0) return;
+    if (w.finish === 'panel') return;
+    // a wall stands up to the lower of its top and its cut (building.js)
     const cut = cutOf(w), wallTop = roof.topFn(w.top);
-    const top = u => (cut ? cut : wallTop(w.a[0] + ux * u, w.a[1] + uz * u));
+    const top = u => (cut ? Math.min(cut, wallTop(w.a[0] + ux * u, w.a[1] + uz * u)) : wallTop(w.a[0] + ux * u, w.a[1] + uz * u));
     if (Math.abs(top(0) - top(L)) >= 0.005) return;
     const y = top(0), lo = -endReach(f, w.a, [-ux, -uz]), hi = L + endReach(f, w.b, [ux, uz]);
     const gaps = (w.openings || []).filter(o => (o.sill || 0) + o.h > y - 0.01).map(o => [o.c - o.w / 2, o.c + o.w / 2]).sort((a, b) => a[0] - b[0]);
-    kit.spans(lo, hi, gaps, 0.01).forEach(([a, b]) => (cut ? capCut : capUncut).push([i, inWall(f, (a + b) / 2, y + CAP_LIFT + CAP_H / 2, 0, b - a, CAP_H, w.t - 2 * CAP_INSET)]));
+    kit.spans(lo, hi, gaps, 0.01).forEach(([a, b]) => (cut ? capCut : capUncut)[levelOf(w)].push([i, inWall(f, (a + b) / 2, y + CAP_LIFT + CAP_H / 2, 0, b - a, CAP_H, w.t - 2 * CAP_INSET)]));
   });
-  // a ground floor chimney cut at the ceiling is capped like a cut wall
+  // a chimney cut at its storey's cut is capped like a cut wall
   (roof.chimneys || []).forEach(c => {
     if (!c.cut) return;
     const [x0, z0, x1, z1] = c.rect;
-    capCut.push([c.id, new THREE.Matrix4().compose(p.set((x0 + x1) / 2, c.cut + CAP_LIFT + CAP_H / 2, (z0 + z1) / 2), q.identity(), sc.set(x1 - x0 - 2 * CAP_INSET, CAP_H, z1 - z0 - 2 * CAP_INSET))]);
+    capCut[c.level].push([c.id, new THREE.Matrix4().compose(p.set((x0 + x1) / 2, c.cut + CAP_LIFT + CAP_H / 2, (z0 + z1) / 2), q.identity(), sc.set(x1 - x0 - 2 * CAP_INSET, CAP_H, z1 - z0 - 2 * CAP_INSET))]);
   });
-  // the cut walls' caps last, so hiding them is a shorter count
-  const capList = [...capUncut, ...capCut];
-  const caps = capList.length ? instanced(unitBox, kit.surface('cut'), capList.map(c => c[1]), 'cap') : null;
-  if (caps) {
-    caps.userData.walls = capList.map(c => c[0]);
-    caps.receiveShadow = true;
-  }
+  // each storey's caps, the cut walls' last, so hiding them is a shorter count
+  const capMat = kit.surface('cut');
+  const caps = st.list.map((_, s) => {
+    const capList = [...capUncut[s], ...capCut[s]];
+    if (!capList.length) return null;
+    const im = instanced(unitBox, capMat, capList.map(c => c[1]), 'cap', B.of(s));
+    im.userData.walls = capList.map(c => c[0]);
+    im.userData.storey = s;
+    im.receiveShadow = true;
+    return { im, uncut: capUncut[s].length, all: capList.length };
+  });
 
   /* ---------- skirting and floor shade ---------- */
-  const skirts = [], shades = [];
+  const skirts = perStorey(), shades = perStorey();
   frames.forEach(f => {
     const { w, L, ux, uz } = f;
-    // an upper storey's walls are the lift's, outside the interior for now
-    if (w.finish === 'panel' || w.level > 0) return;
+    if (w.finish === 'panel') return;
+    const s0 = levelOf(w), fy = floorOf(s0);
     const gaps = (w.openings || []).filter(o => o.kind !== 'window' || o.sill < SKIRT_H).map(o => [o.c - o.w / 2, o.c + o.w / 2]).sort((a, b) => a[0] - b[0]);
     const n = Math.max(1, Math.ceil(L / PROBE)), k = w.t / 2 + PROBE_OUT;
     [1, -1].forEach(s => {
@@ -160,20 +174,21 @@ export default function build({ THREE, kit, model, roof, state, look, layer }) {
       const runs = [];
       for (let j = 0; j < n; j++) {
         const u = ((j + 0.5) * L) / n, x = w.a[0] + ux * u - uz * k * s, z = w.a[1] + uz * u + ux * k * s;
-        if (!inRoom(x, z)) continue;
+        if (!inRoom(x, z, s0)) continue;
         const last = runs[runs.length - 1], a = (j * L) / n, b = ((j + 1) * L) / n;
         if (last && Math.abs(last[1] - a) < 1e-9) last[1] = b;
         else runs.push([a, b]);
       }
       runs.flatMap(([lo, hi]) => kit.spans(lo, hi, gaps, 0.02)).forEach(([a, b]) => {
         const c = (a + b) / 2, len = b - a;
-        skirts.push(inWall(f, c, FLOOR_Y + SKIRT_H / 2, s * (w.t / 2 + SKIRT_D / 2), len, SKIRT_H, SKIRT_D));
-        shades.push(inWall(f, c, SHADE_Y, s * (w.t / 2 + SHADE_W / 2), len, 1, SHADE_W, s > 0 ? 0 : Math.PI));
+        skirts[s0].push(inWall(f, c, fy + FLOOR_Y + SKIRT_H / 2, s * (w.t / 2 + SKIRT_D / 2), len, SKIRT_H, SKIRT_D));
+        shades[s0].push(inWall(f, c, fy + SHADE_Y, s * (w.t / 2 + SHADE_W / 2), len, 1, SHADE_W, s > 0 ? 0 : Math.PI));
       });
     });
   });
-  if (skirts.length) instanced(unitBox, kit.surface('skirting'), skirts, 'skirting').receiveShadow = true;
-  if (shades.length) {
+  const skirtMat = skirts.some(l => l.length) ? kit.surface('skirting') : null;
+  skirts.forEach((list, s) => { if (list.length) instanced(unitBox, skirtMat, list, 'skirting', B.of(s)).receiveShadow = true; });
+  if (shades.some(l => l.length)) {
     // dark at the wall (v 1, the plane's local -z, which faces the wall) fading to nothing
     const data = new Uint8Array(SHADE_PX * 4);
     for (let j = 0; j < SHADE_PX; j++) data[j * 4 + 3] = Math.round(255 * ((j + 0.5) / SHADE_PX) ** 2);
@@ -187,7 +202,7 @@ export default function build({ THREE, kit, model, roof, state, look, layer }) {
       color: 0x000000, map: tex, transparent: true, opacity: SHADE_OPACITY, depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4
     }));
-    instanced(plane, mat, shades, 'shade');
+    shades.forEach((list, s) => { if (list.length) instanced(plane, mat, list, 'shade', B.of(s)); });
   }
 
   /* ---------- furniture ---------- */
@@ -206,7 +221,7 @@ export default function build({ THREE, kit, model, roof, state, look, layer }) {
   // a splashback: a thin slab on its rect, its UVs in metres along the wall and up it
   function splashback(f, i) {
     const [x0, z0, x1, z1] = f.rect, alongX = x1 - x0 >= z1 - z0;
-    const m = kit.solid(group, mat('splash', () => kit.surface('linen', { map: kit.splashTiles(), roughness: 0.42 })), f.rect, f.y);
+    const m = kit.solid(B.of(storeyOf(f)), mat('splash', () => kit.surface('linen', { map: kit.splashTiles(), roughness: 0.42 })), f.rect, f.y);
     const pos = m.geometry.attributes.position, uv = m.geometry.attributes.uv;
     for (let k = 0; k < pos.count; k++) uv.setXY(k, alongX ? pos.getX(k) + m.position.x : pos.getZ(k) + m.position.z, pos.getY(k) + m.position.y);
     m.userData = { part: 'splashback', items: [i] };
@@ -228,7 +243,7 @@ export default function build({ THREE, kit, model, roof, state, look, layer }) {
     const m = new THREE.Mesh(geo, mat('sheer'));
     m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
     m.userData = { part: 'curtain', items: [i] };
-    group.add(m);
+    B.of(storeyOf(f)).add(m);
   }
   // item f's own frame: s along its long side from the head end, d across from the back side;
   // box() turns a part given in it into a world rect
@@ -266,10 +281,13 @@ export default function build({ THREE, kit, model, roof, state, look, layer }) {
     return { L: l1 - l0, D: c1 - c0, box, alongX, frontSign: backLo ? 1 : -1 };
   }
 
-  const parts = new Map(); // surface name -> [{ i, matrix }]
+  // the storey of the item being drawn: its parts go with that storey's contents
+  let storey = 0;
+  const parts = new Map(); // storey and surface name -> [{ i, matrix }]
   const push = (name, i, matrix) => {
-    if (!parts.has(name)) parts.set(name, []);
-    parts.get(name).push({ i, matrix });
+    const key = `${storey} ${name}`;
+    if (!parts.has(key)) parts.set(key, { storey, name, list: [] });
+    parts.get(key).list.push({ i, matrix });
   };
   const add = (name, i, rect, y0, y1) => {
     if (rect[2] - rect[0] < 0.005 || rect[3] - rect[1] < 0.005 || y1 - y0 < 0.002) return;
@@ -286,10 +304,11 @@ export default function build({ THREE, kit, model, roof, state, look, layer }) {
     push(name, i, new THREE.Matrix4().compose(p.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), q.setFromAxisAngle(axis, turn),
       alongX ? sc.set(x1 - x0, t, len) : sc.set(len, t, z1 - z0)));
   };
-  const cylinders = new Map(); // surface name -> [{ i, matrix }], on one unit cylinder
+  const cylinders = new Map(); // storey and surface name -> [{ i, matrix }], on one unit cylinder
   const cylinder = (name, i, x, z, r, y0, y1) => {
-    if (!cylinders.has(name)) cylinders.set(name, []);
-    cylinders.get(name).push({ i, matrix: new THREE.Matrix4().compose(p.set(x, (y0 + y1) / 2, z), q.identity(), sc.set(r, y1 - y0, r)) });
+    const key = `${storey} ${name}`;
+    if (!cylinders.has(key)) cylinders.set(key, { storey, name, list: [] });
+    cylinders.get(key).list.push({ i, matrix: new THREE.Matrix4().compose(p.set(x, (y0 + y1) / 2, z), q.identity(), sc.set(r, y1 - y0, r)) });
   };
 
   // the strip w wide along a rect's edge x0, x1, z0 or z1
@@ -581,6 +600,23 @@ export default function build({ THREE, kit, model, roof, state, look, layer }) {
       const edge = Math.min(0.03, Math.min(L, D) / 4);
       part('rug', 0, L, 0, D, y0, y0 + 0.6 * (y1 - y0));
       part('rug', edge, L - edge, edge, D - edge, y0, y1);
+    },
+    stair({ world, item, y0, y1, floor }) {
+      // n steps from y0 to y1 along the rect towards its edge up, each a white block from the
+      // floor under an oak tread
+      const [x0, z0, x1, z1] = item.rect, alongX = item.up[0] === 'x', rising = item.up[1] === '1';
+      const lo = alongX ? x0 : z0, hi = alongX ? x1 : z1, n = Math.max(1, Math.round((y1 - y0) / STAIR_RISE));
+      const run = (hi - lo) / n, rise = (y1 - y0) / n;
+      for (let k = 0; k < n; k++) {
+        const a = rising ? lo + k * run : hi - (k + 1) * run, top = y0 + (k + 1) * rise;
+        const r = alongX ? [a, z0, a + run, z1] : [x0, a, x1, a + run];
+        world('white', r, floor, top - TREAD);
+        world('oak', r, top - TREAD, top);
+      }
+    },
+    landing({ world, item, y1, floor }) {
+      world('white', item.rect, floor, y1 - TREAD);
+      world('oak', item.rect, y1 - TREAD, y1);
     }
   };
   // calls draw(type, s0, s1) for each front, from the run's low end, scaled to fill its length
@@ -651,31 +687,33 @@ export default function build({ THREE, kit, model, roof, state, look, layer }) {
     } else leaf(part, s0, s1, a, b, proud, STILE);
     handleAt(part, s0, s1, y, proud);
   }
-  // a table's or desk's top: the item's own slab when it floats (y0 > 0), else TOP at y1
-  const underTop = (y0, y1) => (y0 > 0 ? y0 : y1 - TOP);
-  // a table's or desk's top on four legs or, for a desk, two side panels down to the floor
-  function legs({ part, L, D, y0, y1 }, panels) {
-    const under = underTop(y0, y1);
+  // a table's or desk's top: the item's own slab when it floats over its floor, else TOP at y1
+  const underTop = (y0, y1, floor) => (y0 > floor ? y0 : y1 - TOP);
+  // a table's or desk's top on four legs or, for a desk, two side panels down to its floor
+  function legs({ part, L, D, y0, y1, floor }, panels) {
+    const under = underTop(y0, y1, floor);
     part('oak', 0, L, 0, D, under, y1);
     if (panels) {
-      part('oak', LEG_IN, LEG_IN + PANEL, LEG_IN, D - LEG_IN, 0, under);
-      part('oak', L - LEG_IN - PANEL, L - LEG_IN, LEG_IN, D - LEG_IN, 0, under);
+      part('oak', LEG_IN, LEG_IN + PANEL, LEG_IN, D - LEG_IN, floor, under);
+      part('oak', L - LEG_IN - PANEL, L - LEG_IN, LEG_IN, D - LEG_IN, floor, under);
       return;
     }
     [[LEG_IN, LEG_IN + LEG], [L - LEG_IN - LEG, L - LEG_IN]].forEach(([s0, s1]) =>
-      [[LEG_IN, LEG_IN + LEG], [D - LEG_IN - LEG, D - LEG_IN]].forEach(([d0, d1]) => part('oak', s0, s1, d0, d1, 0, under)));
+      [[LEG_IN, LEG_IN + LEG], [D - LEG_IN - LEG, D - LEG_IN]].forEach(([d0, d1]) => part('oak', s0, s1, d0, d1, floor, under)));
   }
 
   items.forEach((f, i) => {
     const [y0, y1] = f.y, shape = f.kind && SHAPES[f.kind];
+    storey = storeyOf(f);
+    const floor = floorOf(storey);
     // a finish recolours the kitchen's surfaces the shapes draw in
     const surf = name => (FINISHES[f.finish] || {})[name] || name;
     if (f.circle) {
       const [x, z, r] = f.circle;
       if (f.kind !== 'table') return cylinder(surf(MAIN[f.kind] || 'furniture'), i, x, z, r, y0, y1);
-      const under = underTop(y0, y1);
+      const under = underTop(y0, y1, floor);
       cylinder(surf('oak'), i, x, z, r, under, y1);
-      cylinder(surf('oak'), i, x, z, Math.min(0.06, r / 3), 0, under);
+      cylinder(surf('oak'), i, x, z, Math.min(0.06, r / 3), floor, under);
       return;
     }
     if (f.kind === 'splashback') return splashback(f, i);
@@ -687,28 +725,29 @@ export default function build({ THREE, kit, model, roof, state, look, layer }) {
       world: (name, rect, a, b) => add(surf(name), i, rect, a, b),
       cyl: (name, x, z, r, a, b) => cylinder(surf(name), i, x, z, r, a, b),
       lean: (name, s0, s1, d0, d1, a, b, t) => leaning(surf(name), i, fr, s0, s1, d0, d1, a, b, t),
-      L, D, y0, y1, h: y1 - y0, item: f, frame: fr
+      L, D, y0, y1, h: y1 - y0, floor, item: f, frame: fr
     });
   });
 
-  parts.forEach((list, name) => {
-    const im = instanced(unitBox, mat(name), list.map(x => x.matrix), 'furniture');
+  parts.forEach(({ storey: s, name, list }) => {
+    const im = instanced(unitBox, mat(name), list.map(x => x.matrix), 'furniture', B.of(s));
     im.userData.items = list.map(x => x.i);
     im.castShadow = im.receiveShadow = true;
   });
   const unitCylinder = new THREE.CylinderGeometry(1, 1, 1, CYLINDER_SEGMENTS);
-  cylinders.forEach((list, name) => {
-    const im = instanced(unitCylinder, mat(name), list.map(x => x.matrix), 'furniture');
+  cylinders.forEach(({ storey: s, name, list }) => {
+    const im = instanced(unitCylinder, mat(name), list.map(x => x.matrix), 'furniture', B.of(s));
     im.userData.items = list.map(x => x.i);
     im.castShadow = im.receiveShadow = true;
   });
 
-  // the cut walls' caps hide under the lifted walls while the roof is fully on; they cast no
-  // shadow, so this layer has no shades
+  // a storey's cut walls' caps hide under its lifted walls while the band over its cut is fully on;
+  // they cast no shadow, so this layer has no shades
   function update() {
-    if (caps) caps.count = state.roofFade > ROOF_ON ? capUncut.length : capList.length;
+    caps.forEach((c, s) => { if (c) c.im.count = state.bandFade(s) > ROOF_ON ? c.uncut : c.all; });
     return false;
   }
   update();
-  return { id: 'interior', group, update };
+  B.separate();
+  return st.list.length > 1 ? { id: 'interior', group, lifts: B.lifts.map((l, i) => (i < B.lifts.length - 1 ? l : null)), update } : { id: 'interior', group, update };
 }

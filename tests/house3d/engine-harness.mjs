@@ -26,7 +26,7 @@ export const { createKit } = await import(new URL('scene/kit.js', E));
 export const { createLook } = await import(new URL('scene/look.js', E));
 export const { photoLook } = await import(new URL('scene/photo.js', E));
 export const BUILDERS = await Promise.all(LAYERS.map(id => import(new URL(`scene/layers/${id}.js`, E))));
-export const { modelFrame, seasonOn, seasonWindow, buildLayer, guardLayer, syncCamera, toScreen, releaseVelocity, coast, homeBox, homeDir, homeView, pvNow, roofNormal, roofTop, tapAction, aoWanted, resolveStyle, autoQuality } = await import(new URL('house3d.js', E));
+export const { modelFrame, seasonOn, seasonWindow, buildLayer, guardLayer, syncCamera, toScreen, releaseVelocity, coast, homeBox, homeDir, homeView, pvNow, roofNormal, roofTop, tapAction, aoWanted, resolveStyle, autoQuality, storeysOf, levelOf, storeyOfItem, pitOf, liftBands, liftsOf, bandTargets, storeyName } = await import(new URL('house3d.js', E));
 export const { collide, inChip, hitRect, markerClass, drawnAt } = await import(new URL('scene/overlay.js', E));
 export const { OrbitControls } = await import(new URL('vendor/three-0.187.0/examples/jsm/controls/OrbitControls.js', E));
 export const { sunPosition, gridBearing, sunDirection, sunGlow, realLight } = await import(new URL('scene/sun.js', E));
@@ -55,13 +55,20 @@ export function makeCtx(opts = options, m = model) {
   const kit = createKit(THREE, style, m.look);
   const look = createLook(THREE, kit, style, { light: realLight, photo: photoLook, quality: opts.quality });
   const { roof, frame } = modelFrame(m);
+  const storeys = storeysOf(m);
   const byId = {};
   const ctx = {
     THREE, kit, C: kit.C, model: m, options: opts, style: look.id, look, stage, reduceMotion: false,
-    state: { mode: 'roof', roofFade: 1, hovered: null, selection: null, night: 0 },
+    // bandFade(i): fades[i] when a test sets it, else roofFade, the top band's
+    state: { mode: 'roof', level: null, roofFade: 1, fades: {}, bandFade(i) { return i in this.fades ? this.fades[i] : this.roofFade; }, hovered: null, selection: null, night: 0 },
     screen: () => null,
     frame, roof,
     ceiling: m.ceiling,
+    storeys,
+    levelOf: o => levelOf(o, storeys),
+    storeyOf: f => storeyOfItem(m, storeys, f),
+    pit: pitOf(m, storeys),
+    bands: (group, lift) => liftBands(THREE, storeys, group, lift),
     layer: id => byId[id] || null,
     invalidate: () => {}
   };
@@ -80,12 +87,15 @@ export function buildAll(opts, m = model) {
   return { ctx, built, byId };
 }
 
-// one layer's objects in traversal order (group, then lift), each with its material's id; the
-// ids give which objects share a material instance
+// a layer's group, then its lift bands in order (one, the lift, for a house of one storey)
+export const rootsOf = L => [L.group, ...liftsOf(L)].filter(Boolean);
+
+// one layer's objects in traversal order (group, then the lift bands), each with its material's id;
+// the ids give which objects share a material instance
 export function describeLayer(L) {
   const ids = new Map(), materials = {}, objects = [];
   const r = v => Number(v.toFixed(4));
-  [L.group, L.lift].filter(Boolean).forEach(root => root.traverse(o => {
+  rootsOf(L).forEach(root => root.traverse(o => {
     let line = `${o.type} ${o.renderOrder}`;
     if (o.material) {
       const mt = o.material;

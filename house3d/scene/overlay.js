@@ -154,7 +154,9 @@ export function inChip(m, chip, focus) {
  *   core made), camera, width() and height() of the view, rooms and roomById, options (labels,
  *   onMarker, onRoom), reduceMotion, the core's toScreen and icon, getters roofFade(), mode(),
  *   selection(), focus() and markersOn() (the markers switch), invalidate, and narrowBelow, the
- *   width under which the view is narrow.
+ *   width under which the view is narrow; with storeys, shown() (the storey shown from inside),
+ *   storeyOf(room) and floorOf(room): labels stand on their room's floor, and labels, chips and
+ *   covered indoor markers show for the shown storey's rooms alone.
  * setMarkers and setRoomChips are mount()'s DOM part (the core forwards the list to the layers);
  * rerender() redraws the markers after the selection changed; at(ev) is the marker or chip under
  * a pointer as 'm:<id>' or 'c:<room>', hover(key) gives it the hover border; frame(dt) places
@@ -174,7 +176,7 @@ export function createOverlay(deps) {
     overlay.appendChild(el);
     const [x0, z0, x1, z1] = r.rects[0];
     const [lx, lz] = r.label || [(x0 + x1) / 2, (z0 + z1) / 2];
-    return { room: r.id, el, pos: new THREE.Vector3(lx, 0.05, lz), disp: '', op: -1, tf: '' };
+    return { room: r.id, el, pos: new THREE.Vector3(lx, (deps.floorOf ? deps.floorOf(r) : 0) + 0.05, lz), disp: '', op: -1, tf: '' };
   });
   const labelPos = Object.fromEntries(labels.map(l => [l.room, l.pos]));
   // the house rooms: every room but a paved one (the carport), as homeBox() frames them
@@ -182,6 +184,8 @@ export function createOverlay(deps) {
 
   const markers = new Map(); // id -> { data, el }
   const isIndoor = m => !!(m.room && roomById[m.room]);
+  // a room on the storey shown from inside (the ground's with the roof on); a house of one storey has no other
+  const onStorey = room => !deps.storeyOf || !roomById[room] || deps.storeyOf(roomById[room]) === deps.shown();
 
   // a change of class or content can change the size, which is measured again on the next frame
   // that shows the marker (a hidden one measures 0)
@@ -307,7 +311,7 @@ export function createOverlay(deps) {
     const narrow = width < narrowBelow, items = [];
     for (const [room, rec] of chips) {
       const parts = rec.data.parts || [];
-      const p = chipsOn && room !== focus && !(narrow && !parts.length) ? toScreen(camera, labelPos[room], width, height, v) : null;
+      const p = chipsOn && room !== focus && onStorey(room) && !(narrow && !parts.length) ? toScreen(camera, labelPos[room], width, height, v) : null;
       rec.fac = roofOpen;
       rec.p = p;
       if (!p) continue;
@@ -320,7 +324,7 @@ export function createOverlay(deps) {
     for (const [id, rec] of markers) {
       // an alert indoors shows through the roof, so a closed view never hides it
       const m = rec.data, covered = isIndoor(m) && m.state !== 'alert';
-      const p = (markersOn || m.state === 'alert') && !(covered && roofOpen <= 0.02) && !inChip(m, chipOf(m.room), focus) ? toScreen(camera, drawnAt(m), width, height, v) : null;
+      const p = (markersOn || m.state === 'alert') && !(covered && (roofOpen <= 0.02 || !onStorey(m.room))) && !inChip(m, chipOf(m.room), focus) ? toScreen(camera, drawnAt(m), width, height, v) : null;
       rec.fac = covered ? roofOpen : 1;
       rec.p = p;
       if (!p) continue;
@@ -346,7 +350,7 @@ export function createOverlay(deps) {
     for (const [id, rec] of markers) apply(`m:${id}`, rec, 'dot');
     for (const [room, rec] of chips) apply(`c:${room}`, rec, 'compact');
     labels.forEach(l => {
-      const p = roofOpen < 0.02 || chipOf(l.room) ? null : toScreen(camera, l.pos, width, height, v);
+      const p = roofOpen < 0.02 || chipOf(l.room) || !onStorey(l.room) ? null : toScreen(camera, l.pos, width, height, v);
       place(l, l.el, p ? '' : 'none', Math.round(roofOpen * 80) / 100, p ? at(p) : '');
     });
     return fading;
