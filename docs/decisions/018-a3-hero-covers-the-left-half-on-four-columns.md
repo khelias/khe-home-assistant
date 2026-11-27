@@ -1,6 +1,6 @@
 # ADR-018: On four-column screens A3's hero covers the left half
 
-- **Status:** Accepted (2026-11-17); amended (2026-11-27): the demo takes the layouts at its own column counts, and decision 4 adds a layout for three columns
+- **Status:** Accepted (2026-11-17); amended (2026-11-27): the demo takes the layouts at its own column counts, and decision 4 adds a layout for three columns, and the demo widths are its window's on khe.ee
 - **Related:** supersedes [ADR-010](010-a3-landscape-hero-beside-the-cards.md) decision 1 from 1716 px and extends its decision 3; [ADR-005](005-a3-glass-cards-history-sheet.md), [ADR-012](012-the-demo-is-the-houses-overview.md)
 
 ## Context
@@ -113,9 +113,12 @@ Read from HA frontend 20261028.5 (HA 2026.11):
   layout from 1076 px and B from 1428 px. Without a scrollbar, from 1408 to
   1427 px, the demo has four columns and decision 4's layout, the fourth
   column empty.
+- On khe.ee the demo runs in a window on khe-sites' `/ha/` page, so these
+  are the window's widths: the page keeps 40 px a side and a 1 px border,
+  and a screen gets B from about 1510 px and decision 4's layout at 1440 px.
 - In the house, decision 4 covers a band of 76 px. Other screens with
   three columns keep ADR-010's layout: a 1440 to 1680 px laptop with the
-  sidebar open, and a 1180 px tablet with it collapsed The household uses the
+  sidebar open, and a 1180 px tablet with it collapsed. The household uses the
   tablet and phones, and on a laptop the sidebar folds away, so a card that
   reads HA's column count stays turned down (2026-11-27).
 - Each hero carries the model inline, so the stored view holds it three

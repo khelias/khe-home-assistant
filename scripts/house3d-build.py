@@ -18,7 +18,7 @@ scenarios.json, the simulated recorder it reads its history and dated states fro
 recorder.json (one file for both languages), and the same in English with the demo house's model as dashboard.en.json,
 states.en.json, series.en.json, scenarios.en.json and model.en.json. In the demo's files __HOUSE3D_VERSION__ becomes the card's version,
 __KHE_CARDS_VERSION__ the dashboard cards' version and __DEMO_VERSION__ a hash of the demo's
-files, the generated JSON files and those two versions. khe-sites publishes it at khe.ee/ha/. The demo house is
+files, the generated JSON files and those two versions. khe-sites publishes it at khe.ee/ha/demo/, in a window on khe.ee/ha/. The demo house is
 public; the dashboard comes from the generator, which names the real house's devices, so
 check.sh scans the demo build with the real model whenever one is at hand.
 """
