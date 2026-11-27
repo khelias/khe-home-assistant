@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 68;
+const HOUSE3D_VERSION = 69;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -447,7 +447,7 @@ export function stretchHeight({ min, top, rest, beside, bottom }) {
 // with. A hero (a card with `height`, a dashboard's top) is always the real style with the live
 // sun; it keeps its layer switches to itself, not in the stored ones of the full 3D view (ADR-006,
 // ADR-009). Any other card is as the visitor left it. season holds the seasonal layers' defaults
-// for today ({ winter: seasonOn(now) }), under the switches; snow falls and the contact shadows
+// for the day shown ({ winter: seasonOn(at) }), under the switches; snow falls and the contact shadows
 // show in the full view only, since the hero sits on an always-on dashboard.
 export function heroMount(hero, style, layers, season) {
   const all = { ...LAYERS_OFF, ...(season || {}), ...(layers || {}) };
@@ -770,8 +770,9 @@ export class House3dCard extends Base {
       this._mod = mod;
       this._posterDue = fresh && !this._time && this._sceneTime === undefined;
       const now = new Date();
-      this._season = mod.seasonOn(now);
-      const start = heroMount(this._isHero, this._style, resolveLayers(this._readLayers(), mod.seasonWindow(now)), { [SEASONAL]: this._season });
+      this._season = mod.seasonOn(this._time || now);
+      this._window = mod.seasonWindow(now);
+      const start = heroMount(this._isHero, this._style, resolveLayers(this._readLayers(), this._window), { [SEASONAL]: this._season });
       const reset = sr.querySelector('.bar [data-act="reset"]');
       if (reset) reset.innerHTML = mod.icon('reset');
       const expand = sr.querySelector('.bar [data-act="full"]');
@@ -933,6 +934,7 @@ export class House3dCard extends Base {
   _setTime(t) {
     this._time = t;
     if (this._view) this._view.setTime(t);
+    this._checkSeason();
     this._syncTime();
   }
 
@@ -1255,14 +1257,17 @@ export class House3dCard extends Base {
     this._renderLayers();
   }
 
-  // once a minute while mounted: a season that starts or ends (a tablet mounted on 31 October)
-  // switches its layer to the new default, unless a switch flipped in the new window holds it
+  // once a minute while mounted (a tablet mounted on 31 October) and on every time set: the
+  // season of the day shown, the sliders' or today's, switches its layer to that season's
+  // default, unless a switch flipped in today's window holds it; today's window ending drops
+  // that switch even while a kept slider day stays in its season
   _checkSeason(now = new Date()) {
     if (!this._view || !this._mod) return;
-    const on = this._mod.seasonOn(now);
-    if (on === this._season) return;
+    const on = this._mod.seasonOn(this._time || now), win = this._mod.seasonWindow(now);
+    if (on === this._season && win === this._window) return;
     this._season = on;
-    if (SEASONAL in resolveLayers(this._readLayers(), this._mod.seasonWindow(now))) return;
+    this._window = win;
+    if (SEASONAL in resolveLayers(this._readLayers(), win)) return;
     this._view.setLayer(SEASONAL, on);
     if (this._sheet === 'layers') this._renderLayers();
   }

@@ -236,6 +236,7 @@ test('card: the minute check turns winter on from 31 October to 1 November, unle
     const el = Object.create(card.House3dCard.prototype);
     Object.assign(el, { _heroLayers: {}, _isHero: false, _mod: mod, _view: { setLayer: (id, on) => calls.push([id, on]) } });
     el._season = seasonOn(new Date(2026, 9, 31, 23, 59));
+    el._window = seasonWindow(new Date(2026, 9, 31, 23, 59));
     el._checkSeason(new Date(2026, 9, 31, 23, 59));
     assert.deepEqual(calls, []);
     el._checkSeason(new Date(2026, 10, 1, 0, 0));
@@ -248,6 +249,37 @@ test('card: the minute check turns winter on from 31 October to 1 November, unle
     el._writeLayers(card.storeLayer({}, 'winter', false, seasonWindow(new Date(2026, 10, 1, 0, 1))));
     el._checkSeason(new Date(2026, 10, 1, 0, 2));
     assert.deepEqual(calls, []);
+  } finally { delete globalThis.localStorage; }
+});
+
+test('card: the time sliders\' day sets the winter layer, Praegu brings today\'s back, a switch holds', () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: k => store.delete(k) };
+  try {
+    const mod = { seasonOn, seasonWindow }, calls = [], today = seasonOn(new Date());
+    const otherSeason = new Date(new Date().getFullYear(), today ? 6 : 0, 15, 12);
+    const el = Object.create(card.House3dCard.prototype);
+    Object.assign(el, { _heroLayers: {}, _isHero: false, _mod: mod, _season: today, _window: seasonWindow(new Date()), _syncTime() {},
+      _view: { setLayer: (id, on) => calls.push([id, on]), setTime() {} } });
+    // the in-memory copy behind localStorage keeps an earlier test's switch
+    el._writeLayers({});
+    el._setTime(otherSeason);
+    assert.deepEqual(calls, [['winter', !today]]);
+    el._setTime(null);
+    assert.deepEqual(calls, [['winter', !today], ['winter', today]]);
+    // a switch flipped today holds whatever day the sliders show
+    calls.length = 0;
+    el._writeLayers(card.storeLayer({}, 'winter', today, seasonWindow(new Date())));
+    el._setTime(otherSeason);
+    assert.deepEqual(calls, []);
+    // a kept January slider over 31 March to 1 April: today's window ends and its switch with it
+    calls.length = 0;
+    Object.assign(el, { _time: new Date(2026, 0, 15, 12), _season: true, _window: seasonWindow(new Date(2026, 2, 31, 12)) });
+    el._writeLayers(card.storeLayer({}, 'winter', false, el._window));
+    el._checkSeason(new Date(2026, 2, 31, 23, 59));
+    assert.deepEqual(calls, []);
+    el._checkSeason(new Date(2026, 3, 1, 0, 0));
+    assert.deepEqual(calls, [['winter', true]]);
   } finally { delete globalThis.localStorage; }
 });
 

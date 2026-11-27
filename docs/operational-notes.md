@@ -676,11 +676,13 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   `attach()`) rather than copied constants, and the crowns' caps hang on the
   trees, so they hide with them. The season is a view default, not data:
   `seasonOn(date)` in `house3d.js` is true from 1 November to 31 March, and
-  the card and the viewer mount the layer on then and off outside it, the
-  card re-checking once a minute so a wall tablet changes over on
+  the card and the viewer show the layer on then and off outside it, by the
+  day the time sliders show (today while live), so a July slider has no
+  snow; the card re-checks once a minute so a wall tablet changes over on
   1 November. A switch the user flips is stored as `{ on, window }`
-  (`seasonWindow(date)`, `2026-11` or `gap-2027`) and holds only for that
-  season window or gap, so the next season starts from its default. Falling
+  (`seasonWindow(date)`, `2026-11` or `gap-2027`) and holds, whatever the
+  sliders show, only for today's season window or gap, so the next season
+  starts from its default. Falling
   snow (`options.snowfall`) animates in the full view and the viewer only,
   never in the hero or under reduced motion, since a moving layer keeps the
   render loop running.
