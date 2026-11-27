@@ -36,19 +36,27 @@ export default function init({ cssVars, palette, a3Palette, A3_CSS, words, DAY, 
       this._cssDark = null;
       this._ids = this._watched();
       this._seen = null;
-      this._draw();
+      if (this._hass && this.isConnected) this._refresh();
     }
-    // HA sets hass on every state change in the house: compare by identity, build nothing
+    // HA sets hass on every state change in the house: compare by identity, build nothing. HA's
+    // hui-card takes a hidden card out of the DOM and still sets hass on it, so a card out of the
+    // DOM draws only when it is connected again.
     set hass(hass) {
       this._hass = hass;
-      if (!this._config) return;
+      if (this._config && this.isConnected) this._refresh();
+    }
+    get hass() { return this._hass; }
+    connectedCallback() {
+      if (this._config && this._hass) this._refresh();
+    }
+    _refresh() {
+      const hass = this._hass;
       const dark = !!(hass.themes && hass.themes.darkMode), clock = this._clock(), seen = this._seen;
       if (seen && seen[0] === dark && seen[1] === clock && this._ids.every((e, i) => seen[i + 2] === this._stamp(hass.states[e]))) return;
       this._seen = [dark, clock, ...this._ids.map(e => this._stamp(hass.states[e]))];
       this._draw();
       if (this._sheet) this._sheet.live();
     }
-    get hass() { return this._hass; }
     getCardSize() { return 3; }
     getGridOptions() { return { columns: 'full' }; }
     _check() {}
@@ -168,7 +176,9 @@ export default function init({ cssVars, palette, a3Palette, A3_CSS, words, DAY, 
     }
     connectedCallback() {
       if (this._config && this._hist().length && historyStale(this._data, Date.now())) this._loadedFor = null;
-      this._draw();
+      // a reconnect draws, so _ensure retries a failed load or reloads a stale history
+      this._seen = null;
+      super.connectedCallback();
     }
   }
 

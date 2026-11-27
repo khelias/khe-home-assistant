@@ -146,6 +146,8 @@ export default function init({ icon, esc, hasValue, stateOf, words, num, numOf, 
     }
     connectedCallback() {
       if (!this._vis) { this._vis = () => this._sync(); document.addEventListener('visibilitychange', this._vis); }
+      super.connectedCallback();
+      // a reconnect with nothing changed draws nothing, and only this restarts the timers
       if (this._hass) this._sync();
     }
     disconnectedCallback() {

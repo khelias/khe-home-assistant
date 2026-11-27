@@ -134,7 +134,8 @@ export default function init({ icon, esc, hasValue, stateOf, words, sensorWords,
     // a redraw at each hour boundary; Estonia's offset is whole hours, so UTC's hours are local ones
     connectedCallback() {
       clearTimeout(this._timer);
-      this._timer = setTimeout(() => { if (this._hass) this.hass = this._hass; this.connectedCallback(); }, HOUR - (Date.now() % HOUR) + 1000);
+      this._timer = setTimeout(() => this.connectedCallback(), HOUR - (Date.now() % HOUR) + 1000);
+      super.connectedCallback();
     }
     disconnectedCallback() { clearTimeout(this._timer); }
     // a mouse over the bars shows that hour's price in place of the price now; a tap opens the sheet
