@@ -31,10 +31,11 @@ const MAIN = {
   plant: 'leaf', picture: 'canvas', stair: 'oak', landing: 'oak'
 };
 // an item's finish other than the kitchen's: the surfaces its kitchen and kitchenTop parts and
-// its handles take; scripts/house3d_model.py FINISHES lists the same names
+// its handles take, a 'role:surface' keeping the part's role under another surface (a painted
+// worktop is still a worktop to Foto); scripts/house3d_model.py FINISHES lists the same names
 const FINISHES = {
-  anthracite: { kitchen: 'anthracite', kitchenTop: 'anthracite', handle: 'steel' },
-  white: { kitchen: 'white', kitchenTop: 'white' },
+  anthracite: { kitchen: 'anthracite', kitchenTop: 'kitchenTop:anthracite', handle: 'steel' },
+  white: { kitchen: 'white', kitchenTop: 'kitchenTop:white' },
   dark_oak: { oak: 'darkOak', kitchen: 'darkOak', kitchenTop: 'darkOak' },
   medium_oak: { oak: 'mediumOak', kitchen: 'mediumOak', kitchenTop: 'mediumOak' }
 };
@@ -218,7 +219,11 @@ export default function build({ THREE, kit, model, roof, state, look, layer, sto
   }));
   const items = model.furniture || [];
   const mats = new Map();
-  const mat = (name, make = () => look.material(name)) => mats.get(name) || mats.set(name, make()).get(name);
+  const byName = name => {
+    const [role, surface = role] = name.split(':');
+    return look.material(role, {}, surface);
+  };
+  const mat = (name, make = () => byName(name)) => mats.get(name) || mats.set(name, make()).get(name);
   // a splashback: a thin slab on its rect, its UVs in metres along the wall and up it
   function splashback(f, i) {
     const [x0, z0, x1, z1] = f.rect, alongX = x1 - x0 >= z1 - z0;
