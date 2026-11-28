@@ -805,7 +805,8 @@ export function stageLayers(style, stage) {
  *                    styles; sun as the sun getter gives it
  *   onFirstFrame()   the first frame is on the canvas
  *   onIdle()         the frame loop has stopped: nothing moves until the next change
- *   onLook()         the look's textures are in (Foto on the garden stage), before the frame
+ *   onLook()         the look's textures are in, the house's detail photographs included (Foto on
+ *                    the garden stage), before the frame
  *                    that shows them; never when they fail or for a look without any
  *   bloom            default true; always off below 720 px width and in the lit styles
  *   ao               default true; false keeps a lit style's contact shadows off, which are
@@ -1651,9 +1652,10 @@ export function mount(element, model, options = {}) {
       if (disposed) return;
       const loader = new KTX2Loader().setTranscoderPath(new URL(`${vendor}libs/basis/`, import.meta.url).href).detectSupport(renderer);
       return look.start({
+        scene,
         load: f => loader.loadAsync(new URL(`./assets/${f}${QUERY}`, import.meta.url).href),
-        done: () => { if (!disposed) { updateSun(); shadowsDirty(); invalidate(); if (options.onLook) options.onLook(); } }
-      }).finally(() => loader.dispose());
+        done: () => { if (!disposed) { updateSun(); shadowsDirty(); invalidate(); } }
+      }).then(() => { if (!disposed && options.onLook) options.onLook(); }).finally(() => loader.dispose());
     }).catch(e => console.warn('house3d: the Foto style stays as Päris draws it', e));
   }
   // the bake and its atlas beside it, after the first frame so they never hold it up

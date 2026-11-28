@@ -25,7 +25,7 @@ export default function build({ THREE, kit, C, model, look }) {
   const { basic, lineMat, box, prism, edges, keep } = kit;
   const lit = look.lit;
   const group = new THREE.Group();
-  const deckM = lit ? kit.surface('deck') : basic({ color: C.teal, opacity: 0.04 });
+  const deckM = lit ? look.material('deck') : basic({ color: C.teal, opacity: 0.04 });
   const deckE = lineMat({ color: C.teal, opacity: 0.45 });
   const plankM = lit ? lineMat({ color: kit.REAL.fence, opacity: 0.5 }) : lineMat({ color: C.teal, opacity: 0.09 });
   const pathM = lit ? look.material('paving') : basic({ color: C.lineSoft, opacity: 0.05 });
@@ -154,7 +154,7 @@ export default function build({ THREE, kit, C, model, look }) {
   // lit styles: a frame of four boards 0.05 thick, a 0.15 wide ledge on top, the sand inset
   // and 0.08 under the frame's top
   function sandpit({ rect: [x0, z0, x1, z1], height: h }) {
-    const timber = kit.surface('timber'), T = 0.05, L = 0.15, LT = 0.03;
+    const timber = look.material('timber'), T = 0.05, L = 0.15, LT = 0.03;
     [[x0, z0, x1, z0 + T], [x0, z1 - T, x1, z1], [x0, z0 + T, x0 + T, z1 - T], [x1 - T, z0 + T, x1, z1 - T]]
       .forEach(r => shade(kit.solid(group, timber, r, [0, h - LT]), true));
     [[x0, z0, x1, z0 + L], [x0, z1 - L, x1, z1], [x0, z0 + L, x0 + L, z1 - L], [x1 - L, z0 + L, x1, z1 - L]]
@@ -165,7 +165,7 @@ export default function build({ THREE, kit, C, model, look }) {
   // lit styles: an A-frame swing along the rect's long axis with a nest seat; with slide, a tower
   // past the beam end nearer to it, with a climbing wall on its outer side and a chute to slide
   function swing({ rect: [x0, z0, x1, z1], height: h, slide }) {
-    const timber = kit.surface('timber');
+    const timber = look.material('timber');
     const alongX = x1 - x0 >= z1 - z0;
     // plan points from (s along the beam from its first end, t across from its centre line)
     const c = alongX ? (z0 + z1) / 2 : (x0 + x1) / 2, [s0, s1] = alongX ? [x0, x1] : [z0, z1];
@@ -298,7 +298,7 @@ export default function build({ THREE, kit, C, model, look }) {
   // lit styles: a planter is a box in the frame's colour or the cladding, a thuja a column
   // above it, a low plant a box on it
   function planters() {
-    const fin = { frame: kit.surface('frame'), cladding: kit.surface('cladding') };
+    const fin = { frame: kit.surface('frame'), cladding: look.material('cladding') };
     (site.planters || []).forEach(p => {
       const [x0, z0, x1, z1] = p.rect, top = p.y[1];
       shade(kit.solid(group, fin[p.finish || 'frame'], p.rect, p.y), true).userData.part = 'planter';

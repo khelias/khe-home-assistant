@@ -78,6 +78,48 @@
    "from": "bare twigs drawn for khe-house3d with PIL at 1024, resized to 512, ETC1S",
    "licence": "CC0-1.0",
    "bytes": 79071
+  },
+  "wood.ktx2": {
+   "url": "https://ambientcg.com/view?id=Wood049",
+   "from": "Wood049 1K-JPG Color, ETC1S",
+   "licence": "CC0-1.0",
+   "bytes": 148769
+  },
+  "wood-normal.ktx2": {
+   "url": "https://ambientcg.com/view?id=Wood049",
+   "from": "Wood049 1K-JPG NormalGL at 512, UASTC",
+   "licence": "CC0-1.0",
+   "bytes": 303207
+  },
+  "concrete.ktx2": {
+   "url": "https://ambientcg.com/view?id=Concrete034",
+   "from": "Concrete034 1K-JPG Color, ETC1S",
+   "licence": "CC0-1.0",
+   "bytes": 72232
+  },
+  "clay.ktx2": {
+   "url": "https://ambientcg.com/view?id=Clay005",
+   "from": "Clay005 1K-JPG Color, ETC1S",
+   "licence": "CC0-1.0",
+   "bytes": 121183
+  },
+  "clay-normal.ktx2": {
+   "url": "https://ambientcg.com/view?id=Clay005",
+   "from": "Clay005 1K-JPG NormalGL at 512, UASTC",
+   "licence": "CC0-1.0",
+   "bytes": 329922
+  },
+  "metal.ktx2": {
+   "url": "https://ambientcg.com/view?id=Metal012",
+   "from": "Metal012 1K-JPG Color, ETC1S",
+   "licence": "CC0-1.0",
+   "bytes": 91596
+  },
+  "metal-normal.ktx2": {
+   "url": "https://ambientcg.com/view?id=Metal012",
+   "from": "Metal012 1K-JPG NormalGL at 512, UASTC",
+   "licence": "CC0-1.0",
+   "bytes": 170787
   }
  }
 }

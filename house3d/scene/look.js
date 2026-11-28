@@ -5,10 +5,12 @@
 // A look: { id: 'simple' | 'real' | 'photo', lit, and when lit:
 //   material(role, o?)  a new lit material for a surface by its kit name (kit.surface), with the
 //                       role's own texture (the lawn's mottle, the road's asphalt, the paving's
-//                       stones) unless o gives a map
+//                       stones) unless o gives a map, and the role in its userData.role, which a
+//                       band's copy keeps: Foto dresses the house's surfaces by it
 //   light(alt)          the light at a sun altitude in degrees (sun.js realLight()'s shape)
-//   start({ load, done })?  after the first frame: load(file) -> Promise<texture> from
-//                       house3d/assets/, done() once applied (scene/photo.js)
+//   start({ load, done, scene })?  after the first frame: load(file) -> Promise<texture> from
+//                       house3d/assets/, done() once each batch is applied; the promise it
+//                       returns settles once all of it is (scene/photo.js)
 //   sky({ alt, dir, scene, pmrem })?  per sun change in the garden, after the lights are set;
 //                       true when the look drew its own sky, environment and fog; once true,
 //                       true for the rest of the mount (the core drops its own environment)
@@ -29,7 +31,11 @@ export function createLook(THREE, kit, id, { light, photo, quality } = {}) {
   if (id !== 'real' && id !== 'photo') return { id: 'simple', lit: false };
   const real = {
     id: 'real', lit: true,
-    material: (role, o = {}) => kit.surface(role, MAPS[role] && !('map' in o) ? { map: kit[MAPS[role]](), ...o } : o),
+    material: (role, o = {}) => {
+      const m = kit.surface(role, MAPS[role] && !('map' in o) ? { map: kit[MAPS[role]](), ...o } : o);
+      m.userData.role = role;
+      return m;
+    },
     light
   };
   return id === 'photo' && photo ? photo(THREE, kit, real, { quality }) : real;
