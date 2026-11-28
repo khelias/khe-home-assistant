@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 export const E = new URL('../../house3d/', import.meta.url);
 export const SNAPSHOT = new URL('./simple-snapshot.json', import.meta.url);
-export const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'interior', 'lights', 'winter', 'car', 'future', 'fans'];
+export const LAYERS = ['ground', 'site', 'props', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'interior', 'lights', 'winter', 'car', 'future', 'fans'];
 
 // of what the tests run under scene/, only kit.canvasTexture touches the DOM (the overlay's
 // createOverlay() builds DOM too, but no test mounts the view)

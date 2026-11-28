@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Seadmete, puude ja tuleviku paigutus</title>
+<title>Seadmete, puude, aiaasjade ja tuleviku paigutus</title>
 <style>
 :root { --bg: #060c1b; --panel: #0c1631; --edge: rgba(111, 227, 255, 0.18); --line: #6fe3ff; --ink: #e4ecff; --muted: #8a9bc2; --amber: #ffc56e; --ok: #6fe3b4; color-scheme: dark; }
 * { box-sizing: border-box; }
@@ -63,6 +63,8 @@ svg#plan { width: 100%; height: 100%; display: block; cursor: crosshair; touch-a
 #cam label, #tree label { display: grid; grid-template-columns: 78px 1fr 52px; gap: 8px; align-items: center; font-size: 13px; }
 #cam output, #tree output { text-align: right; font: 12px ui-monospace, Menlo, monospace; color: var(--amber); }
 #cam input, #tree input { width: 100%; accent-color: var(--amber); }
+select { font: inherit; color: var(--ink); background: #040814; border: 1px solid var(--edge); border-radius: 8px; padding: 8px; }
+#delProp[hidden] { display: none; }
 #cam .note { font-size: 12px; color: var(--muted); }
 .mlabel { fill: var(--ink); font-size: .36px; pointer-events: none; paint-order: stroke; stroke: var(--bg); stroke-width: .12px; }
 </style>
@@ -70,8 +72,8 @@ svg#plan { width: 100%; height: 100%; display: block; cursor: crosshair; touch-a
 <body>
 <aside>
   <header>
-    <h1>Seadmete, puude ja tuleviku paigutus</h1>
-    <p>Vali seade, puu või tuleviku asi nimekirjast või plaanilt, siis klõpsa plaanil õigesse kohta. Kõiki saab ka lohistada. Kaamerat pööra liuguriga Suund, puu suurust muuda liuguritega Kõrgus ja Võra, tuleviku asja pööra nuppudega Pööre. Tänav on üleval. Näpista või Ctrl+ratas suumib, kahe sõrmega libistus nihutab.</p>
+    <h1>Seadmete, puude, aiaasjade ja tuleviku paigutus</h1>
+    <p>Vali seade, puu, aiaasi või tuleviku asi nimekirjast või plaanilt, siis klõpsa plaanil õigesse kohta. Kõiki saab ka lohistada. Kaamerat pööra liuguriga Suund, puu suurust muuda liuguritega Kõrgus ja Võra, aiaasja ja tuleviku asja pööra nuppudega Pööre. Uue aiaasja lisab nupp Lisa. Tänav on üleval. Näpista või Ctrl+ratas suumib, kahe sõrmega libistus nihutab.</p>
   </header>
   <div id="list"></div>
   <footer>
@@ -83,6 +85,7 @@ svg#plan { width: 100%; height: 100%; display: block; cursor: crosshair; touch-a
       <label>Kõrgus <input type="range" id="height" min="1" max="25" step="0.5"><output id="heightV"></output></label>
       <label>Võra <input type="range" id="crown" min="0.5" max="15" step="0.5"><output id="crownV"></output></label>
     </div>
+    <div class="row"><select id="propKind" aria-label="Aiaasi"></select><button class="btn ghost" id="addProp">Lisa</button><button class="btn ghost" id="delProp" hidden>Eemalda</button></div>
     <div class="row"><button class="btn" id="copy">Kopeeri muudatused</button><button class="btn ghost" id="reset">Taasta valitu</button></div>
     <div class="row"><button class="btn ghost" id="vDev">Seadmed</button><button class="btn ghost" id="vLot">Krunt</button><button class="btn ghost" id="zIn">+</button><button class="btn ghost" id="zOut">−</button></div>
     <div id="count" class="st"></div>
@@ -95,8 +98,8 @@ svg#plan { width: 100%; height: 100%; display: block; cursor: crosshair; touch-a
   <div id="coords"></div>
 </main>
 <script type="module">
-// Placement page for the house 3D model's devices and future items (private layer) and trees
-// (geometry layer), served with the model by scripts/house3d-place.py; it holds no house data itself.
+// Placement page for the house 3D model's devices and future items (private layer) and trees and
+// yard things (geometry layer), served with the model by scripts/house3d-place.py; it holds no house data itself.
 import { icon } from './house3d.js';
 const NS = 'http://www.w3.org/2000/svg';
 const esc = s => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
@@ -138,6 +141,21 @@ const origF = Object.fromEntries(futureList.map(f => [fkey(f), clone(f)]));
 const futureEditable = f => ({ pos: f.pos, rot: f.rot || 0 });
 const futures = futureList.map(f => restore(fkey(f), f, futureEditable));
 const futureByKey = Object.fromEntries(futures.map(f => [fkey(f), f]));
+// yard things (site.props) are keyed prop:<id>; the page adds, moves, turns and removes them
+const pkey = p => `prop:${p.id}`;
+const isProp = k => !!k && k.startsWith('prop:');
+const isDevice = k => !!k && !isTree(k) && !isFuture(k) && !isProp(k);
+const PROP_KINDS = { bin: 'Prügikast', mailbox: 'Postkast', garden_table: 'Aialaud', pot: 'Lillepott', lamp_post: 'Laternapost' };
+// the footprints as scene/layers/props.js draws them
+const PROP_FOOT = { bin: [0.58, 0.74], mailbox: [0.38, 0.2], garden_table: [0.9, 1.7], pot: [0.48, 0.48], lamp_post: [0.26, 0.26] };
+const propEditable = p => ({ kind: p.kind, at: p.at, rot: p.rot || 0 });
+const origP = Object.fromEntries((model.site.props || []).map(p => [pkey(p), clone(p)]));
+// the edited list survives a reload while the model's list is still the one it started from
+const savedProps = saved['props:'] && JSON.stringify(saved['props:'].base) === JSON.stringify(model.site.props || []) ? saved['props:'].now : null;
+const props = clone(savedProps || model.site.props || []);
+const propOf = k => props.find(p => pkey(p) === k);
+const propName = p => `${PROP_KINDS[p.kind] || p.kind} ${p.id}`;
+const propIcon = p => (p.kind === 'lamp_post' ? 'light' : 'info');
 // the plan footprint as the engine draws it
 const FOOT = { greenhouse: [3, 4], tub: [2, 2], charger: [0.3, 0.3], battery: [0.6, 0.3] };
 const footOf = f => f.size || FOOT[f.kind] || [0.5, 0.5];
@@ -151,8 +169,8 @@ const treeName = {};
     treeName[tkey(t)] = !KINDS[t.kind] ? t.id : total[t.kind] > 1 ? `${KINDS[t.kind]} ${seen[t.kind]}` : KINDS[t.kind];
   });
 }
-const nameOf = k => (isTree(k) ? treeName[k] : isFuture(k) ? futureByKey[k].name : byId[k].name);
-const planPos = k => (isTree(k) ? treeByKey[k].pos : isFuture(k) ? futureByKey[k].pos : [byId[k].pos[0], byId[k].pos[2]]);
+const nameOf = k => (isTree(k) ? treeName[k] : isFuture(k) ? futureByKey[k].name : isProp(k) ? propName(propOf(k)) : byId[k].name);
+const planPos = k => (isTree(k) ? treeByKey[k].pos : isFuture(k) ? futureByKey[k].pos : isProp(k) ? propOf(k).at : [byId[k].pos[0], byId[k].pos[2]]);
 
 // room of a point: the rectangle it is in, else the nearest within a wall's thickness; outdoor devices stay outdoor
 function roomAt(x, z, d) {
@@ -233,12 +251,21 @@ function marker(key, type, name) {
 devs.forEach(d => marker(d.entity, d.type, d.name));
 trees.forEach(t => marker(tkey(t), 'tree', treeName[tkey(t)]));
 futures.forEach(f => marker(fkey(f), f.kind === 'charger' ? 'plug' : 'info', f.name));
+props.forEach(p => marker(pkey(p), propIcon(p), propName(p)));
 
 /* ---------- state ---------- */
 let sel = null, dragging = null, dragFrom = null, dragMoved = false;
 const changed = d => JSON.stringify(editable(orig[d.entity])) !== JSON.stringify(editable(d));
 const changedT = t => JSON.stringify(treeEditable(origT[tkey(t)])) !== JSON.stringify(treeEditable(t));
 const changedF = f => JSON.stringify(futureEditable(origF[fkey(f)])) !== JSON.stringify(futureEditable(f));
+const changedP = p => !origP[pkey(p)] || JSON.stringify(propEditable(origP[pkey(p)])) !== JSON.stringify(propEditable(p));
+// the page's props changes: each added or moved one in full, each removed one null
+function propChanges() {
+  const out = {};
+  props.filter(changedP).forEach(p => { out[p.id] = propEditable(p); });
+  Object.keys(origP).filter(k => !propOf(k)).forEach(k => { out[origP[k].id] = null; });
+  return out;
+}
 // the slider's degrees run clockwise from the street side, up on the plan
 const lookDeg = look => Math.round((Math.atan2(look[0], -look[1]) * 180 / Math.PI + 360) % 360);
 function mark(key, x, z, isChanged) {
@@ -263,27 +290,32 @@ function draw() {
     mark(k, t.pos[0], t.pos[1], changedT(t));
     el('circle', { cx: t.pos[0], cy: t.pos[1], r: t.crown / 2, class: 'crown' + (k === sel ? ' sel' : '') }, fanLayer);
   });
-  futures.forEach(f => {
-    const k = fkey(f), [w, d] = (f.rot || 0) % 180 ? footOf(f).slice().reverse() : footOf(f);
-    mark(k, f.pos[0], f.pos[1], changedF(f));
-    rect([f.pos[0] - w / 2, f.pos[1] - d / 2, f.pos[0] + w / 2, f.pos[1] + d / 2], 'foot' + (k === sel ? ' sel' : ''), fanLayer);
-  });
+  // a footprint [w, d] at [x, z], its sides swapped on an odd quarter turn
+  const foot = (k, [x, z], size, rot, isChanged) => {
+    const [w, d] = (rot || 0) % 180 ? size.slice().reverse() : size;
+    mark(k, x, z, isChanged);
+    rect([x - w / 2, z - d / 2, x + w / 2, z + d / 2], 'foot' + (k === sel ? ' sel' : ''), fanLayer);
+  };
+  futures.forEach(f => foot(fkey(f), f.pos, footOf(f), f.rot, changedF(f)));
+  props.forEach(p => foot(pkey(p), p.at, PROP_FOOT[p.kind], p.rot, changedP(p)));
   if (sel) markerLayer.appendChild(mEls[sel].g);
-  const selRoom = sel && !isTree(sel) && !isFuture(sel) ? byId[sel].room : null;
+  const selRoom = isDevice(sel) ? byId[sel].room : null;
   Object.entries(roomEls).forEach(([id, els]) => els.forEach(e => e.classList.toggle('hl', selRoom === id)));
   renderList();
   const ch = devs.filter(changed), chT = trees.filter(changedT), chF = futures.filter(changedF);
-  const out = {}, n = ch.length + chT.length + chF.length;
+  const pc = propChanges(), out = {}, n = ch.length + chT.length + chF.length + Object.keys(pc).length;
   if (ch.length) out.devices = Object.fromEntries(ch.map(d => [d.entity, editable(d)]));
   if (chT.length) out.trees = Object.fromEntries(chT.map(t => [t.id, treeEditable(t)]));
   if (chF.length) out.future = Object.fromEntries(chF.map(f => [f.id, futureEditable(f)]));
+  if (Object.keys(pc).length) out.props = pc;
   document.getElementById('out').value = n ? JSON.stringify(out) : '';
-  document.getElementById('count').textContent = `Muudetud ${n} / ${devs.length + trees.length + futures.length}`;
+  document.getElementById('count').textContent = `Muudetud ${n} / ${devs.length + trees.length + futures.length + props.length}`;
   const keep = [...ch.map(d => [d.entity, { base: editable(orig[d.entity]), now: editable(d) }]),
     ...chT.map(t => [tkey(t), { base: treeEditable(origT[tkey(t)]), now: treeEditable(t) }]),
-    ...chF.map(f => [fkey(f), { base: futureEditable(origF[fkey(f)]), now: futureEditable(f) }])];
+    ...chF.map(f => [fkey(f), { base: futureEditable(origF[fkey(f)]), now: futureEditable(f) }]),
+    ...(Object.keys(pc).length ? [['props:', { base: model.site.props || [], now: props }]] : [])];
   try { localStorage.setItem('house3d-place', JSON.stringify(Object.fromEntries(keep))); } catch (e) {}
-  const cam = document.getElementById('cam'), sd = sel && !isTree(sel) && !isFuture(sel) && byId[sel];
+  const cam = document.getElementById('cam'), sd = isDevice(sel) && byId[sel];
   cam.hidden = !(sd && sd.look);
   if (!cam.hidden) {
     const deg = lookDeg(sd.look);
@@ -298,11 +330,13 @@ function draw() {
     document.getElementById('crown').value = st.crown;
     document.getElementById('crownV').textContent = metres(st.crown);
   }
-  const rot = document.getElementById('rot'), sf = isFuture(sel) && futureByKey[sel];
-  rot.hidden = !sf;
-  if (sf) rot.querySelectorAll('[data-rot]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.rot) === (sf.rot || 0))));
+  const rot = document.getElementById('rot'), sf = isFuture(sel) && futureByKey[sel], sp = isProp(sel) && propOf(sel), turns = sf || sp;
+  rot.hidden = !turns;
+  if (turns) rot.querySelectorAll('[data-rot]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.rot) === (turns.rot || 0))));
+  document.getElementById('delProp').hidden = !sp;
   const hint = document.getElementById('hint');
-  if (!sel) hint.innerHTML = 'Vali seade, puu või tuleviku asi nimekirjast või plaanilt.';
+  if (!sel) hint.innerHTML = 'Vali seade, puu, aiaasi või tuleviku asi nimekirjast või plaanilt.';
+  else if (sp) hint.innerHTML = `<b>${esc(nameOf(sel))}</b>: klõpsa plaanil õigesse kohta või lohista. Pööra nuppudega Pööre.`;
   else if (sf) hint.innerHTML = `<b>${esc(nameOf(sel))}</b>: klõpsa plaanil keskkoha jaoks õigesse kohta või lohista. Pööra nuppudega Pööre. Suurus ja numbrid on mudelis käsitsi.`;
   else if (st) hint.innerHTML = `<b>${esc(nameOf(sel))}</b>: klõpsa plaanil õigesse kohta või lohista. Suurust muuda liuguritega Kõrgus ja Võra.`;
   else hint.innerHTML = `<b>${esc(nameOf(sel))}</b>: klõpsa plaanil õigesse kohta või lohista. ${sd.look ? 'Pööramiseks kasuta vasakul liugurit Suund.' : ''}`;
@@ -316,6 +350,7 @@ function renderList() {
   list.innerHTML = order.map(id => `<div class="group">${esc(id === 'oues' ? 'Õues' : roomById[id].name)}</div>` +
     groups[id].map(d => row(d.entity, d.type, d.name, changed(d))).join('')).join('') +
     (trees.length ? '<div class="group">Puud</div>' + trees.map(t => row(tkey(t), 'tree', treeName[tkey(t)], changedT(t))).join('') : '') +
+    (props.length ? '<div class="group">Aiaasjad</div>' + props.map(p => row(pkey(p), propIcon(p), propName(p), changedP(p))).join('') : '') +
     (futures.length ? '<div class="group">Tulevik</div>' + futures.map(f => row(fkey(f), f.kind === 'charger' ? 'plug' : 'info', f.name, changedF(f))).join('') : '');
 }
 function select(id) { sel = id; draw(); }
@@ -334,6 +369,7 @@ document.getElementById('list').addEventListener('click', ev => {
 function place(key, x, z) {
   if (isTree(key)) { treeByKey[key].pos = [r2(x), r2(z)]; return; }
   if (isFuture(key)) { futureByKey[key].pos = [r2(x), r2(z)]; return; }
+  if (isProp(key)) { propOf(key).at = [r2(x), r2(z)]; return; }
   const d = byId[key];
   d.pos = [r2(x), d.pos[1], r2(z)];
   d.room = roomAt(x, z, d);
@@ -360,6 +396,11 @@ document.getElementById('reset').addEventListener('click', () => {
   } else if (isFuture(sel)) {
     const o = origF[sel], f = futureByKey[sel];
     f.pos = o.pos.slice(); f.rot = o.rot || 0;
+  } else if (isProp(sel)) {
+    const o = origP[sel], p = propOf(sel);
+    // an added one has nothing to go back to
+    if (!o) return;
+    p.at = o.at.slice(); p.rot = o.rot || 0;
   } else {
     const o = orig[sel], d = byId[sel];
     d.pos = o.pos.slice(); d.room = o.room; if (o.look) d.look = o.look.slice();
@@ -367,16 +408,46 @@ document.getElementById('reset').addEventListener('click', () => {
   draw();
 });
 document.getElementById('dir').addEventListener('input', ev => {
-  if (!sel || isTree(sel) || isFuture(sel)) return;
+  if (!isDevice(sel)) return;
   const a = Number(ev.target.value) * Math.PI / 180;
   byId[sel].look = [r2(Math.sin(a)), r2(-Math.cos(a))];
   draw();
 });
 document.getElementById('rot').addEventListener('click', ev => {
   const b = ev.target.closest('[data-rot]');
-  if (!b || !isFuture(sel)) return;
-  futureByKey[sel].rot = Number(b.dataset.rot);
+  if (!b || !(isFuture(sel) || isProp(sel))) return;
+  (isFuture(sel) ? futureByKey[sel] : propOf(sel)).rot = Number(b.dataset.rot);
   draw();
+});
+const kindSel = document.getElementById('propKind');
+kindSel.innerHTML = Object.entries(PROP_KINDS).map(([k, name]) => `<option value="${k}">${esc(name)}</option>`).join('');
+// a new yard thing in the middle of the view, its id the kind and the first free number
+document.getElementById('addProp').addEventListener('click', () => {
+  const kind = kindSel.value, ids = new Set([...props.map(p => p.id), ...Object.values(origP).map(p => p.id)]);
+  let n = 1;
+  while (ids.has(`${kind}_${n}`)) n++;
+  // the middle of the view, or of the lot when the view's middle is outside it
+  const mid = [vb[0] + vb[2] / 2, vb[1] + vb[3] / 2], centre = [xs.reduce((a, b) => a + b) / xs.length, zs.reduce((a, b) => a + b) / zs.length];
+  const p = { id: `${kind}_${n}`, kind, at: (inLot(mid) ? mid : centre).map(r2) };
+  props.push(p);
+  marker(pkey(p), propIcon(p), propName(p));
+  select(pkey(p));
+});
+const inLot = ([x, z]) => {
+  let at = false;
+  for (let i = 0, j = lot.length - 1; i < lot.length; j = i++) {
+    const [xi, zi] = lot[i], [xj, zj] = lot[j];
+    if ((zi > z) !== (zj > z) && x < xi + ((z - zi) * (xj - xi)) / (zj - zi)) at = !at;
+  }
+  return at;
+};
+document.getElementById('delProp').addEventListener('click', () => {
+  // a removed one is gone from the page; Taasta valitu cannot bring it back
+  if (!isProp(sel) || !confirm(`Eemaldan: ${nameOf(sel)}?`)) return;
+  props.splice(props.findIndex(p => pkey(p) === sel), 1);
+  mEls[sel].g.remove();
+  delete mEls[sel];
+  select(null);
 });
 ['height', 'crown'].forEach(k => document.getElementById(k).addEventListener('input', ev => {
   if (!isTree(sel)) return;

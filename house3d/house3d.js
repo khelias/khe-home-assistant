@@ -75,7 +75,7 @@ import { UnrealBloomPass } from './vendor/three-0.187.0/examples/jsm/postprocess
 import { OutputPass } from './vendor/three-0.187.0/examples/jsm/postprocessing/OutputPass.js';
 import { FullScreenQuad } from './vendor/three-0.187.0/examples/jsm/postprocessing/Pass.js';
 
-const LAYERS = ['ground', 'site', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'interior', 'lights', 'winter', 'car', 'future', 'fans'];
+const LAYERS = ['ground', 'site', 'props', 'trees', 'gates', 'surroundings', 'pergola', 'building', 'interior', 'lights', 'winter', 'car', 'future', 'fans'];
 const QUERY = new URL(import.meta.url).search;
 // a layer module that fails to load drops its layer, not the engine, and the bake module drops
 // only the bake; the kit, the sun and the overlay (scene/overlay.js, the markers, labels and
@@ -794,7 +794,9 @@ export function stageLayers(style, stage) {
  *   long axis, slide the chute's foot [x, z] with the tower at the beam end nearer to it;
  *   site.trampoline { rect, height } (the mat's); site.planters [{ rect, y, plant?, finish? }],
  *   plant 'thuja' or 'low', finish 'frame' (default) or 'cladding'; site.steps [{ rect, height }].
- *   The simple style draws the trampoline, planters and steps as plain boxes.
+ *   The simple style draws the trampoline, planters and steps as plain boxes. site.props [{ id,
+ *   kind, at, rot? }]: the yard's bins, mailbox, garden table, pots and lamp posts (scene/layers/props.js),
+ *   drawn in the lit styles alone.
  * options:
  *   onMarker(id)     a marker was tapped
  *   onRoom(id|null)  a room floor was tapped with the roof off; null for empty space

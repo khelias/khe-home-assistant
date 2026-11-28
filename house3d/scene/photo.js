@@ -1,6 +1,6 @@
 // The Foto style's look (style 'photo', scene/look.js): Päris's surfaces and light, with a
 // photographed lawn, meadow, street, paving and sky, the house's cladding, roofs, plinth,
-// chimneys, deck and timber under a photographed grain (DETAILS), leaf cards on the crowns and
+// chimneys, deck and timber under a photographed grain (DETAILS), a lacquered car (carPaint), leaf cards on the crowns and
 // hedges, and in winter bare crowns of branches and twig cards under an overcast sky. Its textures
 // are house3d/assets/ (CC0, sources.json there), loaded after the first frame through start(), the
 // ground, sky and cards first and the house's photographs after them; until they are in, it draws
@@ -61,6 +61,9 @@ export const DETAILS = {
   timber: { ...WOOD, strength: 0.9 }
 };
 const DETAIL_NORMAL = 0.5;
+// the car's lacquer and glass (carPaint)
+const CAR_PAINT = { roughness: 0.42, metalness: 0.35, clearcoat: 1, clearcoatRoughness: 0.06 };
+const CAR_GLASS = { roughness: 0.04, metalness: 0.2, opacity: 0.6 }, CAR_GLASS_TINT = 0.35;
 // the DETAILS key a material takes, by its role and, for the cladding and a roof, the look's pattern
 const detailKey = ({ userData: { role }, map }, look) =>
   role === 'cladding' ? `cladding-${look.cladding.pattern}` : role === 'roof' ? `roof-${map ? look.roof.pattern : 'plain'}` : role;
@@ -316,6 +319,13 @@ void main() {
       const m = real.material(role, o);
       if (SURFACES[role]) surfaces.push([role, m]);
       return m;
+    },
+    // the car's body in a clearcoated lacquer and its glass a dark reflective tint, both taking the
+    // sky's environment, faded like Päris's (kit.applyFade) through o
+    carPaint(o) {
+      const body = kit.keep(new THREE.MeshPhysicalMaterial({ color: kit.REAL.car, ...CAR_PAINT, ...o }));
+      const glass = kit.keep(new THREE.MeshStandardMaterial({ color: new THREE.Color(kit.REAL.glass).multiplyScalar(CAR_GLASS_TINT), side: THREE.DoubleSide, ...CAR_GLASS, ...o }));
+      return { body, glass };
     },
     // the hemisphere's share of the sky light: the photographed sky lights the surfaces through
     // the environment instead; in winter a softer sun under the overcast

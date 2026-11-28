@@ -221,6 +221,17 @@ model, never this file.
    { "pos": [15.7, 2.1, 10.22], "kind": "wall", "face": [0, 1] },
    { "pos": [16.22, 2.1, 6.7], "kind": "wall", "face": [1, 0] }
   ],
+  "props": [
+   { "id": "bin_mixed", "kind": "bin", "at": [1.4, -8.3] },
+   { "id": "bin_bio", "kind": "bin", "at": [2.1, -8.3] },
+   { "id": "mailbox", "kind": "mailbox", "at": [-4.8, -8.6] },
+   { "id": "garden_table", "kind": "garden_table", "at": [21.5, 12], "rot": 90 },
+   { "id": "pot_door_west", "kind": "pot", "at": [0.9, -0.8] },
+   { "id": "pot_door_east", "kind": "pot", "at": [7.8, -0.8] },
+   { "id": "pot_deck", "kind": "pot", "at": [17.9, 14.6] },
+   { "id": "lamp_path", "kind": "lamp_post", "at": [5.0, -2.1] },
+   { "id": "lamp_drive", "kind": "lamp_post", "at": [1.0, -5.5] }
+  ],
   "festive": {
    "icicles": [
     { "path": [[-0.7, 2.88, -0.72], [16.7, 2.88, -0.72]], "drop": 0.4 },

@@ -158,6 +158,13 @@ model, never this file.
    { "pos": [35.6, 2.45, -1.6], "kind": "ceiling" },
    { "pos": [30.8, 2.1, 10.8], "kind": "wall", "face": [-1, 0] }
   ],
+  "props": [
+   { "id": "bin_mixed", "kind": "bin", "at": [32.6, -5.4], "rot": 180 },
+   { "id": "mailbox", "kind": "mailbox", "at": [37.6, -5.6] },
+   { "id": "garden_table", "kind": "garden_table", "at": [10, 24] },
+   { "id": "pot_1", "kind": "pot", "at": [12, 24] },
+   { "id": "lamp_drive", "kind": "lamp_post", "at": [32, -1], "rot": 90 }
+  ],
   "trees": [
    { "id": "t1", "kind": "maple", "pos": [6.5, -2.5], "height": 8, "crown": 5 },
    { "id": "t2", "kind": "birch", "pos": [2.5, 25.5], "height": 13, "crown": 5 },

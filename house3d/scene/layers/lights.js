@@ -1,6 +1,7 @@
-// The outdoor luminaires (site.lights), a view effect of the dark: in the lit styles each is a
-// small fixture in the frame's colour, a flat disc under a ceiling or a box on a wall set out along its
-// face, that glows warm with a halo sprite and an additive pool of light on the ground, all
+// The outdoor luminaires (site.lights) and the lamp posts' heads (site.props, through the props
+// layer's api.lamps()), a view effect of the dark: in the lit styles each is a small fixture in the
+// frame's colour, a flat disc under a ceiling, a box on a wall set out along its face or a lamp
+// post's round head, that glows warm with a halo sprite and an additive pool of light on the ground, all
 // scaled by ctx.state.night and eased like a room's glow. They follow no HA entity. There are no
 // real-time lights. The simple style has no night, so there the layer is an empty group.
 const DISC_R = 0.12, DISC_H = 0.03; // a ceiling light
@@ -12,9 +13,11 @@ const POOL_Y = 0.14; // over the decks (0.12) and the step (0.115), so it shows 
 const POOL = 3;
 const WARM = '#ffcf8a', FIXTURE_GLOW = 2.2, HALO_OPACITY = 0.75, POOL_OPACITY = 0.85;
 
-export default function build({ THREE, kit, model, state, look }) {
-  const lights = (model.site || {}).lights;
-  if (!Array.isArray(lights) || !lights.length) return null;
+export default function build({ THREE, kit, model, state, look, layer }) {
+  const props = look.lit && layer('props');
+  const lamps = (props && props.api && props.api.lamps()) || [];
+  const lights = [...(Array.isArray((model.site || {}).lights) ? model.site.lights : []), ...lamps];
+  if (!lights.length) return null;
   const group = new THREE.Group();
   if (!look.lit) return { id: 'lights', group };
 
@@ -28,14 +31,20 @@ export default function build({ THREE, kit, model, state, look }) {
     opacity: 0, blending: THREE.AdditiveBlending
   });
   // one geometry per shape, shared by every light
-  const boxGeo = new THREE.BoxGeometry(...BOX), discGeo = new THREE.CylinderGeometry(DISC_R, DISC_R, DISC_H, 20), poolGeo = new THREE.PlaneGeometry(POOL, POOL);
+  const boxGeo = new THREE.BoxGeometry(...BOX), discGeo = new THREE.CylinderGeometry(DISC_R, DISC_R, DISC_H, 20), lampGeo = new THREE.CylinderGeometry(1, 1, 1, 20), poolGeo = new THREE.PlaneGeometry(POOL, POOL);
   const glows = [];
   const tag = (o, part) => { o.userData.part = part; o.castShadow = o.receiveShadow = false; group.add(o); return o; };
 
   lights.forEach(l => {
     const [x, y, z] = l.pos;
     let at, ground;
-    if (l.kind === 'wall') {
+    if (l.kind === 'lamp') {
+      const head = tag(new THREE.Mesh(lampGeo, fixture), 'fixture');
+      head.position.set(x, y + l.h / 2, z);
+      head.scale.set(l.r, l.h, l.r);
+      at = head.position.toArray();
+      ground = [x, z];
+    } else if (l.kind === 'wall') {
       const n = Math.hypot(l.face[0], l.face[1]), dx = l.face[0] / n, dz = l.face[1] / n;
       const box = tag(new THREE.Mesh(boxGeo, fixture), 'fixture');
       box.position.set(x + (dx * BOX[2]) / 2, y, z + (dz * BOX[2]) / 2);
