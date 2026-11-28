@@ -127,7 +127,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
     const two = { side: THREE.DoubleSide }, fades = { ...two, transparent: true };
     const [front, back] = kit.look.cladding.pattern === 'boards' ? kit.boards() : [];
     const mapped = (o, map) => (map ? { ...o, map } : o);
-    const clad = o => ({ front: kit.surface('cladding', mapped(o, front)), back: kit.surface('cladding', mapped(o, back)), edge: kit.surface('cladding', o) });
+    const clad = o => ({ front: look.material('cladding', mapped(o, front)), back: look.material('cladding', mapped(o, back)), edge: look.material('cladding', o) });
     const inner = kit.surface('interior', two), glass = kit.surface('glass');
     // one glass per room, so a lit room's windows glow alone, every storey's; panes in no room
     // share the first (a band's own copy, B.separate())
@@ -142,13 +142,13 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
     const trimOf = o => (kit.trim.surface === 'frame' ? null : kit.surface('trim', o));
     const trim = trimOf() || frame;
     postMat = trim;
-    const plinth = kit.surface(kit.base.surface);
-    cladLeaf = kit.surface('cladding');
+    const plinth = look.material(kit.base.surface);
+    cladLeaf = look.material('cladding');
     const boarded = { ...clad(two), inner };
     // the lift's inner faces are never seen, so they keep the cladding's colour without boards
     const lifted = clad(fades);
-    const rMap = kit.roofMap(), roofMat = kit.surface('roof', fades);
-    const roofPitched = rMap ? kit.surface('roof', { ...fades, map: rMap }) : roofMat;
+    const rMap = kit.roofMap(), roofMat = look.material('roof', fades);
+    const roofPitched = rMap ? look.material('roof', { ...fades, map: rMap }) : roofMat;
     const frameLift = kit.surface('frame', fades);
     mR = { boarded: { ...lifted, inner: lifted.edge }, roof: roofMat, roofPitched, panel: kit.surface('frame', fades), frame: frameLift, trim: trimOf(fades) || frameLift, inner: kit.surface('interior', fades), door: kit.surface('door', fades) };
     // a panel (the carport's walls and posts) is in the frame's colour; else exterior is thick or
@@ -493,7 +493,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
   // piece in each band over it; a lit style's upper pieces on a material of their own, so their
   // fade stays off the lower part
   const chimneys = roof.chimneys || [], chimneyMeshes = [];
-  const mC = !chimneys.length ? null : lit ? { group: kit.surface('chimney'), lift: kit.surface('chimney', { transparent: true }) } : { group: mH, lift: mR };
+  const mC = !chimneys.length ? null : lit ? { group: look.material('chimney'), lift: look.material('chimney', { transparent: true }) } : { group: mH, lift: mR };
   chimneys.forEach(c => {
     // up to its storey's cut with that storey, then a piece in each band it rises through
     const parts = [[B.of(c.level), levels[c.level] || 0, c.cut || c.top, c.level > st.ground]];

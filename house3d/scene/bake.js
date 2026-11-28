@@ -69,11 +69,14 @@ export function applyBake({ THREE, targets, bake, texture, keep = x => x }) {
       const c = keep(m.clone());
       c.aoMap = texture;
       c.aoMapIntensity = 1;
-      c.onBeforeCompile = s => {
+      // over what the material's shader already had (Foto's detail photograph)
+      const before = m.onBeforeCompile, cacheKey = m.customProgramCacheKey;
+      c.onBeforeCompile = (s, r) => {
+        before.call(c, s, r);
         s.fragmentShader = s.fragmentShader.replace('#include <aomap_fragment>',
           `#include <aomap_fragment>\n\treflectedLight.directDiffuse *= mix(1.0, ambientOcclusion, ${DIRECT_AO.toFixed(2)});`);
       };
-      c.customProgramCacheKey = () => 'house3d-bake';
+      c.customProgramCacheKey = () => `${cacheKey.call(c)}|house3d-bake`;
       clones.set(m, c);
       keep(m);
     }

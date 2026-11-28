@@ -1,9 +1,11 @@
 // The Foto style's look (style 'photo', scene/look.js): Päris's surfaces and light, with a
-// photographed lawn, meadow, street, paving and sky, leaf cards on the crowns and hedges, and in
-// winter bare crowns of branches and twig cards under an overcast sky. Its textures are
-// house3d/assets/ (CC0, sources.json there), loaded after the first frame through start(); until
-// they are in, it draws as Päris, the cards hidden, but for the winter: the deciduous crowns go
-// bare (bare) from the start, their branches drawn at once.
+// photographed lawn, meadow, street, paving and sky, the house's cladding, roofs, plinth,
+// chimneys, deck and timber under a photographed grain (DETAILS), leaf cards on the crowns and
+// hedges, and in winter bare crowns of branches and twig cards under an overcast sky. Its textures
+// are house3d/assets/ (CC0, sources.json there), loaded after the first frame through start(), the
+// ground, sky and cards first and the house's photographs after them; until they are in, it draws
+// as Päris, the cards hidden, but for the winter: the deciduous crowns go bare (bare) from the
+// start, their branches drawn at once.
 // The light tier (quality 'low') keeps fewer and larger leaf cards, half the twig cards, one
 // level of branches less, and drops the normal maps and the contact shadows (ao false).
 //
@@ -35,6 +37,35 @@ const SURFACES = {
   paving: { map: 'paving.ktx2', normal: 'paving-normal.ktx2', repeat: 0.5, mean: [0.2527, 0.2535, 0.2303] }
 };
 const NORMAL = 0.6;
+// the house's detail photographs, by role (look.material's, kept in material.userData.role) and,
+// for the cladding and a roof, its pattern ('plain' for a roof without Päris's map): grain only,
+// never boards, seams or joints of their own, multiplied over Päris's surface and its map. size is
+// one repeat in metres [along the grain, across], mean the photograph's mean linear colour, which
+// the shader divides out so the model's colour stays the average (the paving's rule), strength how
+// much of its variation shows (1 all of it), grain the grain's angle in degrees from the face's
+// level line ('look' the cladding's boards), normal its normal map, high tier only. Sampled in
+// world space on the face's own plane: its level line and the line of steepest rise, so a wall's
+// grain follows its boards and a roof's runs down its slope, on any UVs or none.
+const WOOD = { map: 'wood.ktx2', size: [0.8, 0.8], mean: [0.202, 0.1273, 0.0769] };
+const CONCRETE = { map: 'concrete.ktx2', size: [1.1, 0.55], mean: [0.4818, 0.4818, 0.4818] };
+const METAL = { map: 'metal.ktx2', normal: 'metal-normal.ktx2', size: [1, 1], mean: [0.6716, 0.7233, 0.7831], grain: 90, strength: 0.6 };
+export const DETAILS = {
+  'cladding-boards': { ...WOOD, normal: 'wood-normal.ktx2', strength: 0.5, grain: 'look' },
+  'cladding-plain': { ...CONCRETE, strength: 0.35 },
+  'roof-seam': METAL,
+  'roof-plain': METAL,
+  'roof-tile': { map: 'clay.ktx2', normal: 'clay-normal.ktx2', size: [0.2, 0.2], mean: [0.3428, 0.188, 0.1079], strength: 0.7, grain: 90 },
+  base: { ...CONCRETE, strength: 0.8 },
+  chimney: { ...CONCRETE, strength: 0.8 },
+  deck: { ...WOOD, normal: 'wood-normal.ktx2', strength: 0.9 },
+  timber: { ...WOOD, strength: 0.9 }
+};
+const DETAIL_NORMAL = 0.5;
+// the DETAILS key a material takes, by its role and, for the cladding and a roof, the look's pattern
+const detailKey = ({ userData: { role }, map }, look) =>
+  role === 'cladding' ? `cladding-${look.cladding.pattern}` : role === 'roof' ? `roof-${map ? look.roof.pattern : 'plain'}` : role;
+// what multiplies a photograph back to the model's colour: one over its mean
+const gainOf = mean => mean.map(v => 1 / v);
 // the meadow past the lot reaches this many times the core's plane, past where the fog closes
 const OUTSIDE_SCALE = 4;
 // above this much snow the lawn and the meadow drop their photograph and show the snow's colour
@@ -77,7 +108,7 @@ export function photoLook(THREE, kit, real, { quality } = {}) {
   const low = quality === 'low', tier = low ? 'low' : 'high';
   const surfaces = [], dressings = [], hedges = [], cardMats = {}, sky = { tex: {}, targets: {}, at: null, backdrop: null };
   let winter = false;
-  let loaded = false, snow = 0, plane = null;
+  let loaded = false, snow = 0, plane = null, disposed = false;
   const white = new THREE.Color('#ffffff'), turn = new THREE.Matrix4();
 
   // three's shadow pass gives an alpha-to-coverage material a depth material with its map and
@@ -208,6 +239,65 @@ void main() {
   }
 #endif`);
   };
+
+  // a house surface's detail photograph (DETAILS) patched into its shader, over whatever it had
+  // (a bake's contact shadows) and Päris's own map; once per material, a band's copy included. The
+  // face's level line and line of steepest rise come from its normal per vertex (the faces are
+  // flat), the fragment only turning them to the grain and flipping the level line on a back face;
+  // what differs by role is in uniforms, so every dressed surface shares one program per variant
+  // the world normal from three's view-space one, which is right under any scale and instancing
+  const DETAIL_VERTEX = `vec4 dPos = vec4(transformed, 1.0);
+#ifdef USE_INSTANCING
+  dPos = instanceMatrix * dPos;
+#endif
+  dPos = modelMatrix * dPos;
+  vec3 dNrm = inverseTransformDirection(transformedNormal, viewMatrix);
+  vec3 dUp = abs(dNrm.y) > 0.999 ? vec3(0.0, 0.0, -1.0) : normalize(vec3(0.0, 1.0, 0.0) - dNrm * dNrm.y);
+  vec3 dLevel = normalize(cross(dUp, dNrm));
+  vDetail = vec2(dot(dPos.xyz, dLevel), dot(dPos.xyz, dUp));
+#ifdef DETAIL_NORMAL
+  vDetailLevel = mat3(viewMatrix) * dLevel;
+  vDetailUp = mat3(viewMatrix) * dUp;
+#endif`;
+  const DETAIL_VARYINGS = 'varying vec2 vDetail;\n#ifdef DETAIL_NORMAL\nvarying vec3 vDetailLevel;\nvarying vec3 vDetailUp;\n#endif\n';
+  function dressDetail(m, tex) {
+    const key = m.userData.role && detailKey(m, kit.look), d = DETAILS[key];
+    if (!d || m.userData.detail || !tex[d.map]) return;
+    const normal = !low && d.normal && tex[d.normal];
+    const angle = ((d.grain === 'look' ? kit.look.cladding.angle_deg || 0 : d.grain || 0) * Math.PI) / 180;
+    m.userData.detail = { key, normal: !!normal };
+    const uniforms = {
+      uDetail: { value: tex[d.map] },
+      uDetailAxis: { value: new THREE.Vector2(Math.cos(angle), Math.sin(angle)) },
+      uDetailSize: { value: new THREE.Vector2(...d.size) },
+      uDetailGain: { value: new THREE.Vector3(...gainOf(d.mean)) },
+      uDetailStrength: { value: d.strength },
+      ...(normal && { uDetailNormal: { value: normal } })
+    };
+    const before = m.onBeforeCompile, cacheKey = m.customProgramCacheKey;
+    m.onBeforeCompile = (sh, r) => {
+      before.call(m, sh, r);
+      Object.assign(sh.uniforms, uniforms);
+      const head = (normal ? '#define DETAIL_NORMAL\n' : '') + DETAIL_VARYINGS;
+      sh.vertexShader = head + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>\n  ${DETAIL_VERTEX}`);
+      sh.fragmentShader = `${head}uniform sampler2D uDetail;\nuniform vec2 uDetailAxis;\nuniform vec2 uDetailSize;\nuniform vec3 uDetailGain;\nuniform float uDetailStrength;\n#ifdef DETAIL_NORMAL\nuniform sampler2D uDetailNormal;\n#endif\n` + sh.fragmentShader
+        .replace('#include <map_fragment>', `#include <map_fragment>
+  float dSide = gl_FrontFacing ? 1.0 : -1.0;
+  vec2 dAt = vec2(vDetail.x * dSide, vDetail.y);
+  vec2 dUv = vec2(dot(dAt, uDetailAxis), dAt.y * uDetailAxis.x - dAt.x * uDetailAxis.y) / uDetailSize;
+  diffuseColor.rgb *= mix(vec3(1.0), texture2D(uDetail, dUv).rgb * uDetailGain, uDetailStrength);`)
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+#ifdef DETAIL_NORMAL
+  vec3 dMap = texture2D(uDetailNormal, dUv).xyz * 2.0 - 1.0;
+  dMap.xy *= ${DETAIL_NORMAL.toFixed(2)};
+  vec3 dL = normalize(vDetailLevel) * dSide, dU = normalize(vDetailUp);
+  normal = normalize(mat3(uDetailAxis.x * dL + uDetailAxis.y * dU, uDetailAxis.x * dU - uDetailAxis.y * dL, normal) * dMap);
+#endif`);
+    };
+    m.customProgramCacheKey = () => `${cacheKey.call(m)}|detail${normal ? '-n' : ''}`;
+    m.needsUpdate = true;
+  }
+  const detailFiles = () => [...new Set(Object.values(DETAILS).flatMap(d => [d.map, !low && d.normal]).filter(Boolean))];
 
   const look = {
     ...real,
@@ -382,8 +472,10 @@ void main() {
       horizon.uClean.value = s.clean;
       return true;
     },
-    // after the first frame: load(file) -> Promise<texture>; done() once applied
-    start({ load, done }) {
+    // after the first frame: load(file) -> Promise<texture>; done() once the ground, the sky and the
+    // cards are applied, and again once the house's detail photographs are, on every material with a
+    // role under scene
+    start({ load, done, scene }) {
       const files = [...new Set([
         ...Object.values(SKIES).map(s => s.file),
         ...Object.values(SURFACES).flatMap(s => [s.map, s.rough, !low && s.normal]).filter(Boolean),
@@ -413,7 +505,7 @@ void main() {
           m.normalScale.set(NORMAL, NORMAL);
           if (s.rough) m.roughnessMap = tiled(s.rough, s);
           if (s.roughness) m.roughness = s.roughness;
-          const meadow = role === 'outside', mottled = s.mottle && mottle, gain = s.mean && s.mean.map(v => (1 / v).toFixed(4)).join(', ');
+          const meadow = role === 'outside', mottled = s.mottle && mottle, gain = s.mean && gainOf(s.mean).map(v => v.toFixed(4)).join(', ');
           if (meadow) {
             // the ground layer snows and night-tints it from userData.look
             m.userData.look = colour;
@@ -447,9 +539,20 @@ void main() {
         loaded = true;
         dressings.forEach(f => f());
         done();
+        // a photograph that fails leaves its surfaces as Päris draws them
+        return Promise.all(detailFiles().map(f => load(f).then(t => [f, kit.keep(t)], () => null))).then(list => {
+          if (disposed) return;
+          const details = Object.fromEntries(list.filter(Boolean));
+          Object.values(details).forEach(t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = low ? 4 : 8; });
+          if (scene) scene.traverse(o => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => dressDetail(m, details)); });
+          done();
+        });
       });
     },
-    dispose() { Object.values(sky.targets).forEach(t => t.dispose()); }
+    dispose() {
+      disposed = true;
+      Object.values(sky.targets).forEach(t => t.dispose());
+    }
   };
   return look;
 }
