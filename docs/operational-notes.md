@@ -515,7 +515,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   geometry. `scene/kit.js` makes each mount's colours, materials and
   geometry helpers, and `scene/layers/` holds one module per scene layer
   (ground, site, trees, gates, surroundings, pergola, building, interior,
-  outdoor lights, car, future, camera view fans); `scene/sun.js` holds the
+  outdoor lights, car, future, props, winter, camera view fans); `scene/sun.js` holds the
   sun's position and direction, pure functions loaded like the kit;
   `scene/overlay.js` is the marker and label overlay (markers, room labels
   and chips, their CSS, the collision pass and the hover and tap
@@ -541,14 +541,15 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   wing's faces to where it is highest, which the building layer draws as a
   slab and the winter layer snows on, and wall tops are sampled where they
   cross a ridge, hip or valley, so a gable end reaches its peak. A model may
-  list `levels` (floor heights) with walls and rooms on a `level`: an upper
-  storey's walls stand in the lift on their level, on a glass of their own,
-  so they rise and fade with the roof while the ground floor's glass stays,
-  and a ground-floor wall taller than the ceiling is cut at it. Upper rooms
-  get no floor, label or chip and the interior layer leaves their walls out;
+  list `levels` (floor heights, below zero for a basement) with walls and
+  rooms on a `level`: each storey has its own band of the lift and its own
+  cut, showing a storey from inside lifts the ones above it, the interior
+  layer draws every storey, and labels and chips show for the shown storey's
+  rooms ([khe-house3d ADR-001](https://github.com/khelias/khe-house3d/blob/main/docs/decisions/001-own-3d-engine.md) point 4).
   PV lies on a shed roof or one face of a hip or gable roof, never on a flat
-  one. khe-house3d's `fixture-twostorey.md` is the
-  made-up house that exercises all of it, and its geometry baseline pins
+  one. khe-house3d's `fixture-twostorey.md` and `fixture-storeys.md` (a
+  basement and an attic) are the made-up houses that exercise it, and the
+  engine's geometry baseline pins
   where the roof-reading layers stand on the main fixture.
 - **A house's look:** the lit styles' finishes are the model's
   `geometry.look` ([khe-house3d ADR-001](https://github.com/khelias/khe-house3d/blob/main/docs/decisions/001-own-3d-engine.md) point 6, the
@@ -581,7 +582,8 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   an architectural model: oak planks along the plan's z and the wet rooms'
   wood-look tile on the floors, near-black section caps on the walls' cut
   tops, oak skirting and a soft shade on the floor along the walls, and the furniture shaped by
-  its `kind`), and "Foto" (Päris with a photographed lawn, street and sky and
+  its `kind`), and "Foto" (Päris with photographed textures, the lawn, street and sky, the
+  house's wood, metal, concrete and clay and the oak and fabric inside, and
   leaf cards on the crowns and hedges, the deciduous crowns bare in winter, a
   light tier on a device with few cores or little memory; its textures are
   the engine's `house3d/assets/`, loaded after the first frame, so khe.ee/ha
@@ -849,16 +851,18 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   forecast: no clouds, no shading. The sun is computed in every style for
   it (`onSun`, the view's `sun`). The standalone viewer never gets the
   layer; the scan covers the items' positions.
-- **Placing devices, trees and future items:** khe-house3d's `scripts/house3d-place.py serve <model>`
+- **Placing devices, trees, future items and yard things:** khe-house3d's `scripts/house3d-place.py serve <model>`
   serves `place.html` on 127.0.0.1 with the private layer from memory. Pick a
   device, a tree or a future item, click or drag it into place on the plan, turn a camera
   with the Suund slider, size a tree with the Kõrgus and Võra sliders, turn a
-  future item with the Pööre buttons (its size and numbers stay hand edits), then
-  copy the changes, `{"devices": {...}, "trees": {...}, "future": {...}}` with only the groups
+  future item with the Pööre buttons (its size and numbers stay hand edits), add,
+  move, turn or remove a yard thing, then
+  copy the changes, `{"devices": {...}, "trees": {...}, "future": {...}, "props": {...}}` with only the groups
   that changed; `pbpaste | scripts/house3d-place.py apply <model> -` (there too) rewrites
   those device lines in the private block (heights stay by type), those
   tree lines in the geometry block's `site.trees` and those item lines in
-  the private block's future `items`, refusing a pv item moved off its roof. Trees are geometry, so they
+  the private block's future `items` and the yard things in the geometry
+  block's `props` list, refusing a pv item moved off its roof. Trees are geometry, so they
   show in the standalone viewer too and the privacy scan does not cover them.
   Commit the model in khe-meta and rerun `ha-dashboard.py`. HA serves
   `place.html` too, but without a model it shows nothing.
