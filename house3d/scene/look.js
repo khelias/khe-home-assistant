@@ -3,7 +3,8 @@
 // which lit style it is stays here. createLook() runs once per mount, after createKit().
 //
 // A look: { id: 'simple' | 'real' | 'photo', lit, and when lit:
-//   material(role, o?)  a new lit material for a surface by its kit name (kit.surface), with the
+//   material(role, o?, surface?)  a new lit material for a surface by its kit name (kit.surface;
+//                       surface when it is not the role's own, as the splashback's linen), with the
 //                       role's own texture (the lawn's mottle, the road's asphalt, the paving's
 //                       stones) unless o gives a map, and the role in its userData.role, which a
 //                       band's copy keeps: Foto dresses the house's surfaces by it
@@ -32,8 +33,8 @@ export function createLook(THREE, kit, id, { light, photo, quality } = {}) {
   if (id !== 'real' && id !== 'photo') return { id: 'simple', lit: false };
   const real = {
     id: 'real', lit: true,
-    material: (role, o = {}) => {
-      const m = kit.surface(role, MAPS[role] && !('map' in o) ? { map: kit[MAPS[role]](), ...o } : o);
+    material: (role, o = {}, surface = role) => {
+      const m = kit.surface(surface, MAPS[role] && !('map' in o) ? { map: kit[MAPS[role]](), ...o } : o);
       m.userData.role = role;
       return m;
     },

@@ -4,7 +4,8 @@
 // wall face that has a house room of its storey in front of it, and the furniture, on the storey
 // ctx.storeyOf gives it, its legs down to that floor, shaped by its kind (scripts/house3d_model.py
 // FURNITURE_KINDS; an item without one is a warm grey block; a chair's or sofa's back is on the
-// edge it names, else the side nearer a wall). It reads the building layer's
+// edge it names, else the side nearer a wall), its surfaces through the look, so each keeps its
+// role (Foto's detail photographs). It reads the building layer's
 // inRoom and cutOf through its api, so it builds after it, and builds nothing in the
 // simple style or without the building. Caps, skirting and shade are one InstancedMesh each, the
 // furniture one per material and storey, so the interior costs a handful of draw calls; every mesh carries
@@ -186,7 +187,7 @@ export default function build({ THREE, kit, model, roof, state, look, layer, sto
       });
     });
   });
-  const skirtMat = skirts.some(l => l.length) ? kit.surface('skirting') : null;
+  const skirtMat = skirts.some(l => l.length) ? look.material('skirting') : null;
   skirts.forEach((list, s) => { if (list.length) instanced(unitBox, skirtMat, list, 'skirting', B.of(s)).receiveShadow = true; });
   if (shades.some(l => l.length)) {
     // dark at the wall (v 1, the plane's local -z, which faces the wall) fading to nothing
@@ -217,11 +218,11 @@ export default function build({ THREE, kit, model, roof, state, look, layer, sto
   }));
   const items = model.furniture || [];
   const mats = new Map();
-  const mat = (name, make = () => kit.surface(name)) => mats.get(name) || mats.set(name, make()).get(name);
+  const mat = (name, make = () => look.material(name)) => mats.get(name) || mats.set(name, make()).get(name);
   // a splashback: a thin slab on its rect, its UVs in metres along the wall and up it
   function splashback(f, i) {
     const [x0, z0, x1, z1] = f.rect, alongX = x1 - x0 >= z1 - z0;
-    const m = kit.solid(B.of(storeyOf(f)), mat('splash', () => kit.surface('linen', { map: kit.splashTiles(), roughness: 0.42 })), f.rect, f.y);
+    const m = kit.solid(B.of(storeyOf(f)), mat('splash', () => look.material('splash', { map: kit.splashTiles(), roughness: 0.42 }, 'linen')), f.rect, f.y);
     const pos = m.geometry.attributes.position, uv = m.geometry.attributes.uv;
     for (let k = 0; k < pos.count; k++) uv.setXY(k, alongX ? pos.getX(k) + m.position.x : pos.getZ(k) + m.position.z, pos.getY(k) + m.position.y);
     m.userData = { part: 'splashback', items: [i] };

@@ -592,7 +592,7 @@ export default function build({ THREE, kit, C, model, roof, ceiling, state, look
       const map = !lit ? null : stones ? kit.pavers() : r.floor === 'tile' ? kit.tiles() : kit.planks();
       // the night glow lights the planks, tiles or stones, not a flat sheet over them
       const mat = !lit ? basic({ color: C.floor.clone(), opacity: 0.85, side: THREE.DoubleSide })
-        : stones ? look.material('paving', { map, emissiveMap: map }) : kit.surface(r.floor || 'floor', { map, emissiveMap: map });
+        : look.material(stones ? 'paving' : r.floor || 'floor', { map, emissiveMap: map });
       // a lit style's floors run to the rect's edge, so a room in several rects is one floor
       const inset = lit ? 0 : 0.05, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
       const geo = new THREE.PlaneGeometry(x1 - x0 - inset * 2, z1 - z0 - inset * 2);
