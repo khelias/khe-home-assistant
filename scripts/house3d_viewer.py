@@ -119,6 +119,16 @@ def _decimals(v):
     return len(format(Decimal(repr(float(v))), "f").partition(".")[2].rstrip("0"))
 
 
+def glb_json(path):
+    """A binary glTF's JSON chunk (its names and any extras), the part of it a scan can read;
+    nothing for a file that is not one."""
+    raw = path.read_bytes()
+    if raw[:4] != b"glTF":
+        return ""
+    length = int.from_bytes(raw[12:16], "little")
+    return raw[20 : 20 + length].decode("utf-8")
+
+
 def scan(model, paths, allow=()):
     """allow: (file, label) pairs, a hit with that label in that file is not one."""
     pats = patterns(model)
@@ -132,7 +142,7 @@ def scan(model, paths, allow=()):
         files.extend(sorted(f for f in p.rglob("*") if f.is_file()) if p.is_dir() else [p])
     for f in files:
         try:
-            text = f.read_text(encoding="utf-8")
+            text = glb_json(f) if f.suffix == ".glb" else f.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
         here = f.resolve() if allowed else None

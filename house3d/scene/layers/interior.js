@@ -5,7 +5,8 @@
 // ctx.storeyOf gives it, its legs down to that floor, shaped by its kind (scripts/house3d_model.py
 // FURNITURE_KINDS; an item without one is a warm grey block; a chair's or sofa's back is on the
 // edge it names, else the side nearer a wall), its surfaces through the look, so each keeps its
-// role (Foto's detail photographs). It reads the building layer's
+// role (Foto's detail photographs; Foto also puts a model in a plant's place, its instances then
+// scaled to nothing). It reads the building layer's
 // inRoom and cutOf through its api, so it builds after it, and builds nothing in the
 // simple style or without the building. Caps, skirting and shade are one InstancedMesh each, the
 // furniture one per material and storey, so the interior costs a handful of draw calls; every mesh carries
@@ -89,6 +90,7 @@ export default function build({ THREE, kit, model, roof, state, look, layer, sto
   const unitBox = new THREE.BoxGeometry(1, 1, 1);
   const Y = new THREE.Vector3(0, 1, 0), ONE = new THREE.Vector3(1, 1, 1);
   const q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+  const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 
   // a wall's frame: its group transform in building.js (local +x along the wall, +z is plan (-uz, ux))
   const frames = walls.map(w => {
@@ -745,6 +747,23 @@ export default function build({ THREE, kit, model, roof, state, look, layer, sto
     const im = instanced(unitCylinder, mat(name), list.map(x => x.matrix), 'furniture', B.of(s));
     im.userData.items = list.map(x => x.i);
     im.castShadow = im.receiveShadow = true;
+  });
+
+  // Foto puts a model in a plant's place, fitted to its box, and hides the plant's instances
+  // once it has one (look.model)
+  if (look.model) items.forEach((f, i) => {
+    if (f.kind !== 'plant') return;
+    const [cx, cz, r] = f.circle || [], [x0, z0, x1, z1] = f.circle ? [cx - r, cz - r, cx + r, cz + r] : f.rect;
+    const band = B.of(storeyOf(f)), [y0, y1] = f.y;
+    look.model(f.bloom ? 'plant-bloom' : 'plant', {
+      group: band, at: [(x0 + x1) / 2, y0, (z0 + z1) / 2], fit: [x1 - x0, y1 - y0, z1 - z0],
+      hide: () => band.children.forEach(im => {
+        if (!im.isInstancedMesh || !im.userData.items || !im.userData.items.includes(i)) return;
+        im.userData.items.forEach((k, n) => { if (k === i) im.setMatrixAt(n, ZERO); });
+        im.instanceMatrix.needsUpdate = true;
+        im.computeBoundingSphere();
+      })
+    });
   });
 
   // a storey's cut walls' caps hide under its lifted walls while the band over its cut is fully on;

@@ -2,11 +2,12 @@
 // photographed lawn, meadow, street, paving and sky, the house's cladding, roofs, plinth,
 // chimneys, deck and timber and the rooms' oak, fabric, tiles and worktops under a photographed
 // grain (DETAILS), a lacquered car (carPaint), leaf cards on the crowns and
-// hedges, and in winter bare crowns of branches and twig cards under an overcast sky. Its textures
-// are house3d/assets/ (CC0, sources.json there), loaded after the first frame through start(), the
-// ground, sky and cards first and the house's photographs after them; until they are in, it draws
-// as Päris, the cards hidden, but for the winter: the deciduous crowns go bare (bare) from the
-// start, their branches drawn at once.
+// hedges, models in place of the yard things' and plants' shapes (MODELS), and in winter bare
+// crowns of branches and twig cards under an overcast sky. Its textures and models are
+// house3d/assets/ (CC0, sources.json there), loaded after the first frame through start(), the
+// ground, sky and cards first, the house's photographs after them and the models last; until they
+// are in, it draws as Päris, the cards hidden, but for the winter: the deciduous crowns go bare
+// (bare) from the start, their branches drawn at once.
 // The light tier (quality 'low') keeps fewer and larger leaf cards, half the twig cards, one
 // level of branches less, and drops the normal maps and the contact shadows (ao false).
 //
@@ -74,6 +75,28 @@ export const DETAILS = {
   fabric: FABRIC, sofa: FABRIC, linen: { ...FABRIC, strength: 0.3 }
 };
 const DETAIL_NORMAL = 0.5;
+// the models Foto draws in place of a layer's shapes (house3d/assets/*.glb, built by
+// scripts/house3d-models.sh): each part (a glTF material) in its own photographed colours, or with
+// tint in a surface's colour with its colour map's mean linear colour divided out, as the detail
+// photographs do, or plain in a surface's colour; cut parts are leaves and needles cut out by alpha.
+// A part's maps are <kind>-<part>.ktx2 and <kind>-<part>-normal.ktx2 beside its model.
+const MODELS = {
+  bin: { body: { surface: 'anthracite' }, trim: { surface: 'shell' } },
+  mailbox: { box: { surface: 'anthracite' }, post: { surface: 'fence' } },
+  'lamp-post': { metal: { surface: 'anthracite' } },
+  thuja: { core: { surface: 'hedge' }, needles: { map: true, cut: true, tint: 'hedge', mean: [0.0099, 0.0089, 0.0026] } },
+  'garden-table': {
+    table: { map: true, normal: true, tint: 'timber', mean: [0.2867, 0.1445, 0.0771] },
+    chair: { map: true, normal: true, tint: 'timber', mean: [0.2881, 0.1319, 0.0609] }
+  },
+  pot: { pot: { map: true, normal: true }, leaves: { map: true, normal: true, cut: true } },
+  plant: { pot: { map: true, normal: true }, leaves: { map: true, normal: true, cut: true } },
+  'plant-bloom': {
+    vase: { map: true, normal: true },
+    flowers: { map: true, normal: true, cut: true }
+  },
+  fern: { fronds: { map: true, normal: true, cut: true } }
+};
 // the car's lacquer and glass (carPaint)
 const CAR_PAINT = { roughness: 0.42, metalness: 0.35, clearcoat: 1, clearcoatRoughness: 0.06 };
 const CAR_GLASS = { roughness: 0.04, metalness: 0.2, opacity: 0.6 }, CAR_GLASS_TINT = 0.35;
@@ -123,6 +146,7 @@ export const cardCount = (perM2, area, low) => Math.round(perM2 * area * (low ? 
 export function photoLook(THREE, kit, real, { quality } = {}) {
   const low = quality === 'low', tier = low ? 'low' : 'high';
   const surfaces = [], dressings = [], hedges = [], cardMats = {}, sky = { tex: {}, targets: {}, at: null, backdrop: null };
+  const models = [];
   let winter = false;
   let loaded = false, snow = 0, plane = null, disposed = false;
   const white = new THREE.Color('#ffffff'), turn = new THREE.Matrix4();
@@ -325,6 +349,69 @@ void main() {
     return d ? [d.map, !low && d.normal] : [];
   }).filter(Boolean))];
 
+  // a model's material for one part, one per part and group (a lift band fades and casts on its own)
+  const modelMats = new Map();
+  const mapFile = (kind, name, suffix = '') => `${kind}-${name}${suffix}.ktx2`;
+  function modelMaterial(kind, name, scope, tex) {
+    const key = `${kind}|${name}|${scope.uuid}`;
+    if (modelMats.has(key)) return modelMats.get(key);
+    const p = MODELS[kind][name] || {}, base = p.surface || p.tint;
+    const m = base ? kit.surface(base) : kit.keep(new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0 }));
+    const map = p.map && tex[mapFile(kind, name)];
+    if (map) {
+      m.map = map;
+      if (p.tint) m.color.multiply(new THREE.Color(...gainOf(p.mean)));
+      else m.color.set('#ffffff');
+      const normal = !low && p.normal && tex[mapFile(kind, name, '-normal')];
+      if (normal) m.normalMap = normal;
+      if (p.cut) Object.assign(m, { alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide });
+    }
+    modelMats.set(key, m);
+    return m;
+  }
+  // puts a loaded model where a layer asked: scaled to fit its box, the shape hidden
+  function placeModel({ kind, group, scope, at, turn, fit, hide }, gltf, tex) {
+    const box = new THREE.Box3().setFromObject(gltf.scene), size = box.getSize(new THREE.Vector3());
+    const scale = fit ? Math.min(fit[0] / size.x, fit[1] / size.y, fit[2] / size.z) : 1;
+    const m = gltf.scene.clone(true);
+    // a band casts only while it is fully on (house3d.js): the model takes the state of a
+    // neighbour that casts when the band is on
+    let casts = true;
+    group.traverse(o => { if (o.isMesh && o.userData.cast) casts = o.castShadow; });
+    m.traverse(o => {
+      if (!o.isMesh) return;
+      o.material = modelMaterial(kind, o.material.name, scope, tex);
+      o.castShadow = casts;
+      o.receiveShadow = true;
+      o.userData.cast = true;
+    });
+    m.position.set(...at);
+    m.rotation.y = turn;
+    m.scale.setScalar(scale);
+    m.userData.part = 'model';
+    m.userData.model = kind;
+    group.add(m);
+    if (hide) hide();
+  }
+  // the models the scene asked for and their maps; a model that fails, or whose colour map does,
+  // leaves its shapes
+  function loadModels(load, model) {
+    const kinds = [...new Set(models.map(m => m.kind))];
+    if (!kinds.length) return Promise.resolve();
+    const maps = kinds.flatMap(k => Object.entries(MODELS[k]).flatMap(([name, p]) => [p.map && mapFile(k, name), !low && p.normal && mapFile(k, name, '-normal')])).filter(Boolean);
+    return Promise.all([
+      Promise.all(kinds.map(k => model(`${k}.glb`).then(g => [k, g], () => null))),
+      Promise.all(maps.map(f => load(f).then(t => [f, kit.keep(t)], () => null)))
+    ]).then(([gs, ts]) => {
+      if (disposed) return;
+      const gltfs = Object.fromEntries(gs.filter(Boolean)), tex = Object.fromEntries(ts.filter(Boolean));
+      const whole = k => gltfs[k] && Object.entries(MODELS[k]).every(([name, p]) => !p.map || tex[mapFile(k, name)]);
+      models.forEach(m => { if (whole(m.kind)) placeModel(m, gltfs[m.kind], tex); });
+      // the loader's own materials, each placed copy having its own
+      Object.values(gltfs).forEach(g => g.scene.traverse(o => { if (o.material) o.material.dispose(); }));
+    });
+  }
+
   const look = {
     ...real,
     id: 'photo',
@@ -465,6 +552,12 @@ void main() {
       hedges.push(hedge);
       dressings.push(() => { sides.userData.ready = top.userData.ready = true; dressHedge(hedge); });
     },
+    // a model in place of a layer's shapes, once start() has it: kind a MODELS key, group where it
+    // goes, at its foot there, turn about y, fit [w, h, d] the box it is scaled into (uniformly,
+    // never stretched) or none for its own size, hide() hides the shapes it replaces
+    model(kind, { group, scope = group, at, turn = 0, fit = null, hide = null }) {
+      if (MODELS[kind]) models.push({ kind, group, scope, at, turn, fit, hide });
+    },
     // the ground's snow over the lawn and the meadow, 0 to 1
     snow(amount) {
       snow = amount;
@@ -505,10 +598,10 @@ void main() {
       horizon.uClean.value = s.clean;
       return true;
     },
-    // after the first frame: load(file) -> Promise<texture>; done() once the ground, the sky and the
-    // cards are applied, and again once the house's detail photographs are, on every material with a
-    // role under scene
-    start({ load, done, scene }) {
+    // after the first frame: load(file) -> Promise<texture>, model(file) -> Promise<glTF>; done()
+    // once the ground, the sky and the cards are applied, again once the house's detail photographs
+    // are, on every material with a role under scene, and again once the models are in place
+    start({ load, model, done, scene }) {
       const files = [...new Set([
         ...Object.values(SKIES).map(s => s.file),
         ...Object.values(SURFACES).flatMap(s => [s.map, s.rough, !low && s.normal]).filter(Boolean),
@@ -579,6 +672,8 @@ void main() {
           Object.values(details).forEach(t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = low ? 4 : 8; });
           sceneMaterials(scene).forEach(m => dressDetail(m, details));
           done();
+          if (!model) return;
+          return loadModels(load, model).then(() => { if (!disposed) done(); });
         });
       });
     },

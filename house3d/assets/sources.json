@@ -1,5 +1,5 @@
 {
- "licence": "CC0 1.0 (ambientCG, Poly Haven); encoded with basisu 2.50",
+ "licence": "CC0 1.0 (ambientCG, Poly Haven, and khe-house3d's own models); encoded with basisu 2.50, models made in Blender 5.3",
  "files": {
   "lawn.ktx2": {
    "url": "https://ambientcg.com/view?id=Grass004",
@@ -132,6 +132,174 @@
    "from": "Fabric039 1K-JPG Color, ETC1S",
    "licence": "CC0-1.0",
    "bytes": 149438
+  },
+  "bin.glb": {
+   "url": "https://github.com/khelias/khe-house3d",
+   "from": "geometry, built for khe-house3d by scripts/house3d_make_models.py: a 240 l two-wheeled bin to EN 840",
+   "licence": "CC0-1.0",
+   "bytes": 21520
+  },
+  "fern-fronds-normal.ktx2": {
+   "url": "https://polyhaven.com/a/fern_02",
+   "from": "normal map, UASTC 256, Poly Haven fern_02 1k glTF (one clump) and its Alpha, by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 68228
+  },
+  "fern-fronds.ktx2": {
+   "url": "https://polyhaven.com/a/fern_02",
+   "from": "colour map, ETC1S 512, Poly Haven fern_02 1k glTF (one clump) and its Alpha, by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 48440
+  },
+  "fern.glb": {
+   "url": "https://polyhaven.com/a/fern_02",
+   "from": "geometry, Poly Haven fern_02 1k glTF (one clump) and its Alpha, by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 35504
+  },
+  "garden-table-chair-normal.ktx2": {
+   "url": "https://polyhaven.com/a/outdoor_table_chair_set_01",
+   "from": "normal map, UASTC 256, Poly Haven outdoor_table_chair_set_01 1k glTF, reduced and quantised by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 51651
+  },
+  "garden-table-chair.ktx2": {
+   "url": "https://polyhaven.com/a/outdoor_table_chair_set_01",
+   "from": "colour map, ETC1S 512, Poly Haven outdoor_table_chair_set_01 1k glTF, reduced and quantised by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 46282
+  },
+  "garden-table-table-normal.ktx2": {
+   "url": "https://polyhaven.com/a/outdoor_table_chair_set_01",
+   "from": "normal map, UASTC 256, Poly Haven outdoor_table_chair_set_01 1k glTF, reduced and quantised by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 47549
+  },
+  "garden-table-table.ktx2": {
+   "url": "https://polyhaven.com/a/outdoor_table_chair_set_01",
+   "from": "colour map, ETC1S 512, Poly Haven outdoor_table_chair_set_01 1k glTF, reduced and quantised by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 44763
+  },
+  "garden-table.glb": {
+   "url": "https://polyhaven.com/a/outdoor_table_chair_set_01",
+   "from": "geometry, Poly Haven outdoor_table_chair_set_01 1k glTF, reduced and quantised by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 179944
+  },
+  "lamp-post.glb": {
+   "url": "https://github.com/khelias/khe-house3d",
+   "from": "geometry, built for khe-house3d by scripts/house3d_make_models.py: a garden lamp post, its head the lights layer's",
+   "licence": "CC0-1.0",
+   "bytes": 13024
+  },
+  "mailbox.glb": {
+   "url": "https://github.com/khelias/khe-house3d",
+   "from": "geometry, built for khe-house3d by scripts/house3d_make_models.py: a steel post mailbox",
+   "licence": "CC0-1.0",
+   "bytes": 19368
+  },
+  "plant-bloom-flowers-normal.ktx2": {
+   "url": "https://polyhaven.com/a/ceramic_vase_02",
+   "from": "normal map, UASTC 256, Poly Haven ceramic_vase_02 with periwinkle_plant stems (https://polyhaven.com/a/periwinkle_plant) and its opacity, 1k glTF, by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 83550
+  },
+  "plant-bloom-flowers.ktx2": {
+   "url": "https://polyhaven.com/a/ceramic_vase_02",
+   "from": "colour map, ETC1S 512, Poly Haven ceramic_vase_02 with periwinkle_plant stems (https://polyhaven.com/a/periwinkle_plant) and its opacity, 1k glTF, by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 51623
+  },
+  "plant-bloom-vase-normal.ktx2": {
+   "url": "https://polyhaven.com/a/ceramic_vase_02",
+   "from": "normal map, UASTC 256, Poly Haven ceramic_vase_02 with periwinkle_plant stems (https://polyhaven.com/a/periwinkle_plant) and its opacity, 1k glTF, by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 70524
+  },
+  "plant-bloom-vase.ktx2": {
+   "url": "https://polyhaven.com/a/ceramic_vase_02",
+   "from": "colour map, ETC1S 512, Poly Haven ceramic_vase_02 with periwinkle_plant stems (https://polyhaven.com/a/periwinkle_plant) and its opacity, 1k glTF, by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 37629
+  },
+  "plant-bloom.glb": {
+   "url": "https://polyhaven.com/a/ceramic_vase_02",
+   "from": "geometry, Poly Haven ceramic_vase_02 with periwinkle_plant stems (https://polyhaven.com/a/periwinkle_plant) and its opacity, 1k glTF, by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 192924
+  },
+  "plant-leaves-normal.ktx2": {
+   "url": "https://polyhaven.com/a/potted_plant_01",
+   "from": "normal map, UASTC 256, Poly Haven potted_plant_01 1k glTF and its leaves_alpha, thinned, reduced and quantised by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 82668
+  },
+  "plant-leaves.ktx2": {
+   "url": "https://polyhaven.com/a/potted_plant_01",
+   "from": "colour map, ETC1S 512, Poly Haven potted_plant_01 1k glTF and its leaves_alpha, thinned, reduced and quantised by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 54439
+  },
+  "plant-pot-normal.ktx2": {
+   "url": "https://polyhaven.com/a/potted_plant_01",
+   "from": "normal map, UASTC 256, Poly Haven potted_plant_01 1k glTF and its leaves_alpha, thinned, reduced and quantised by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 80623
+  },
+  "plant-pot.ktx2": {
+   "url": "https://polyhaven.com/a/potted_plant_01",
+   "from": "colour map, ETC1S 512, Poly Haven potted_plant_01 1k glTF and its leaves_alpha, thinned, reduced and quantised by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 51122
+  },
+  "plant.glb": {
+   "url": "https://polyhaven.com/a/potted_plant_01",
+   "from": "geometry, Poly Haven potted_plant_01 1k glTF and its leaves_alpha, thinned, reduced and quantised by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 144632
+  },
+  "pot-leaves-normal.ktx2": {
+   "url": "https://polyhaven.com/a/potted_plant_02",
+   "from": "normal map, UASTC 256, Poly Haven potted_plant_02 1k glTF and its leaves_alpha, reduced and quantised by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 82389
+  },
+  "pot-leaves.ktx2": {
+   "url": "https://polyhaven.com/a/potted_plant_02",
+   "from": "colour map, ETC1S 512, Poly Haven potted_plant_02 1k glTF and its leaves_alpha, reduced and quantised by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 58395
+  },
+  "pot-pot-normal.ktx2": {
+   "url": "https://polyhaven.com/a/potted_plant_02",
+   "from": "normal map, UASTC 256, Poly Haven potted_plant_02 1k glTF and its leaves_alpha, reduced and quantised by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 52955
+  },
+  "pot-pot.ktx2": {
+   "url": "https://polyhaven.com/a/potted_plant_02",
+   "from": "colour map, ETC1S 512, Poly Haven potted_plant_02 1k glTF and its leaves_alpha, reduced and quantised by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 44743
+  },
+  "pot.glb": {
+   "url": "https://polyhaven.com/a/potted_plant_02",
+   "from": "geometry, Poly Haven potted_plant_02 1k glTF and its leaves_alpha, reduced and quantised by scripts/house3d_models.py",
+   "licence": "CC0-1.0",
+   "bytes": 111460
+  },
+  "thuja-needles.ktx2": {
+   "url": "https://github.com/khelias/khe-house3d",
+   "from": "colour map, ETC1S 512, built for khe-house3d by scripts/house3d_make_models.py on site.js THUJA, its needle cards cut from Poly Haven fir_tree_01 twig_diff and twig_alpha (https://polyhaven.com/a/fir_tree_01)",
+   "licence": "CC0-1.0",
+   "bytes": 51659
+  },
+  "thuja.glb": {
+   "url": "https://github.com/khelias/khe-house3d",
+   "from": "geometry, built for khe-house3d by scripts/house3d_make_models.py on site.js THUJA, its needle cards cut from Poly Haven fir_tree_01 twig_diff and twig_alpha (https://polyhaven.com/a/fir_tree_01)",
+   "licence": "CC0-1.0",
+   "bytes": 93588
   }
  }
 }
