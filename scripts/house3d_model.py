@@ -79,6 +79,13 @@ are optional. site.garage_roof may carry "rim" (0-0.2 m), an upstand round each 
 and "bands" (1-4), its fascia as that many stacked boards; without them, or with 1, one block. The
 real style draws both in the casings' surface.
 
+Yard things: site.props (optional) is a list of {"id": "bin_1", "kind": "bin", "at": [x, z],
+"rot": 0}, each inside the lot with an id of its own, kind one of bin (a wheelie bin), mailbox (a
+box on a post), garden_table (a table with two chairs), pot (a flower pot with the low planter's
+plant) and lamp_post (a pole whose head glows at dusk with a pool on the ground); rot is 0, 90,
+180 or 270 degrees, the way a future item turns, and optional. The lit styles draw them as simple
+shapes, the simple style not at all; the placement page adds, moves, turns and removes them.
+
 Usage:  house3d_model.py --check FILE
         house3d_model.py --layers geometry,rooms,showcase FILE   (or --layers all)
 Import: load(path, layers), validate(layers), private_strings(model)
@@ -103,6 +110,8 @@ PLANTS = ("thuja", "low")
 PLANTER_FINISHES = ("frame", "cladding")
 OPENING_FINISHES = ("cladding",)  # a door leaf in the walls' cladding; without it, by the wall
 LIGHT_KINDS = ("ceiling", "wall")  # site.lights: under a roof or soffit, or on a wall's face
+# site.props: everyday things in the yard
+PROP_KINDS = ("bin", "mailbox", "garden_table", "pot", "lamp_post")
 SLIDE_OFFSET = (
     0.12  # a sliding leaf runs this far to the lot side of the fence line, past its rails
 )
@@ -176,7 +185,7 @@ RECT_ONLY_KINDS = ("stove", "plant", "picture", "stair", "landing")
 WALL_HUNG_KINDS = ("mirror", "picture")  # y0 above the floor
 PICTURE_ARTS = 4  # a picture's art: the engine's three palettes, 0 by default, or 3, its grey-blue brush strokes
 DOOR_GLASS_MARGIN = 0.2  # how far a door's glass strip stays inside its opening on each side
-FUTURE_ROT = (0, 90, 180, 270)
+QUARTER_TURNS = (0, 90, 180, 270)
 PANEL = (1.72, 1.13)  # a PV panel's long and short side; the engine lays them out the same way
 PANEL_GAP = 0.02
 FUTURE_FACTS, FACT_CHARS = 6, 80
@@ -914,6 +923,29 @@ def validate(layers):
             bad(f"{where}: kind {li.get('kind')!r} is not one of {', '.join(LIGHT_KINDS)}")
         elif li["kind"] == "wall" and not (_point(li.get("face")) and math.hypot(*li["face"]) > 0):
             bad(f"{where}: a wall light needs face [dx, dz], its outward direction")
+    props = site.get("props", [])
+    if not isinstance(props, list):
+        bad("site.props: not a list")
+        props = []
+    ids(
+        "site.props",
+        [pr["id"] for pr in props if isinstance(pr, dict) and isinstance(pr.get("id"), str)],
+    )
+    for i, pr in enumerate(props):
+        where = f"site.props[{i}]"
+        if not isinstance(pr, dict):
+            bad(f"{where}: not a JSON object")
+            continue
+        if not (isinstance(pr.get("id"), str) and pr["id"]):
+            bad(f"{where}: id is not a non-empty string")
+        if pr.get("kind") not in PROP_KINDS:
+            bad(f"{where}: kind {pr.get('kind')!r} is not one of {', '.join(PROP_KINDS)}")
+        if not _point(pr.get("at")):
+            bad(f"{where}: at must be [x, z]")
+        elif lot and not _inside(pr["at"], lot):
+            bad(f"{where}: at is outside the lot")
+        if pr.get("rot", 0) not in QUARTER_TURNS:
+            bad(f"{where}: rot {pr.get('rot')!r} is not one of 0, 90, 180, 270")
     if "garage_roof" in site:
         gr = site["garage_roof"]
         if ("rect" in gr) == ("rects" in gr):
@@ -1376,7 +1408,7 @@ def _validate_future(model, roofs, bad):
             bad(f"{where}: pos must be [x, z]")
         elif lot and not _inside(it["pos"], lot):
             bad(f"{where}: pos is outside the lot")
-        if it.get("rot", 0) not in FUTURE_ROT:
+        if it.get("rot", 0) not in QUARTER_TURNS:
             bad(f"{where}: rot {it.get('rot')!r} is not one of 0, 90, 180, 270")
         sized = "size" in it and _point(it["size"]) and min(it["size"]) > 0
         if ("size" in it or kind == "pv") and not sized:
@@ -1400,7 +1432,7 @@ def _validate_future(model, roofs, bad):
         elif _kind(roof) == "flat":
             bad(f"{where}: roof {it['roof']} is flat; PV lies on a shed, hip or gable roof")
             continue
-        if not (placed and sized and it.get("rot", 0) in FUTURE_ROT):
+        if not (placed and sized and it.get("rot", 0) in QUARTER_TURNS):
             continue
         fit = it["size"]
         if roof and _kind(roof) != "shed":

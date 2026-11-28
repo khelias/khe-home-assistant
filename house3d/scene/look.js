@@ -23,6 +23,7 @@
 //   bare?               true when winter strips the deciduous crowns
 //   winter(on)?         the winter layer switched, for what else the look changes in winter
 //   ao?                 false when the look wants no contact shadows
+//   carPaint(o)?        { body, glass }: the car's own materials (the car layer), with o's options
 //   dispose()? }
 // The studio stage is Päris's in every lit style: mount() asks for 'real' there.
 const MAPS = { lawn: 'lawn', road: 'asphalt', paving: 'pavers' };

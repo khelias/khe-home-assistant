@@ -1,7 +1,8 @@
 // The car: drawn from options.car's profile and built hidden. It stands at the path's end or
 // drives the path in after the drive gate, if any, has opened. It sits outside the building's
 // lift, so it shows in both modes, and has its own materials, so fading it never fades the house.
-// The lit styles draw it as lit surfaces; it casts a shadow only while fully shown, since the
+// The lit styles draw it as lit surfaces, the tyres apart from the body and the body and glass in
+// the look's car paint where it has one (Foto's lacquer); it casts a shadow only while fully shown, since the
 // shadow pass ignores opacity.
 const GATE_S = 1.2; // the drive gate's opening and closing time
 const CAR_CLEARANCE = 0.3; // the car's tail clears the gate leaves' sweep by this before the gate closes
@@ -12,11 +13,13 @@ export default function build({ THREE, kit, C, options, reduceMotion, layer, scr
   const { keep, lineMat, mats, edges, canvasTexture, applyFade, near } = kit;
   const lit = look.lit;
 
-  // a lit style's set, in the keys mats() gives; null edges are left out
+  // a lit style's set, in the keys mats() gives; null edges are left out. The tyres (furn) have a
+  // material of their own; the body and the glass are the look's car paint where it has one (Foto)
   function realMats() {
     const fades = { transparent: true };
     const line = lineMat({ color: kit.REAL.fence, opacity: 0.9 });
-    return { wall: kit.surface('car', fades), edge: null, glass: kit.surface('glass', fades), glassEdge: line, furn: kit.surface('car', fades), furnEdge: line };
+    const paint = look.carPaint ? look.carPaint(fades) : { body: kit.surface('car', fades), glass: kit.surface('glass', fades) };
+    return { wall: paint.body, edge: null, glass: paint.glass, glassEdge: line, furn: kit.surface('car', fades), furnEdge: line };
   }
 
   function buildCar(p, path) {
