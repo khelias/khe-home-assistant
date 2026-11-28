@@ -2,7 +2,7 @@
 // the card config, written by scripts/ha-dashboard.py; this file carries no house data.
 // Bump HOUSE3D_VERSION on every change to this file or the engine, and the same ?v= on the
 // Lovelace resource URL: HA's /local and the phone app cache aggressively.
-const HOUSE3D_VERSION = 76;
+const HOUSE3D_VERSION = 77;
 
 // importRetry(load, urlFor, opts) -> the module load(url) gives, tried `tries` times `delay` ms
 // apart. A failed module URL stays failed in the browser's module map, so each try asks urlFor()
@@ -477,8 +477,6 @@ export function storeLayer(stored, id, on, win) {
 
 const STYLE = `
 :host { display: block; height: var(--house3d-height, 480px); }
-/* a hero leaves vertical swipes to the page; the important beats OrbitControls' inline none */
-:host([hero]:not([panel])) canvas { touch-action: pan-y !important; }
 .wrap { display: block; position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: var(--ha-card-border-radius, 12px);
   --ink: #e4ecff; --muted: #8a9bc2; --line: #6fe3ff; --amber: #ffc56e; --alert: #ff8b7b; --bg: #060c1b;
   --glass: rgba(26, 30, 42, 0.62); --glass-edge: rgba(255, 255, 255, 0.2); --row: rgba(255, 255, 255, 0.08); --pressed: rgba(255, 255, 255, 0.92);

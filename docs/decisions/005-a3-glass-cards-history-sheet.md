@@ -1,6 +1,6 @@
 # ADR-005: Kodu A3 is drawn by our own glass cards, with a view background and a history sheet
 
-- **Status:** Accepted (2026-11-12); front page: [ADR-006](006-a3-front-page-live-hero.md); decision 1 superseded by [ADR-007](007-a3-in-the-overview.md); decision 4's full-width hero superseded from two columns up by [ADR-010](010-a3-landscape-hero-beside-the-cards.md); decision 5 extended to page cards by [ADR-008](008-a3-page-cards-read-statistics.md) and to a days card's 30 days, 90 days and 12 months by [ADR-013](013-days-cards-open-a-long-range-sheet.md). Narrows [ADR-002](002-own-dashboard-cards.md) for the A3 dashboard; replaces the trial of [ADR-004](004-bubble-card-trial.md). Decision 6 superseded by [ADR-012](012-the-demo-is-the-houses-overview.md): the demo is the Overview with A3, on a simulated recorder.
+- **Status:** Accepted (2026-11-28); front page: [ADR-006](006-a3-front-page-live-hero.md); decision 1 superseded by [ADR-007](007-a3-in-the-overview.md); decision 4's full-width hero superseded from two columns up by [ADR-010](010-a3-landscape-hero-beside-the-cards.md); decision 5 extended to page cards by [ADR-008](008-a3-page-cards-read-statistics.md) and to a days card's 30 days, 90 days and 12 months by [ADR-013](013-days-cards-open-a-long-range-sheet.md). Narrows [ADR-002](002-own-dashboard-cards.md) for the A3 dashboard; replaces the trial of [ADR-004](004-bubble-card-trial.md). Decision 6 superseded by [ADR-012](012-the-demo-is-the-houses-overview.md): the demo is the Overview with A3, on a simulated recorder.
 - **Related:** [ADR-001](001-own-3d-engine.md), [ADR-002](002-own-dashboard-cards.md), [ADR-004](004-bubble-card-trial.md), [estate ADR-035](https://github.com/khelias/khe-architecture/blob/main/decisions/035-family-shell-and-design-check-with-its-exceptions.md) (point 9)
 
 ## Context
@@ -45,9 +45,10 @@ ADR-002 already draw most of the rest.
    (`src/panels/lovelace/views/hui-view-background.ts`, frontend of HA
    2026.11). The value mixes HA's own theme background variable, so it
    follows light and dark without `light-dark()`.
-4. **The 3D card is the hero.** It takes an optional `height` in pixels,
-   spans the view's width, and with `height` set a vertical swipe scrolls
-   the page while a horizontal drag turns the house.
+4. **The 3D card is the hero.** It takes an optional `height` in pixels
+   and spans the view's width. A finger on it turns and zooms the house;
+   the page scrolls from beside or below it, since a swipe the browser took
+   could reload the page or go back.
 5. **History comes from the recorder over the frontend's WebSocket.** The
    generator names each tile's source: `recorder/statistics_during_period`
    (periods `5minute`, `hour` and `day` for 24 hours, 7 and 30 days; types
