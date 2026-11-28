@@ -6,7 +6,8 @@
 // trampoline with its pad, mat, legs and a see-through net, the mesh fence as a wire texture on
 // posts and the bar fence as bars between posts. Decks, paving, steps and sand take shadows;
 // hedges, the play area, fences, planters and the outdoor units cast them. See-through things
-// (the net, the mesh) do neither.
+// (the net, the mesh) do neither. Foto puts a model of a thuja on a tall planter's column and ferns
+// along a low planter's plant once it has them (look.model).
 const FENCE_H = 1.2, POST_STEP = 2.5;
 const HEDGE_H = 1.6, HEDGE_W = 0.8;
 // a clipped hedge in the lit styles: a box cut every HEDGE_STEP along and in HEDGE_ROWS up, its
@@ -19,6 +20,9 @@ const THUJA = [[0, 0], [0.26, 0], [0.3, 0.25], [0.29, 0.7], [0.23, 1.1], [0.13, 
 const DECK_TOP = 0.12, PAVING_TOP = 0.02;
 
 const isTall = p => p.plant === 'thuja';
+// a low planter's fern clump in Foto: its spread as a multiple of the planter's inner width (the
+// fronds are sparse at their tips), and its height at most
+const FERN_SPREAD = 2.75, FERN_H = 0.625;
 
 export default function build({ THREE, kit, C, model, look }) {
   const site = model.site || {};
@@ -296,17 +300,31 @@ export default function build({ THREE, kit, C, model, look }) {
   }
 
   // lit styles: a planter is a box in the frame's colour or the cladding, a thuja a column
-  // above it, a low plant a box on it
+  // above it, a low plant a box on it; Foto puts a model of the thuja on its column, and ferns
+  // in a row along the low plant's box, in their place once it has them (look.model)
   function planters() {
     const fin = { frame: kit.surface('frame'), cladding: look.material('cladding') };
-    (site.planters || []).forEach(p => {
-      const [x0, z0, x1, z1] = p.rect, top = p.y[1];
+    (site.planters || []).forEach((p, k) => {
+      const [x0, z0, x1, z1] = p.rect, top = p.y[1], cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
       shade(kit.solid(group, fin[p.finish || 'frame'], p.rect, p.y), true).userData.part = 'planter';
       if (isTall(p)) {
         const t = new THREE.Mesh(new THREE.LatheGeometry(THUJA.map(([r, h]) => new THREE.Vector2(r, h)), 14), hedgeM);
-        t.position.set((x0 + x1) / 2, top, (z0 + z1) / 2);
+        t.position.set(cx, top, cz);
         group.add(shade(t, true));
-      } else if (p.plant === 'low') shade(kit.solid(group, hedgeM, [x0 + 0.08, z0 + 0.08, x1 - 0.08, z1 - 0.08], [top, top + 0.25]), true);
+        if (look.model) look.model('thuja', { group, at: [cx, top, cz], hide: () => { t.visible = false; } });
+      } else if (p.plant === 'low') {
+        const inner = [x0 + 0.08, z0 + 0.08, x1 - 0.08, z1 - 0.08], [a0, b0, a1, b1] = inner;
+        const box = shade(kit.solid(group, hedgeM, inner, [top, top + 0.25]), true);
+        if (!look.model) return;
+        // clumps wider than the planter, their fronds hanging over its edges, as many as fill its length
+        const alongX = a1 - a0 >= b1 - b0, L = Math.max(a1 - a0, b1 - b0), side = Math.min(a1 - a0, b1 - b0) * FERN_SPREAD;
+        const n = Math.max(1, Math.round(L / side)), rand = kit.seeded(`planter ${k}`);
+        for (let i = 0; i < n; i++) {
+          const t = -L / 2 + (L * (i + 0.5)) / n;
+          const at = alongX ? [cx + t, top, cz] : [cx, top, cz + t];
+          look.model('fern', { group, at, turn: rand() * 2 * Math.PI, fit: [side, FERN_H, side], hide: () => { box.visible = false; } });
+        }
+      }
     });
   }
 

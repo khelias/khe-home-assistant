@@ -1,8 +1,9 @@
 // Everyday things in the yard (site.props): a wheelie bin, a mailbox on its post, a garden table
 // with two chairs, a flower pot with the low planter's plant and a lamp post, each at [x, z]
 // turned by rot degrees. The lit styles draw them as simple shapes, like the furniture inside,
-// casting shadows, standing on a deck or paving under them; the simple style draws none. A lamp post's head glows at dusk through the
-// lights layer, which asks for the heads through api.lamps().
+// casting shadows, standing on a deck or paving under them; the simple style draws none, and Foto
+// puts a model in their place once it has loaded (look.model). A lamp post's head glows at dusk
+// through the lights layer, which asks for the heads through api.lamps().
 // the shapes in metres, x across and z along a turn of 0
 const BIN = { w: 0.58, d: 0.74, h: 1.0, lid: 0.05, wheel: 0.1 };
 const MAILBOX = { post: 0.07, h: 1.05, box: [0.38, 0.3, 0.2] };
@@ -10,6 +11,15 @@ const TABLE = { r: 0.45, h: 0.73, top: 0.04, leg: 0.05, chair: [0.44, 0.45, 0.44
 const POT = { r: 0.24, h: 0.42, plant: 0.32 };
 const LAMP_HEAD = 2.15; // the glowing head's underside
 const LAMP = { pole: 0.045, head: [0.26, 0.14], cap: 0.03, foot: [0.1, 0.12] };
+// the box [w, h, d] a lit look fits each kind's model into in place of its shapes (look.model, the
+// model named by the kind): the shapes' own, the pot's a size up with its leaves spreading past
+// the rim; the mailbox and the lamp post are built to these shapes' measurements and keep their
+// size, so the lamp's cap stays over the lights layer's head
+const FIT = {
+  bin: [BIN.w, BIN.h, BIN.d],
+  garden_table: [2 * TABLE.r, TABLE.chair[1] + TABLE.back, 2 * (TABLE.gap + TABLE.chair[2] / 2)],
+  pot: [3.75 * POT.r, 1.25 * (POT.h + POT.plant), 3.75 * POT.r]
+};
 
 export default function build({ THREE, kit, model, look, layer }) {
   const props = (model.site || {}).props;
@@ -87,12 +97,15 @@ export default function build({ THREE, kit, model, look, layer }) {
     item.userData.prop = p.id;
     item.userData.part = p.kind;
     draw(parts);
+    const shapes = [];
     parts.forEach((geos, mat) => {
       const m = new THREE.Mesh(kit.merge(geos), mat);
       m.castShadow = m.receiveShadow = true;
       item.add(m);
+      shapes.push(m);
     });
     group.add(item);
+    if (look.model) look.model(p.kind.replace('_', '-'), { group: item, scope: group, at: [0, 0, 0], fit: FIT[p.kind] || null, hide: () => shapes.forEach(m => { m.visible = false; }) });
   });
   return {
     id: 'props',

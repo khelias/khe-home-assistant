@@ -807,8 +807,8 @@ export function stageLayers(style, stage) {
  *                    styles; sun as the sun getter gives it
  *   onFirstFrame()   the first frame is on the canvas
  *   onIdle()         the frame loop has stopped: nothing moves until the next change
- *   onLook()         the look's textures are in, the house's detail photographs included (Foto on
- *                    the garden stage), before the frame
+ *   onLook()         the look's textures are in, the house's detail photographs and its models
+ *                    included (Foto on the garden stage), before the frame
  *                    that shows them; never when they fail or for a look without any
  *   bloom            default true; always off below 720 px width and in the lit styles
  *   ao               default true; false keeps a lit style's contact shadows off, which are
@@ -1646,16 +1646,21 @@ export function mount(element, model, options = {}) {
     }
   }
   let drawn = false;
-  // what the look loads (Foto's textures, house3d/assets/ at this file's ?v=), after the first frame
+  // what the look loads (Foto's textures and models, house3d/assets/ at this file's ?v=), after the first frame
   // like the bake; a texture that fails leaves the look as Päris draws it
   function loadLook() {
     const vendor = './vendor/three-0.187.0/examples/jsm/';
     import(`${vendor}loaders/KTX2Loader.js`).then(({ KTX2Loader }) => {
       if (disposed) return;
       const loader = new KTX2Loader().setTranscoderPath(new URL(`${vendor}libs/basis/`, import.meta.url).href).detectSupport(renderer);
+      const asset = f => new URL(`./assets/${f}${QUERY}`, import.meta.url).href;
+      // the glTF loader only once a scene asks for a model, after the textures
+      let models = null;
+      const gltf = () => (models ||= import(`${vendor}loaders/GLTFLoader.js`).then(({ GLTFLoader }) => new GLTFLoader()));
       return look.start({
         scene,
-        load: f => loader.loadAsync(new URL(`./assets/${f}${QUERY}`, import.meta.url).href),
+        load: f => loader.loadAsync(asset(f)),
+        model: f => gltf().then(l => l.loadAsync(asset(f))),
         done: () => { if (!disposed) { updateSun(); shadowsDirty(); invalidate(); } }
       }).then(() => { if (!disposed && options.onLook) options.onLook(); }).finally(() => loader.dispose());
     }).catch(e => console.warn('house3d: the Foto style stays as Päris draws it', e));

@@ -9,13 +9,17 @@
 //                       stones) unless o gives a map, and the role in its userData.role, which a
 //                       band's copy keeps: Foto dresses the house's surfaces by it
 //   light(alt)          the light at a sun altitude in degrees (sun.js realLight()'s shape)
-//   start({ load, done, scene })?  after the first frame: load(file) -> Promise<texture> from
-//                       house3d/assets/, done() once each batch is applied; the promise it
-//                       returns settles once all of it is (scene/photo.js)
+//   start({ load, model, done, scene })?  after the first frame: load(file) -> Promise<texture>
+//                       and model(file) -> Promise<glTF> from house3d/assets/, done() once each
+//                       batch is applied; the promise it returns settles once all of it is
+//                       (scene/photo.js)
 //   sky({ alt, dir, scene, pmrem })?  per sun change in the garden, after the lights are set;
 //                       true when the look drew its own sky, environment and fog; once true,
 //                       true for the rest of the mount (the core drops its own environment)
 //   crown(tree)?, hedge(hedge)?  dress a crown or a hedge (leaf cards), see scene/photo.js
+//   model(kind, { group, scope, at, turn, fit, hide })?  a model in place of a layer's shapes
+//                       once start() has it, the shapes hidden then; its materials are one per
+//                       scope (default group), which a fade reaches as a whole (scene/photo.js MODELS)
 //   bareCrown(tree)?    draw a tree's branches (in place of the trees layer's struts) and its
 //                       twig cards (part 'twigs', shown while bare)
 //   outsideScale?       how many times the ground layer's plane the ground past the lot reaches
