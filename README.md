@@ -46,14 +46,21 @@ The quirks behind each of these are in
 ## Run it
 
 The configuration runs only inside Home Assistant, which the deploy checks
-it against. The check of the scripts, the 3D view, the dashboard and the
-demo is:
+it against. The demo of khe.ee/ha, on its made-up house, builds and serves
+locally at http://localhost:8000 (Python 3.10 or newer):
+
+```bash
+python3 -I scripts/house3d-build.py --demo demo-out && python3 -m http.server 8000 --directory demo-out
+```
+
+The check of the scripts, the 3D view, the dashboard and the demo first
+needs a `.venv` with ruff (the setup line in [AGENTS.md](AGENTS.md)), then:
 
 ```bash
 bash scripts/check.sh
 ```
 
-Its setup and the other commands are in [AGENTS.md](AGENTS.md).
+The other commands are in [AGENTS.md](AGENTS.md).
 
 ## Where it runs
 
