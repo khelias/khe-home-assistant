@@ -97,7 +97,12 @@ export default function build({ THREE, kit, model, look, layer }) {
   return {
     id: 'props',
     group,
-    // each lamp post's glowing head, for the lights layer: its foot's centre in the world, radius and height
-    api: { lamps: () => props.filter(p => p.kind === 'lamp_post' && Array.isArray(p.at)).map(p => ({ kind: 'lamp', pos: [p.at[0], LAMP_HEAD, p.at[1]], r: LAMP.head[0], h: LAMP.head[1] })) }
+    // each lamp post's glowing head, for the lights layer: the centre of its underside in the world, radius and height
+    api: {
+      lamps: () =>
+        props
+          .filter(p => p.kind === 'lamp_post' && Array.isArray(p.at))
+          .map(p => ({ kind: 'lamp', pos: [p.at[0], floorAt(p.at) + LAMP_HEAD, p.at[1]], r: LAMP.head[0], h: LAMP.head[1] }))
+    }
   };
 }

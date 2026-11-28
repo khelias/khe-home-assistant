@@ -1,6 +1,6 @@
 {
  "repo": "khelias/khe-house3d",
- "commit": "16318ea9d226bbfc4b566867af100e6bad8b1106",
+ "commit": "539a26723188a2f0892d71ae564022bb5216ae3e",
  "include": [
   "house3d/",
   "scripts/house3d_model.py",
@@ -47,10 +47,10 @@
   "house3d/scene/layers/future.js": "0622518fbb759aa8c53da096a8887e3e9ee88b57c4db15ec740f06fd6d721d3c",
   "house3d/scene/layers/gates.js": "b06a3af1330a9361f3181bc49252de5adfa7c3692225d8f877881e1292da68a2",
   "house3d/scene/layers/ground.js": "d6b49dad10f5e8ab5967ea3d0ce8e01b77f2dbbe330bd74bb11bee58a471a52a",
-  "house3d/scene/layers/interior.js": "09181631a98fa4d46ee6f43c2a76a86be47cf68bfa6810bd1eecb4699182688f",
+  "house3d/scene/layers/interior.js": "5bb081c16ceb9671c745030171132a4bda59cb548b7dddc64212106ff8a52085",
   "house3d/scene/layers/lights.js": "c9ebb57f733e45397822cc49dccb2555b82ca49118657fec923afa4fdeac50b3",
   "house3d/scene/layers/pergola.js": "2f7168fc58dc7a89615f6d41539b046810c1f0b6387a0ca86136ce0ae04cbcd4",
-  "house3d/scene/layers/props.js": "4cc65aa898f20cc03bc7d8ea4745da976997cc82a776f1b59be42eb3a18dbd97",
+  "house3d/scene/layers/props.js": "4bfe2421dec3b3f490ce1e2434d6e58862f6acdde8328076e50c52cc5de0ee54",
   "house3d/scene/layers/site.js": "bcbb837efc763df8c6f8a0907476e3045060f5f9389505434108b3e9f90c54bb",
   "house3d/scene/layers/surroundings.js": "88a9b1d41aef949c7e85be475a24b1d2cdc4a7b4623b4cee220367e55b8eb36c",
   "house3d/scene/layers/trees.js": "409674712543f223fe212937d4f7f4e0e841a0a3af6a1d4984cda39d939df09c",
