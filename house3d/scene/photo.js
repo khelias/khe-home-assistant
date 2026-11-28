@@ -1,6 +1,7 @@
 // The Foto style's look (style 'photo', scene/look.js): Päris's surfaces and light, with a
 // photographed lawn, meadow, street, paving and sky, the house's cladding, roofs, plinth,
-// chimneys, deck and timber under a photographed grain (DETAILS), a lacquered car (carPaint), leaf cards on the crowns and
+// chimneys, deck and timber and the rooms' oak, fabric, tiles and worktops under a photographed
+// grain (DETAILS), a lacquered car (carPaint), leaf cards on the crowns and
 // hedges, and in winter bare crowns of branches and twig cards under an overcast sky. Its textures
 // are house3d/assets/ (CC0, sources.json there), loaded after the first frame through start(), the
 // ground, sky and cards first and the house's photographs after them; until they are in, it draws
@@ -48,6 +49,9 @@ const NORMAL = 0.6;
 // grain follows its boards and a roof's runs down its slope, on any UVs or none.
 const WOOD = { map: 'wood.ktx2', size: [0.8, 0.8], mean: [0.202, 0.1273, 0.0769] };
 const CONCRETE = { map: 'concrete.ktx2', size: [1.1, 0.55], mean: [0.4818, 0.4818, 0.4818] };
+const OAK = { map: 'oak.ktx2', size: [0.8, 0.8], mean: [0.4342, 0.1721, 0.0506], strength: 0.6 };
+const STONE = { ...CONCRETE, strength: 0.5 };
+const FABRIC = { map: 'fabric.ktx2', size: [0.3, 0.3], mean: [0.0768, 0.0768, 0.0768], strength: 0.5 };
 const METAL = { map: 'metal.ktx2', normal: 'metal-normal.ktx2', size: [1, 1], mean: [0.6716, 0.7233, 0.7831], grain: 90, strength: 0.6 };
 export const DETAILS = {
   'cladding-boards': { ...WOOD, normal: 'wood-normal.ktx2', strength: 0.5, grain: 'look' },
@@ -58,7 +62,16 @@ export const DETAILS = {
   base: { ...CONCRETE, strength: 0.8 },
   chimney: { ...CONCRETE, strength: 0.8 },
   deck: { ...WOOD, normal: 'wood-normal.ktx2', strength: 0.9 },
-  timber: { ...WOOD, strength: 0.9 }
+  timber: { ...WOOD, strength: 0.9 },
+  // inside, no normal maps: oak along the floors' planks (the photograph's grain runs up its v,
+  // which a floor's projection lays along z, as Päris's planks run) and the oak furniture, the wet
+  // rooms' tile and the kitchen's splashback a faint mottle (a glaze's photograph is all but
+  // uniform), the worktops a stone-like one, the sofa, bed and headboard a woven fabric
+  floor: OAK, oak: OAK, mediumOak: OAK, darkOak: OAK, skirting: OAK,
+  tile: { ...CONCRETE, strength: 0.2 },
+  splash: { ...CONCRETE, strength: 0.15 },
+  worktop: STONE, kitchenTop: STONE,
+  fabric: FABRIC, sofa: FABRIC, linen: { ...FABRIC, strength: 0.3 }
 };
 const DETAIL_NORMAL = 0.5;
 // the car's lacquer and glass (carPaint)
@@ -300,7 +313,17 @@ void main() {
     m.customProgramCacheKey = () => `${cacheKey.call(m)}|detail${normal ? '-n' : ''}`;
     m.needsUpdate = true;
   }
-  const detailFiles = () => [...new Set(Object.values(DETAILS).flatMap(d => [d.map, !low && d.normal]).filter(Boolean))];
+  // every material under scene, once each
+  const sceneMaterials = scene => {
+    const out = new Set();
+    if (scene) scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => out.add(m)); });
+    return [...out];
+  };
+  // the photographs these materials' roles take, and nothing for a role they do not have
+  const detailFiles = materials => [...new Set(materials.flatMap(m => {
+    const d = m.userData.role && DETAILS[detailKey(m, kit.look)];
+    return d ? [d.map, !low && d.normal] : [];
+  }).filter(Boolean))];
 
   const look = {
     ...real,
@@ -315,8 +338,8 @@ void main() {
       hedges.forEach(dressHedge);
       dressCards();
     },
-    material(role, o) {
-      const m = real.material(role, o);
+    material(role, o, surface) {
+      const m = real.material(role, o, surface);
       if (SURFACES[role]) surfaces.push([role, m]);
       return m;
     },
@@ -550,11 +573,11 @@ void main() {
         dressings.forEach(f => f());
         done();
         // a photograph that fails leaves its surfaces as Päris draws them
-        return Promise.all(detailFiles().map(f => load(f).then(t => [f, kit.keep(t)], () => null))).then(list => {
+        return Promise.all(detailFiles(sceneMaterials(scene)).map(f => load(f).then(t => [f, kit.keep(t)], () => null))).then(list => {
           if (disposed) return;
           const details = Object.fromEntries(list.filter(Boolean));
           Object.values(details).forEach(t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = low ? 4 : 8; });
-          if (scene) scene.traverse(o => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => dressDetail(m, details)); });
+          sceneMaterials(scene).forEach(m => dressDetail(m, details));
           done();
         });
       });

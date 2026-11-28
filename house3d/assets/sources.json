@@ -120,6 +120,18 @@
    "from": "Metal012 1K-JPG NormalGL at 512, UASTC",
    "licence": "CC0-1.0",
    "bytes": 170787
+  },
+  "oak.ktx2": {
+   "url": "https://ambientcg.com/view?id=Wood092",
+   "from": "Wood092 1K-JPG Color, ETC1S",
+   "licence": "CC0-1.0",
+   "bytes": 138594
+  },
+  "fabric.ktx2": {
+   "url": "https://ambientcg.com/view?id=Fabric039",
+   "from": "Fabric039 1K-JPG Color, ETC1S",
+   "licence": "CC0-1.0",
+   "bytes": 149438
   }
  }
 }
