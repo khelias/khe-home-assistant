@@ -789,7 +789,7 @@ replaces `www/house3d/` in HA's config volume with it, so HA serves it as
   fades it out at the first live frame; a first visit shows a slow wave.
   The picture is taken once per page load, when a fresh mount (home view,
   live time, no demo scene) first settles, in Foto after the engine's
-  `onLook()` says its textures are in (ADR-019), since the next load starts from
+  `onLook()` says its textures and models are in (ADR-019), since the next load starts from
   that view; a remount swaps the canvas in place without it. The engine and three.js take a few seconds
   over a phone connection on a first visit or after a version bump.
 - **three.js updates** are manual, Renovate does not see the vendored copy:

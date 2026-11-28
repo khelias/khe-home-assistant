@@ -1,6 +1,6 @@
 # ADR-019: The hero and a first visit show Foto
 
-- **Status:** Accepted (2026-11-27)
+- **Status:** Accepted (2026-11-28)
 - **Supersedes:** [ADR-006](006-a3-front-page-live-hero.md) decision 2's style (the real style)
 - **Related:** [ADR-009](009-hero-shows-the-surroundings.md), [ADR-001](001-own-3d-engine.md)
 
@@ -42,9 +42,9 @@ Android tablets were not measured.
 
 - Undo: revert the commit that brought this ADR (card, tests, demo, docs)
   and the README picture's after it, bump the Lovelace resource's `?v=` and run khe-sites' `deploy.yml`.
-- The loading picture in Foto waits for its textures (the engine's
-  `onLook()`), so it shows the look the household chose; on every load the
-  first live frame, drawn before the textures arrive again, is plainer than
+- The loading picture in Foto waits for its textures and models (the
+  engine's `onLook()`), so it shows the look the household chose; on every
+  load the first live frame, drawn before they arrive again, is plainer than
   the picture for a moment. The operator chose that over a picture that
   matches the first frame.
 - The tablets' frame time is unmeasured; the household's look at one
