@@ -329,9 +329,10 @@ test('card: a hero keeps its height outside a panel view, and a panel view still
   assert.equal(fitted(['panel', 'hero'], 300).height, '800px');
 });
 
-test('card: the hero rule lets vertical swipes scroll the page only outside a panel view', () => {
+test('card: a finger on the house is the house\'s, a hero\'s too: nothing hands its swipes to the page', () => {
   const src = readFileSync(new URL('house3d-card.js', E), 'utf-8');
-  assert.match(src, /:host\(\[hero\]:not\(\[panel\]\)\) canvas \{ touch-action: pan-y !important; \}/);
+  assert.doesNotMatch(src, /canvas \{ touch-action: pan-y/);
+  assert.match(readFileSync(new URL('house3d.js', E), 'utf-8'), /\.h3d-stage canvas \{[^}]*touch-action: none;/);
   assert.match(src, /:host \{ display: block; height: var\(--house3d-height, 480px\); \}/);
 });
 

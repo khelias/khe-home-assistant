@@ -301,9 +301,9 @@ behind every value and device. It replaced the Bubble Card trial of
   through HA's `.section` element in the view's `.content`. With
   `stretch: "beside"` (ADR-018) it grows to the lowest section right of it
   that starts at or below its top, so the left half reaches Kliima's
-  bottom or the screen's; the height is floored so it cannot creep. With `height`
-  a vertical swipe on the house scrolls the page, a horizontal drag turns
-  the house and the mouse wheel scrolls instead of zooming. A hero is always Foto at its light tier with the live
+  bottom or the screen's; the height is floored so it cannot creep. A finger on
+  the house always turns and zooms it; with `height` the mouse wheel scrolls
+  instead of zooming. A hero is always Foto at its light tier with the live
   sun (ADR-019); it draws the surroundings with their ETAK credit (ADR-009), its layer
   switches are its own and are not stored, and its sheet has no style row.
   Without `height` the card is as before.
